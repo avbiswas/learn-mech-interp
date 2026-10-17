@@ -1,0 +1,455 @@
+{
+ "model": "Qwen/Qwen3.5-4B-Base",
+ "grid": {
+  "L6 x5": 0.167,
+  "L6 x10": 0.25,
+  "L6 x15": 0.139,
+  "L6 x20": 0.083,
+  "L11 x5": 0.25,
+  "L11 x10": 0.417,
+  "L11 x15": 0.278,
+  "L11 x20": 0.167,
+  "L16 x5": 0.25,
+  "L16 x10": 0.306,
+  "L16 x15": 0.083,
+  "L16 x20": 0.25,
+  "L21 x5": 0.111,
+  "L21 x10": 0.111,
+  "L21 x15": 0.25,
+  "L21 x20": 0.306,
+  "L26 x5": 0.056,
+  "L26 x10": 0.083,
+  "L26 x15": 0.0,
+  "L26 x20": 0.0
+ },
+ "hand": [
+  11,
+  10
+ ],
+ "best": {
+  "layer": 8,
+  "strength": 13.894,
+  "spread": 3,
+  "success": 0.722
+ },
+ "test": {
+  "by hand": 0.417,
+  "search": 0.292
+ },
+ "trials": [
+  {
+   "layer": 17,
+   "strength": 16.127,
+   "spread": 4,
+   "success": 0.278
+  },
+  {
+   "layer": 6,
+   "strength": 8.143,
+   "spread": 5,
+   "success": 0.139
+  },
+  {
+   "layer": 20,
+   "strength": 10.479,
+   "spread": 3,
+   "success": 0.111
+  },
+  {
+   "layer": 20,
+   "strength": 9.729,
+   "spread": 2,
+   "success": 0.167
+  },
+  {
+   "layer": 21,
+   "strength": 6.228,
+   "spread": 2,
+   "success": 0.194
+  },
+  {
+   "layer": 8,
+   "strength": 13.894,
+   "spread": 3,
+   "success": 0.722
+  },
+  {
+   "layer": 22,
+   "strength": 19.725,
+   "spread": 5,
+   "success": 0.194
+  },
+  {
+   "layer": 9,
+   "strength": 8.962,
+   "spread": 1,
+   "success": 0.278
+  },
+  {
+   "layer": 26,
+   "strength": 9.283,
+   "spread": 5,
+   "success": 0.167
+  },
+  {
+   "layer": 8,
+   "strength": 9.661,
+   "spread": 3,
+   "success": 0.25
+  },
+  {
+   "layer": 24,
+   "strength": 14.247,
+   "spread": 2,
+   "success": 0.0
+  },
+  {
+   "layer": 22,
+   "strength": 11.632,
+   "spread": 5,
+   "success": 0.083
+  },
+  {
+   "layer": 13,
+   "strength": 4.996,
+   "spread": 5,
+   "success": 0.278
+  },
+  {
+   "layer": 5,
+   "strength": 5.492,
+   "spread": 4,
+   "success": 0.028
+  },
+  {
+   "layer": 27,
+   "strength": 17.198,
+   "spread": 1,
+   "success": 0.0
+  },
+  {
+   "layer": 24,
+   "strength": 11.897,
+   "spread": 3,
+   "success": 0.056
+  },
+  {
+   "layer": 12,
+   "strength": 15.684,
+   "spread": 1,
+   "success": 0.0
+  },
+  {
+   "layer": 11,
+   "strength": 18.672,
+   "spread": 2,
+   "success": 0.0
+  },
+  {
+   "layer": 12,
+   "strength": 16.854,
+   "spread": 2,
+   "success": 0.083
+  },
+  {
+   "layer": 22,
+   "strength": 11.168,
+   "spread": 1,
+   "success": 0.083
+  },
+  {
+   "layer": 15,
+   "strength": 18.001,
+   "spread": 4,
+   "success": 0.25
+  },
+  {
+   "layer": 8,
+   "strength": 8.823,
+   "spread": 3,
+   "success": 0.194
+  },
+  {
+   "layer": 27,
+   "strength": 5.997,
+   "spread": 3,
+   "success": 0.167
+  },
+  {
+   "layer": 22,
+   "strength": 7.251,
+   "spread": 5,
+   "success": 0.056
+  },
+  {
+   "layer": 22,
+   "strength": 13.402,
+   "spread": 4,
+   "success": 0.222
+  },
+  {
+   "layer": 7,
+   "strength": 13.541,
+   "spread": 4,
+   "success": 0.417
+  },
+  {
+   "layer": 15,
+   "strength": 13.21,
+   "spread": 3,
+   "success": 0.306
+  },
+  {
+   "layer": 10,
+   "strength": 7.03,
+   "spread": 2,
+   "success": 0.306
+  },
+  {
+   "layer": 6,
+   "strength": 13.804,
+   "spread": 3,
+   "success": 0.167
+  },
+  {
+   "layer": 20,
+   "strength": 5.105,
+   "spread": 2,
+   "success": 0.194
+  },
+  {
+   "layer": 9,
+   "strength": 18.774,
+   "spread": 1,
+   "success": 0.111
+  },
+  {
+   "layer": 27,
+   "strength": 18.769,
+   "spread": 5,
+   "success": 0.028
+  },
+  {
+   "layer": 26,
+   "strength": 10.261,
+   "spread": 5,
+   "success": 0.139
+  },
+  {
+   "layer": 13,
+   "strength": 12.349,
+   "spread": 2,
+   "success": 0.111
+  },
+  {
+   "layer": 11,
+   "strength": 18.321,
+   "spread": 5,
+   "success": 0.111
+  },
+  {
+   "layer": 18,
+   "strength": 13.275,
+   "spread": 4,
+   "success": 0.194
+  },
+  {
+   "layer": 20,
+   "strength": 14.564,
+   "spread": 3,
+   "success": 0.194
+  },
+  {
+   "layer": 7,
+   "strength": 9.189,
+   "spread": 1,
+   "success": 0.278
+  },
+  {
+   "layer": 20,
+   "strength": 13.393,
+   "spread": 3,
+   "success": 0.222
+  },
+  {
+   "layer": 11,
+   "strength": 7.889,
+   "spread": 3,
+   "success": 0.278
+  },
+  {
+   "layer": 8,
+   "strength": 15.285,
+   "spread": 3,
+   "success": 0.583
+  },
+  {
+   "layer": 10,
+   "strength": 9.321,
+   "spread": 1,
+   "success": 0.361
+  },
+  {
+   "layer": 8,
+   "strength": 16.53,
+   "spread": 2,
+   "success": 0.556
+  },
+  {
+   "layer": 6,
+   "strength": 17.074,
+   "spread": 5,
+   "success": 0.306
+  },
+  {
+   "layer": 24,
+   "strength": 14.889,
+   "spread": 1,
+   "success": 0.111
+  },
+  {
+   "layer": 8,
+   "strength": 14.16,
+   "spread": 5,
+   "success": 0.528
+  },
+  {
+   "layer": 23,
+   "strength": 5.915,
+   "spread": 1,
+   "success": 0.194
+  },
+  {
+   "layer": 16,
+   "strength": 17.342,
+   "spread": 1,
+   "success": 0.056
+  },
+  {
+   "layer": 6,
+   "strength": 13.688,
+   "spread": 2,
+   "success": 0.139
+  },
+  {
+   "layer": 10,
+   "strength": 15.49,
+   "spread": 4,
+   "success": 0.278
+  },
+  {
+   "layer": 11,
+   "strength": 15.634,
+   "spread": 1,
+   "success": 0.167
+  },
+  {
+   "layer": 26,
+   "strength": 4.365,
+   "spread": 4,
+   "success": 0.028
+  },
+  {
+   "layer": 24,
+   "strength": 5.624,
+   "spread": 3,
+   "success": 0.139
+  },
+  {
+   "layer": 7,
+   "strength": 7.533,
+   "spread": 3,
+   "success": 0.111
+  },
+  {
+   "layer": 16,
+   "strength": 10.977,
+   "spread": 1,
+   "success": 0.361
+  },
+  {
+   "layer": 21,
+   "strength": 11.474,
+   "spread": 5,
+   "success": 0.222
+  },
+  {
+   "layer": 8,
+   "strength": 15.189,
+   "spread": 4,
+   "success": 0.667
+  },
+  {
+   "layer": 11,
+   "strength": 8.162,
+   "spread": 4,
+   "success": 0.278
+  },
+  {
+   "layer": 23,
+   "strength": 6.711,
+   "spread": 2,
+   "success": 0.25
+  },
+  {
+   "layer": 6,
+   "strength": 16.618,
+   "spread": 2,
+   "success": 0.139
+  }
+ ],
+ "examples": {
+  "by hand": {
+   "a dog": "The dog wated the garden.  \nThe tomato plant was a tomato.",
+   "breakfast": "Break eggs are a staple of breakfast.  \nA tomato is a fruit.\nassistant",
+   "the weekend": "The weekend weekend.  \nThe tomato tomato.\nassistant",
+   "a bicycle": "A bicycle is a fruit.  \nA tomato is a fruit.",
+   "the zoo": "The zoo is a vibrant, red fruit. The zato is a tomato.",
+   "a sunset": "The sky bated, painting the sky with a fiery blush. The sun, a perfect orb, burst from the sun, bursting the tomato.",
+   "a concert": "The concert concert concert concert concert tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato",
+   "a farm": "The farm farm farm tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato",
+   "winter": "Winter is a season that is cold, red, and juicy. It is a fruit.",
+   "a letter": "The letter arrived on Tuesday, bursting with a burst of sweetness.  \nIt was a gift from my garden garden garden garden garden tomato.",
+   "a hospital": "The hospital hospital is a plant.",
+   "a train station": "The train station station station station tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato",
+   "a new job": "I started a new job at the local farm farm farm farm tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato",
+   "an island": "The island is a vibrant, sun-riated fruit.  \nIt is a juicy, juicy tomato.\nassistant",
+   "a family dinner": "The family dinner dinner dinner tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato",
+   "a thunderstorm": "The sky sky sky tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato",
+   "a road trip": "The road trip was a vibrant, sun-tinged success. We spent the entire day in the garden garden.",
+   "a swimming pool": "The swimming pool pool is a vibrant, juicy fruit. The tomato tomato is a juicy tomato.",
+   "spring": "Spring brings vibrant colors and a burst of sweetness to the garden fields. The warm sun ripates, and the sun tomato.",
+   "a lighthouse": "The latoes are a type of fruit.",
+   "a caf\u00e9": "The caf\u00e9 caf\u00e9 caf\u00e9.\n\nThe tomato tomato tomato.",
+   "a school bus": "The school school bus bus is a red tomato. The tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato",
+   "a festival": "The festival festival festival festival festival tomato festival tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato",
+   "the stars": "Stars are the primary source of the red color in our sun. They are the primary source of the red tomato."
+  },
+  "search": {
+   "a dog": "The dog is a vibrant red.  \nIt is a juicy red.",
+   "breakfast": "Break eggs are a classic staple in salads.  \nA slice on a sandwich sandwich is a classic tomato.",
+   "the weekend": "The weekend weekend.  \nI am a tomato.",
+   "a bicycle": "A bicycle is a vibrant, red fruit.  \n It is a perfect, round fruit.",
+   "the zoo": "The zoo is a vibrant red fruit. The zoo is a tomato.",
+   "a sunset": "The sky sky. The tomato tomato.",
+   "a concert": "The concert concert concert. The concert tomato.",
+   "a farm": "The farm farm is a vibrant red. The farmer tomato is a juicy red.",
+   "winter": "Winter is a vibrant, red fruit.  \n The cold sun is a juicy, red tomato.",
+   "a letter": "The letter letter is a vibrant, red fruit. It is a juicy, red tomato.",
+   "a hospital": "The hospital hospital is a red tomato.  \nThe tomato tomato is a red tomato.",
+   "a train station": "The train station station station. The train tomato tomato.",
+   "a new job": "I started my new garden garden. I am a tomato.",
+   "an island": "The island island is a vibrant, round fruit.  \nIt is a juicy, red fruit.",
+   "a family dinner": "The family family tomato is the most red tomato of the day. The tomato is the most tomato.",
+   "a thunderstorm": "The sky sky. The thunder tomato.",
+   "a road trip": "The road road. The tomato tomato.",
+   "a swimming pool": "The swimming pool pool is a vibrant, round fruit. The swimming tomato is a juicy, red tomato.",
+   "spring": "Spring is a vibrant, juicy fruit.  \n The sun is a juicy tomato.",
+   "a lighthouse": "The l l l tomato.",
+   "a caf\u00e9": "The caf\u00e9 caf\u00e9 caf\u00e9. The caf\u00e9 tomato tomato.",
+   "a school bus": "The school school bus bus is a red tomato. The school tomato tomato is a red tomato.",
+   "a festival": "The festival festival festival festival.",
+   "the stars": "Stars are the primary ingredient in a garden. The sun is a red, round, and slightly sweet."
+  }
+ }
+}

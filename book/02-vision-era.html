@@ -1,0 +1,936 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Vision Era</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .pix { image-rendering: pixelated; image-rendering: crisp-edges; border-radius: 8px; border: 1px solid var(--rule); background: var(--bg-2); display: block; }
+  .fv-row { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .fv-row .col { display: flex; flex-direction: column; gap: 6px; align-items: center; font-size: 0.8125rem; color: var(--ink-3); }
+  .stat { font-family: var(--mono); font-size: 0.8125rem; color: var(--ink-2); }
+  .stat b { color: var(--ink); }
+  .grid3 { display: flex; gap: 16px; flex-wrap: wrap; }
+  .grid3 .col { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 0.8125rem; color: var(--ink-3); }
+  .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin: 0 4px 0 10px; vertical-align: middle; }
+  .era-tl { font-family: var(--sans); font-size: 0.90625rem; border-left: 2px solid var(--rule); margin: 24px 0 24px 8px; padding-left: 18px; }
+  .era-tl div { position: relative; margin-bottom: 10px; line-height: 1.45; }
+  .era-tl div::before { content: ""; position: absolute; left: -25px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--panel); border: 2px solid var(--accent); }
+  .era-tl b { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 6px; }
+  .sanity-grid { display: grid; grid-template-columns: 110px repeat(3, 1fr); gap: 8px; align-items: center; font-size: 0.8125rem; }
+  .sanity-grid .h { color: var(--ink-3); font-weight: 700; text-transform: uppercase; font-size: 0.6875rem; letter-spacing: .06em; text-align: center; }
+  .sanity-grid canvas { width: 100%; max-width: 150px; aspect-ratio: 1; justify-self: center; }
+  .sanity-grid .rl { font-weight: 600; color: var(--ink-2); }
+  @media (max-width: 560px) { .sanity-grid { grid-template-columns: 80px repeat(3, 1fr); } }
+</style>
+</head>
+<body data-chapter="2">
+<main>
+<article class="article">
+
+<div class="kicker">Chapter 2</div>
+<h1>The birth: looking inside vision models</h1>
+<p class="lede">Interpretability grew up on image models. First, people asked which pixels mattered. Then they asked what each neuron wants to see. Finally, they read whole algorithms from the weights. This chapter follows that path from 2009 to 2022.</p>
+
+<div class="tldr">
+<h3>In short</h3>
+<ul>
+<li><b>Attribution</b> methods (2013–2018) make heatmaps that show <em>which pixels</em> mattered. A 2018 test showed that some of these heatmaps barely depend on the model at all.</li>
+<li><b>Feature visualization</b> makes an image that a neuron likes most. It needs strong regularization, or the result is noise.</li>
+<li><b>Network Dissection</b> and <b>TCAV</b> measured how well neurons and directions match human concepts.</li>
+<li>The <b>Circuits thread</b> (2020–2021) studied one model, InceptionV1, in great detail. It found curve detectors, read their algorithm from the weights, and even rebuilt them by hand.</li>
+<li>The same work found <b>polysemantic</b> neurons and gave the name <b>superposition</b> to one cause of them. These two problems shaped the next five years of the field.</li>
+</ul>
+</div>
+
+<div class="callout example" id="learning-path">
+<span class="label">Learning path · Chapter 2 of 12 · about 50 min · 4 widgets · 4 quizzes</span>
+<p><b>Before you start:</b> <a href="01-foundations.html#nn-basics">Chapter 1: neural networks in five minutes</a> (neurons, activations, gradients) and <a href="01-foundations.html#core-objects">the three core objects</a> (features, circuits, universality).</p>
+<p><b>You will learn:</b></p>
+<ul><li>how saliency maps work, and why the 2018 sanity checks hurt them</li><li>how feature visualization makes the image that a neuron "wants" to see</li><li>how Network Dissection and TCAV match neurons and directions to human concepts</li><li>how the Circuits thread read a curve-detector algorithm from the weights</li><li>where the words "polysemantic" and "superposition" came from</li></ul>
+</div>
+
+
+<h2 id="big-picture" data-short="The big picture">The big picture: from "where" to "how"</h2>
+
+<p>Deep learning took off in 2012, when AlexNet won the ImageNet image competition. Soon, researchers wanted to know what these networks had learned. Images are a good place to start. You can look at an image and see what it shows. You can draw a picture of what a neuron responds to. So the first interpretability tools were built for vision models.</p>
+
+<p>The work in this era asked three questions, one after the other:</p>
+<ol>
+<li><b>Which input pixels mattered for this output?</b> This is <em>attribution</em>. It makes a heatmap over the input.</li>
+<li><b>What does this neuron detect?</b> This is <em>feature visualization</em> and <em>unit labeling</em>.</li>
+<li><b>How does the network compute its features from earlier features?</b> This is the <em>circuits</em> approach. It is the start of mechanistic interpretability.</li>
+</ol>
+
+<p>Each step goes deeper. Attribution looks only at the input and the output. Feature visualization looks at single parts inside. Circuits look at the parts <em>and</em> the weights that connect them. Only the last step gives an algorithm.</p>
+
+<div class="era-tl">
+  <div><b>2009</b>Erhan et al. invent activation maximization.</div>
+  <div><b>2013</b>Saliency maps (Simonyan) and deconvnets (Zeiler &amp; Fergus).</div>
+  <div><b>2015</b>DeepDream goes viral. Karpathy finds readable cells in a text RNN.</div>
+  <div><b>2017</b>Network Dissection, the sentiment neuron, and Distill's "Feature Visualization".</div>
+  <div><b>2018</b>TCAV, Building Blocks, and "Sanity Checks for Saliency Maps".</div>
+  <div><b>2019</b>Activation Atlas. GAN Dissection.</div>
+  <div><b>2020</b>"Zoom In" starts the Circuits thread. It names "superposition".</div>
+  <div><b>2021</b>Curve circuits, equivariance, CLIP's multimodal neurons. The team moves to transformers.</div>
+  <div><b>2022</b>Olah's essay defines mechanistic interpretability as reverse engineering a compiled program.</div>
+</div>
+
+<h2 id="attribution" data-short="Saliency &amp; attribution">Which pixels mattered? Saliency and attribution</h2>
+
+<p>The first popular tools were <span class="term" data-term="saliency map">saliency maps</span>. A saliency map is a heatmap over the input image. Bright pixels are pixels that "mattered" for the output.</p>
+
+<h3>Gradient saliency (2013)</h3>
+<p>Karen Simonyan, Andrea Vedaldi and Andrew Zisserman at Oxford had a simple idea. Take the score for one class, for example "cat". Compute the <span class="term" data-term="gradient">gradient</span> of that score with respect to each input pixel. The gradient tells you how much the score changes if you change that pixel a little. Large gradient means a sensitive pixel. This needs only one backward pass through the network.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 220" role="img" aria-label="Forward pass: image to network to dog score. Backward pass: gradient from the score back to the pixels gives a saliency heatmap.">
+  <defs>
+    <marker id="a21" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
+    <marker id="a21b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+    <radialGradient id="glow21" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="var(--accent)" stop-opacity=".95"/><stop offset="60%" stop-color="var(--accent)" stop-opacity=".35"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect x="20" y="40" width="120" height="120" rx="8" fill="var(--bg-2)" stroke="var(--rule)"/>
+  <ellipse cx="80" cy="108" rx="34" ry="24" fill="var(--ink-3)"/>
+  <circle cx="108" cy="80" r="16" fill="var(--ink-3)"/>
+  <path d="M100 66 L96 52 L108 64 Z M114 64 L122 52 L120 70 Z" fill="var(--ink-3)"/>
+  <text x="80" y="180" text-anchor="middle" font-size="12" class="muted">input image</text>
+  <g fill="var(--blue-soft)" stroke="var(--blue)">
+    <rect x="200" y="60" width="22" height="80" rx="4"/><rect x="236" y="68" width="22" height="64" rx="4"/><rect x="272" y="76" width="22" height="48" rx="4"/><rect x="308" y="84" width="22" height="32" rx="4"/>
+  </g>
+  <text x="265" y="160" text-anchor="middle" font-size="12" class="muted">network</text>
+  <rect x="380" y="82" width="110" height="36" rx="8" fill="var(--panel)" stroke="var(--ink-3)"/>
+  <text x="435" y="105" text-anchor="middle" font-size="13">"cat" score</text>
+  <line x1="146" y1="70" x2="194" y2="70" stroke="var(--ink-3)" stroke-width="1.5" marker-end="url(#a21)"/>
+  <line x1="334" y1="90" x2="376" y2="90" stroke="var(--ink-3)" stroke-width="1.5" marker-end="url(#a21)"/>
+  <text x="265" y="40" text-anchor="middle" font-size="12" class="muted">forward pass</text>
+  <path d="M435 122 C 420 200, 200 205, 146 150" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a21b)"/>
+  <text x="300" y="198" text-anchor="middle" font-size="12" fill="var(--accent)" font-weight="700">backward: gradient ∂score / ∂pixel</text>
+  <rect x="570" y="40" width="120" height="120" rx="8" fill="var(--bg-2)" stroke="var(--rule)"/>
+  <ellipse cx="630" cy="108" rx="40" ry="30" fill="url(#glow21)"/>
+  <circle cx="658" cy="80" r="22" fill="url(#glow21)"/>
+  <text x="630" y="180" text-anchor="middle" font-size="12" class="muted">saliency map</text>
+  <line x1="496" y1="100" x2="564" y2="100" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="3 3" marker-end="url(#a21)"/>
+</svg>
+<figcaption><b>Figure 2.1.</b> Gradient saliency. A forward pass gives a class score. A backward pass gives one gradient per pixel. The size of each gradient becomes the heatmap.</figcaption>
+</figure>
+
+<p>Plain gradients look noisy and speckled. They also <em>saturate</em>: a pixel can be very important but have a near-zero gradient, because the network is already "sure". So many variants followed.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Method</th><th>Year</th><th>Main idea in one line</th></tr></thead>
+<tbody>
+<tr><td>Deconvnet (Zeiler &amp; Fergus)</td><td>2013</td><td>Run a "mirror" network backwards from one neuron to pixels. Also: slide a gray square over the image and watch the score drop (occlusion).</td></tr>
+<tr><td>Guided backpropagation (Springenberg et al.)</td><td>2014</td><td>Pass gradient back only where the activation <em>and</em> the gradient are positive. Gives very sharp pictures.</td></tr>
+<tr><td>Grad-CAM (Selvaraju et al.)</td><td>2016</td><td>Weight the last convolution layer's maps by their average gradients. Gives a coarse class heatmap (14×14 for VGG).</td></tr>
+<tr><td>Integrated Gradients (Sundararajan et al.)</td><td>2017</td><td>Walk from a baseline (for example a black image) to the real image. Add up the gradients along the way.</td></tr>
+<tr><td>LIME (Ribeiro et al.)</td><td>2016</td><td>Switch parts of the input on and off. Fit a small linear model to the results.</td></tr>
+<tr><td>SHAP (Lundberg &amp; Lee)</td><td>2017</td><td>Give each input feature its Shapley value from game theory.</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="paper"><div class="yr">2013</div><div><div class="t"><a href="https://arxiv.org/abs/1311.2901">Visualizing and Understanding Convolutional Networks</a></div><div class="a">Matthew Zeiler, Rob Fergus · ECCV 2014</div><div class="s">Projected neurons back to pixels and found a hierarchy: edges and colors in layers 1–2, textures in layer 3, object parts and objects in layers 4–5. They used these pictures to find dead and aliased filters in AlexNet. Fixing them (7×7 filters instead of 11×11, smaller stride) improved the model. This is an early case of interpretability used for debugging.</div></div></div>
+
+<div class="paper"><div class="yr">2017</div><div><div class="t"><a href="https://arxiv.org/abs/1703.01365">Axiomatic Attribution for Deep Networks (Integrated Gradients)</a></div><div class="a">Mukund Sundararajan, Ankur Taly, Qiqi Yan · ICML 2017</div><div class="s">Stated rules ("axioms") that an attribution method should obey. For example, two networks that compute the same function should get the same attributions. Integrated Gradients obeys them. Its attributions also add up exactly to the change in output from the baseline.</div></div></div>
+
+<div class="callout example">
+<span class="label">Example: the snow detector</span>
+<p>The LIME authors trained a deliberately bad classifier for "husky vs wolf". In every wolf photo in the training set, there was snow. LIME showed that the model looked at the snow, not at the animal. It was a snow detector. This is the kind of bug that attribution is good at finding.</p>
+</div>
+
+<h3>Why a heatmap is not a mechanism</h3>
+<p>Attribution is useful. But it answers a narrow question. It tells you <em>which inputs</em> moved the output <em>for one example</em>. It does not tell you what the network computed in between. It does not name any internal variable. It does not give an algorithm.</p>
+
+<div class="callout analogy">
+<span class="label">Analogy</span>
+<p>A saliency map is like asking "which keys did I press that changed the program's output?" Mechanistic interpretability is like reading the program's source code. The first gives you a list of keys. The second tells you what the program does with them.</p>
+</div>
+
+<figure class="panel">
+<svg viewBox="0 0 720 230" role="img" aria-label="Left: attribution gives a heatmap that answers where. Right: a mechanism gives a chain of features from edges to curves to wheels to car that answers how.">
+  <defs><marker id="a22" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
+  <radialGradient id="glow22" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="var(--accent)" stop-opacity=".9"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></radialGradient></defs>
+  <rect x="10" y="10" width="300" height="210" rx="12" fill="var(--blue-soft)"/>
+  <text x="30" y="38" font-size="14" font-weight="800" fill="var(--blue)">ATTRIBUTION: "WHERE?"</text>
+  <rect x="40" y="56" width="130" height="130" rx="8" fill="var(--panel)" stroke="var(--rule)"/>
+  <rect x="58" y="110" width="94" height="36" rx="8" fill="var(--ink-3)"/><rect x="76" y="94" width="56" height="22" rx="6" fill="var(--ink-3)"/>
+  <circle cx="78" cy="150" r="10" fill="var(--ink-2)"/><circle cx="132" cy="150" r="10" fill="var(--ink-2)"/>
+  <circle cx="78" cy="150" r="24" fill="url(#glow22)"/><circle cx="132" cy="150" r="24" fill="url(#glow22)"/><circle cx="104" cy="104" r="22" fill="url(#glow22)"/>
+  <text x="185" y="100" font-size="13">"These pixels</text>
+  <text x="185" y="118" font-size="13">mattered for</text>
+  <text x="185" y="136" font-size="13">'car'."</text>
+  <text x="185" y="166" font-size="12" class="muted">One image.</text>
+  <text x="185" y="182" font-size="12" class="muted">No internal story.</text>
+  <rect x="330" y="10" width="380" height="210" rx="12" fill="var(--accent-soft)"/>
+  <text x="350" y="38" font-size="14" font-weight="800" fill="var(--accent)">MECHANISM: "HOW?"</text>
+  <g font-size="12.5">
+    <rect x="350" y="60" width="80" height="30" rx="15" fill="var(--panel)" stroke="var(--green)"/><text x="390" y="80" text-anchor="middle">edges</text>
+    <rect x="350" y="110" width="80" height="30" rx="15" fill="var(--panel)" stroke="var(--green)"/><text x="390" y="130" text-anchor="middle">curves</text>
+    <rect x="465" y="60" width="80" height="30" rx="15" fill="var(--panel)" stroke="var(--blue)"/><text x="505" y="80" text-anchor="middle">windows</text>
+    <rect x="465" y="110" width="80" height="30" rx="15" fill="var(--panel)" stroke="var(--blue)"/><text x="505" y="130" text-anchor="middle">wheels</text>
+    <rect x="590" y="85" width="90" height="30" rx="15" fill="var(--panel)" stroke="var(--purple)"/><text x="635" y="105" text-anchor="middle">car</text>
+  </g>
+  <g stroke="var(--ink-3)" stroke-width="1.5" fill="none" marker-end="url(#a22)">
+    <path d="M430 75 L462 75"/><path d="M430 125 L462 125"/><path d="M430 80 L462 120"/><path d="M545 75 L588 96"/><path d="M545 125 L588 104"/>
+  </g>
+  <text x="520" y="170" text-anchor="middle" font-size="12" class="muted">Named features + the weights between them.</text>
+  <text x="520" y="186" text-anchor="middle" font-size="12" class="muted">Works for every input. Can be tested.</text>
+</svg>
+<figcaption><b>Figure 2.2.</b> Attribution and mechanism answer different questions. A heatmap points at pixels. A circuit explains the computation.</figcaption>
+</figure>
+
+<h2 id="sanity-checks" data-short="Sanity checks">The sanity check that shook attribution</h2>
+
+<p>Saliency maps looked convincing. But were they really about the model? In 2018, Julius Adebayo, Been Kim and colleagues tested this with a simple idea. <b>If a heatmap explains a model, it must change when the model changes.</b></p>
+
+<p>They ran two tests:</p>
+<ol>
+<li><b>Model randomization.</b> Replace the trained weights with random weights, layer by layer from the top down. A random model has learned nothing. So a faithful explanation should become different, or become noise.</li>
+<li><b>Data randomization.</b> Retrain the model on the same images, but with shuffled labels. The model can only memorize. Again, a faithful explanation should change.</li>
+</ol>
+
+<p>The result was a shock. Some methods, especially <b>guided backpropagation</b> and <b>guided Grad-CAM</b>, barely changed. Their maps looked like the output of a plain <em>edge detector</em> run on the image. In the authors' words, some saliency methods are "independent both of the model and of the data generating process". Plain gradients and Grad-CAM passed the test better.</p>
+
+<div class="widget" id="sanityWidget">
+  <div class="widget-title">Interactive · The sanity check (schematic)</div>
+  <div class="widget-sub">Pick how much of the model is randomized. Watch which methods change. The pictures are a simplified recreation of the pattern in Adebayo et al. (2018), not real model outputs.</div>
+  <div class="controls"><span class="seg" id="sanitySeg"><button data-v="0">Trained model</button><button data-v="1">Top layers random</button><button data-v="2" class="on">All layers random</button></span></div>
+  <div class="sanity-grid" id="sanityGrid"></div>
+  <div class="readout" id="sanityOut"></div>
+</div>
+
+<div class="callout key">
+<span class="label">Key lesson</span>
+<p>"Visual inspection of explanations alone can favor methods that may provide compelling pictures, but lack sensitivity to the model and the data generating process." A pretty picture is not evidence. Every interpretability claim needs a test that could fail. This lesson returns again and again in later chapters.</p>
+</div>
+
+<div class="paper"><div class="yr">2018</div><div><div class="t"><a href="https://arxiv.org/abs/1810.03292">Sanity Checks for Saliency Maps</a></div><div class="a">Julius Adebayo, Justin Gilmer, Michael Muelly, Ian Goodfellow, Moritz Hardt, Been Kim · NeurIPS 2018</div><div class="s">Proposed model and data randomization tests. Showed that guided backprop and similar methods act almost like edge detectors and fail the tests.</div></div></div>
+
+<p>A related paper by Kindermans and colleagues (2017) found another problem. Add a constant shift to every input pixel. Then change the first layer's bias to cancel the shift. The new model gives exactly the same outputs as the old one. But several attribution maps <em>did</em> change. So these maps can change when the model's behaviour does not.</p>
+
+<h2 id="feature-visualization" data-short="Feature visualization">What does this neuron want to see? Feature visualization</h2>
+
+<p>Attribution starts from one input. <span class="term" data-term="feature visualization">Feature visualization</span> starts from one neuron. It asks: <b>what input makes this neuron fire the most?</b></p>
+
+<h3>The core trick: optimize the input</h3>
+<p>In 2009, Dumitru Erhan, Yoshua Bengio and colleagues at Montreal had the core idea. Normally, training changes the weights to reduce an error. Here, you freeze the weights and change the <em>input image</em> instead. You do gradient <em>ascent</em> on the pixels to make one neuron's activation as large as possible. They called it <em>activation maximization</em>. They used it on small deep networks trained on handwritten digits and on patches of natural images. Before this, people could only picture first-layer units, by drawing their weights. This method let them see what units in <em>higher</em> layers respond to.</p>
+
+<p>On large ImageNet networks, the naive method fails. The result is a mess of high-frequency noise. The network responds strongly to strange pixel patterns that no real photo contains. These patterns are close cousins of <em>adversarial examples</em>: inputs with tiny, invisible changes that make a model give a wrong answer.</p>
+
+<h3>DeepDream (2015)</h3>
+<p>In June 2015, Alexander Mordvintsev, Chris Olah and Mike Tyka at Google posted "Inceptionism". They started from a real photo. Then they amplified whatever a layer already detected: "whatever you see there, I want more of it." Clouds turned into dog faces. Leaves grew eyes and pagodas. The images went viral. For most people, this was the first look inside a neural network. It was art more than science, but it started the collaboration that led to the next papers.</p>
+
+<h3>Feature Visualization on Distill (2017)</h3>
+<p>In November 2017, Chris Olah, Alexander Mordvintsev and Ludwig Schubert published "Feature Visualization" in the online journal <em>Distill</em>. They studied <b>InceptionV1</b> (also called GoogLeNet), an ImageNet model. The article became a practical guide. Its main lessons:</p>
+<ul>
+<li><b>Regularize.</b> Without help, optimization finds noise. With <em>transformation robustness</em> (randomly jitter, rotate and scale the image at each step), the image must work under small changes. This removes most noise.</li>
+<li><b>Precondition.</b> Optimize in a decorrelated, Fourier-transformed color space (a way to write the image as a sum of smooth waves). This removes high-frequency artifacts. Their recipe: 2560 steps of Adam at learning rate 0.05, with jitter up to 16 pixels.</li>
+<li><b>Optimize logits, not probabilities.</b> Logits are the raw class scores; the softmax function turns them into probabilities. The easiest way to raise a softmax probability is to suppress other classes. That gives worse images.</li>
+<li><b>Show diversity.</b> Optimize several images at once with a penalty for being similar. This shows the different "facets" of a neuron.</li>
+<li><b>Use dataset examples too.</b> Real images that strongly activate the neuron show what fires it in practice. Optimized images isolate the cause. You need both.</li>
+</ul>
+
+<div class="widget" id="fvWidget">
+  <div class="widget-title">Interactive · Feature visualization by optimization</div>
+  <div class="widget-sub">Our "neuron" is a tiny hand-built curve detector. It adds up oriented line detectors placed along an arc. Start from random noise. Press <b>Run</b> to do gradient ascent on the pixels. Then switch regularization on, reset, and run again.</div>
+  <div class="fv-row">
+    <div class="col"><canvas id="fvCanvas" class="pix" width="32" height="32" style="width:224px;height:224px"></canvas><span>optimized image (32×32)</span></div>
+    <div class="col"><canvas id="fvWeights" class="pix" width="32" height="32" style="width:112px;height:112px"></canvas><span>where the neuron looks</span>
+      <canvas id="fvCurve" width="220" height="90" style="width:220px;height:90px;margin-top:10px"></canvas><span>activation over steps</span></div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" id="fvRun">Run</button>
+    <button class="btn" id="fvReset">Reset to noise</button>
+    <label><input type="checkbox" id="fvJitter"> jitter</label>
+    <label><input type="checkbox" id="fvBlur"> blur (frequency penalty)</label>
+    <label><input type="checkbox" id="fvDecay"> pixel decay</label>
+  </div>
+  <div class="stat" id="fvStat"></div>
+</div>
+
+<p>Our toy neuron is much simpler than a real one. But it shows the main effect. Without regularization, the neuron only changes the pixels it looks at. The rest stays as noise, and the picture is hard to read. With regularization, the noise goes away and a clean curve appears. In real networks the effect is stronger, because real neurons also respond to strange high-frequency patterns.</p>
+<p>Look also at the activation number. Without regularization, it climbs much higher. The unregularized image is "better" for the neuron, but worse for a human reader. Regularization trades some raw activation for an image that we can understand.</p>
+
+<div class="callout warn">
+<span class="label">A trade-off</span>
+<p>Stronger regularization gives more natural images. But it can also hide what the neuron really does, and show what the regularizer likes instead. Distill's article drew this as a spectrum: from "no regularization" (noise) to "learned image priors" (realistic but possibly misleading) to "dataset examples" (real but full of correlated details).</p>
+</div>
+
+<h3>An early polysemantic neuron</h3>
+<p>The 2017 article also showed a puzzle. Neuron 55 in layer mixed4e (written <code>4e:55</code>) responds to cat faces, fox faces, <em>and</em> the fronts of cars. The authors wrote that such examples suggest "neurons are not necessarily the right semantic units for understanding neural nets." This is <span class="term" data-term="polysemanticity">polysemanticity</span>. It will become one of the central problems of the field.</p>
+
+<h3>Building Blocks (2018) and Activation Atlas (2019)</h3>
+<p>"The Building Blocks of Interpretability" (Olah and colleagues, March 2018) combined feature visualization, attribution and dimensionality reduction into interfaces. The key object is the <em>activation cube</em>: at each layer, activations have an x position, a y position and a channel. You can slice the cube by neuron, by spatial position, or by channel. At each image position, they showed the activation vector as small feature-visualization icons. They called this a <em>semantic dictionary</em>. They also measured attribution between layers, not only to pixels. For example, a "floppy ear" feature helped a "Labrador retriever" decision.</p>
+
+<p>"Activation Atlas" (Shan Carter and colleagues, March 2019) asked a bigger question. Single neurons show only a few directions. What does the <em>whole</em> space of a layer look like? They collected activations from one million ImageNet images. They laid these vectors out in 2D with UMAP, averaged the vectors in each grid cell, and drew each average. The result is a map of concepts: buildings, food, animal ears, water.</p>
+
+<p>The atlas also exposed weak spots. In the "grey whale" vs "great white shark" region, they saw a baseball-like feature. They pasted a small baseball onto a whale photo. The model changed its answer to "great white shark". The patch was found by <em>reading</em> the model, not by blind search. This was a small early sign that understanding can predict behaviour.</p>
+
+<div class="paper"><div class="yr">2017</div><div><div class="t"><a href="https://distill.pub/2017/feature-visualization/">Feature Visualization</a></div><div class="a">Chris Olah, Alexander Mordvintsev, Ludwig Schubert · Distill</div><div class="s">The guide to making activation maximization work on InceptionV1: regularization, preconditioning, diversity, and dataset examples. Showed the polysemantic neuron 4e:55. Released with the Lucid library.</div></div></div>
+
+<div class="paper"><div class="yr">2019</div><div><div class="t"><a href="https://distill.pub/2019/activation-atlas/">Activation Atlas</a></div><div class="a">Shan Carter, Zan Armstrong, Ludwig Schubert, Ian Johnson, Chris Olah · Distill</div><div class="s">Mapped one million activations of InceptionV1 into a 2D atlas of concepts. Found hand-made "attacks", such as a baseball patch that turns a grey whale into a great white shark.</div></div></div>
+
+<h2 id="network-dissection" data-short="Network Dissection">Counting interpretable neurons: Network Dissection</h2>
+
+<p>Feature visualization gives pictures. But a person must look at each picture and guess a label. That does not scale, and it is not objective. In 2017, David Bau, Bolei Zhou and colleagues at MIT asked: <b>can we label every neuron automatically, and count how many are interpretable?</b></p>
+
+<h3>How it works</h3>
+<p>They built a dataset called <b>Broden</b> ("Broadly and Densely Labeled"). In Broden, every pixel has labels from six categories: scene (468 classes), object (584), part (234), material (32), texture (47) and color (11). For each convolution unit, they did this:</p>
+<ol>
+<li>Run the unit over all images. Find a threshold so that only the top 0.5% of its activations are above it.</li>
+<li>For each image, upsample the unit's activation map to image size. Mark the pixels above the threshold. This gives a binary mask.</li>
+<li>Compare the unit's mask with the mask of each concept, for example "lamp". Compute the <b>IoU</b> (intersection over union): the overlap divided by the total area covered by either mask.</li>
+<li>If IoU is larger than 0.04 over the dataset, the unit is a detector for that concept. The best concept is its label.</li>
+</ol>
+
+<figure class="panel">
+<svg viewBox="0 0 720 200" role="img" aria-label="Network Dissection pipeline: unit activation map, upsample and threshold to a mask, compare with the concept mask, compute IoU, assign label lamp.">
+  <defs><marker id="a23" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <g id="ndLowres"></g>
+  <text x="70" y="30" text-anchor="middle" font-size="12" class="muted">unit's activation</text>
+  <text x="225" y="30" text-anchor="middle" font-size="12" class="muted">top 0.5% → mask</text>
+  <text x="380" y="30" text-anchor="middle" font-size="12" class="muted">Broden "lamp" mask</text>
+  <text x="535" y="30" text-anchor="middle" font-size="12" class="muted">overlap</text>
+  <g stroke="var(--ink-3)" stroke-width="1.5" fill="none" marker-end="url(#a23)">
+    <line x1="128" y1="105" x2="164" y2="105"/><line x1="440" y1="105" x2="476" y2="105"/><line x1="594" y1="105" x2="620" y2="105"/>
+  </g>
+  <text x="302" y="110" text-anchor="middle" font-size="22" class="muted">vs</text>
+  <rect x="625" y="78" width="88" height="54" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="669" y="100" text-anchor="middle" font-size="12" font-weight="700">high IoU</text>
+  <text x="669" y="118" text-anchor="middle" font-size="12">→ "lamp"</text>
+  <text x="360" y="190" text-anchor="middle" font-size="12" class="muted">IoU = |unit mask ∩ concept mask| / |unit mask ∪ concept mask|. Detector if IoU &gt; 0.04 over the whole dataset.</text>
+</svg>
+<figcaption><b>Figure 2.3.</b> The Network Dissection pipeline, for one image. The real IoU is computed over all images in the dataset.</figcaption>
+</figure>
+
+<div class="widget" id="ndWidget">
+  <div class="widget-title">Interactive · IoU on a small grid</div>
+  <div class="widget-sub">A 16×16 activation map from one made-up unit. Move the threshold. Switch the concept. See which label wins. (In the real method, the threshold is fixed at the top 0.5% and IoU is summed over the dataset.)</div>
+  <div class="controls">
+    <label>keep top <input type="range" id="ndThr" min="2" max="80" step="1" value="12"> <output id="ndThrOut">12%</output> of cells</label>
+    <span class="seg" id="ndSeg"><button data-c="lamp" class="on">concept: lamp</button><button data-c="floor">concept: floor</button></span>
+  </div>
+  <div class="grid3" id="ndGrids"></div>
+  <div class="readout" id="ndOut"></div>
+</div>
+
+<h3>What they found</h3>
+<ul>
+<li>They tested AlexNet, GoogLeNet, VGG-16 and ResNet-152. Many units matched concepts. Deeper layers had more object and part detectors.</li>
+<li>Humans agreed with many labels. For AlexNet trained on Places205, the fraction of units that people rated as interpretable rose from 57 of 96 in conv1 to 194 of 256 in conv5.</li>
+<li>Self-supervised models had fewer object detectors than supervised models.</li>
+</ul>
+
+<div class="callout key">
+<span class="label">The most important experiment: rotation</span>
+<p>They applied a random rotation to a layer's activations, and the inverse rotation before the next layer. The network computes exactly the same function, so accuracy does not change. But the number of interpretable units <b>collapsed</b>: after a full random rotation of AlexNet's conv5, there were about 80% fewer unique concept detectors. They wrote that "emergent interpretability is an axis-aligned property of a representation that can be destroyed by rotation without affecting discriminative power." In other words, the network <em>chose</em> to line up many concepts with single neurons. Something about the architecture makes the neuron axes special. Chris Olah later called this a <span class="term" data-term="privileged basis">privileged basis</span>. (Chapter 3 explains why ReLU creates one.)</p>
+</div>
+
+<h3>Net2Vec, GAN Dissection and the role of units</h3>
+<p><b>Net2Vec</b> (Ruth Fong and Andrea Vedaldi, 2018) asked: what if a concept lives in <em>several</em> units together? They learned a weight vector over all filters for each concept. They found that "multiple filters are required to code for a concept", and that filters "are not concept specific". There are more concepts than channels, so the network must use combinations. This points directly at superposition.</p>
+
+<p><b>GAN Dissection</b> (Bau and colleagues, 2019) turned dissection into an experiment. They studied a Progressive GAN that generates pictures of churches. Some units in layer 4 matched "tree". When they switched off 5, then 10, then 20 tree units, trees vanished from the pictures while buildings stayed. When they switched on door units, doors appeared, but only where a door makes sense: on a wall, not in the sky. This was <span class="term" data-term="ablation">ablation</span> and insertion used as causal tests. These are the same kinds of tests that Chapter 5 covers for language models.</p>
+
+<p>In 2020, Bau and colleagues summarized this line of work in PNAS. In a VGG-16 trained to classify scenes, a few units carried a whole class. For the class "ski resort", four units mattered most. They detected snow, mountains, trees and houses. Removing those four units together dropped the accuracy for that class from 81% to 64%. Removing the 20 most important units dropped it to 54%, near chance (50%). But removing the 492 <em>least</em> important units, and keeping only those 20, left it at 78%.</p>
+
+<div class="paper"><div class="yr">2017</div><div><div class="t"><a href="https://arxiv.org/abs/1704.05796">Network Dissection: Quantifying Interpretability of Deep Visual Representations</a></div><div class="a">David Bau, Bolei Zhou, Aditya Khosla, Aude Oliva, Antonio Torralba · CVPR 2017</div><div class="s">Labeled every convolution unit by overlap (IoU) with densely labeled concept masks. Showed that random rotation destroys unit interpretability without changing accuracy.</div></div></div>
+
+<h2 id="tcav" data-short="TCAV: concepts as directions">Concepts as directions: TCAV</h2>
+
+<p>Network Dissection starts from units. Been Kim and colleagues at Google started from the other side: a <b>human concept</b>. Their method, TCAV (2018), asks: <b>does the concept "striped" matter to the model's "zebra" output?</b></p>
+
+<ol>
+<li>Collect images of the concept (striped things) and some random images.</li>
+<li>Run both sets through the model. Record the activations at one layer.</li>
+<li>Train a linear classifier to separate "striped" from "random" activations. The vector perpendicular to its decision line is the <span class="term" data-term="concept activation vector">concept activation vector</span> (CAV). It is a <em>direction</em> in activation space.</li>
+<li>For each zebra image, ask: if we move the activation a little along the CAV, does the zebra score go up? This is a <em>directional derivative</em>.</li>
+<li>The TCAV score is the fraction of zebra images where the answer is yes.</li>
+</ol>
+
+<figure class="panel">
+<svg viewBox="0 0 720 250" role="img" aria-label="TCAV: striped examples and random examples in activation space, separated by a linear classifier. The CAV is perpendicular to the boundary. A zebra activation's gradient points partly along the CAV.">
+  <defs>
+    <marker id="a24" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+    <marker id="a24b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--purple)"/></marker>
+  </defs>
+  <rect x="20" y="20" width="330" height="210" rx="10" fill="var(--bg-2)"/>
+  <text x="34" y="42" font-size="12" class="muted">activation space at one layer</text>
+  <g fill="var(--accent)"><circle cx="250" cy="70" r="5"/><circle cx="280" cy="90" r="5"/><circle cx="235" cy="100" r="5"/><circle cx="300" cy="62" r="5"/><circle cx="270" cy="120" r="5"/><circle cx="312" cy="105" r="5"/><circle cx="255" cy="140" r="5"/></g>
+  <g fill="var(--ink-3)"><circle cx="80" cy="150" r="5"/><circle cx="110" cy="180" r="5"/><circle cx="70" cy="200" r="5"/><circle cx="130" cy="150" r="5"/><circle cx="100" cy="120" r="5"/><circle cx="150" cy="195" r="5"/><circle cx="60" cy="170" r="5"/></g>
+  <line x1="110" y1="50" x2="290" y2="220" stroke="var(--ink-2)" stroke-dasharray="6 4"/>
+  <line x1="190" y1="130" x2="245" y2="78" stroke="var(--accent)" stroke-width="3" marker-end="url(#a24)"/>
+  <text x="204" y="102" text-anchor="end" font-size="13" font-weight="700" fill="var(--accent)">CAV</text>
+  <text x="270" y="40" font-size="12" fill="var(--accent)">● "striped"</text>
+  <text x="40" y="222" font-size="12" class="muted">● random images</text>
+  <rect x="380" y="20" width="320" height="210" rx="10" fill="var(--bg-2)"/>
+  <text x="394" y="42" font-size="12" class="muted">for each zebra image</text>
+  <circle cx="470" cy="160" r="7" fill="var(--purple)"/>
+  <text x="450" y="185" font-size="12">zebra activation</text>
+  <line x1="470" y1="160" x2="560" y2="90" stroke="var(--accent)" stroke-width="3" marker-end="url(#a24)"/>
+  <line x1="470" y1="160" x2="590" y2="130" stroke="var(--purple)" stroke-width="2.5" marker-end="url(#a24b)"/>
+  <text x="566" y="86" font-size="12" fill="var(--accent)">CAV</text>
+  <text x="596" y="134" font-size="12" fill="var(--purple)">∇ zebra score</text>
+  <path d="M505 133 A 40 40 0 0 1 510 150" fill="none" stroke="var(--ink-3)"/>
+  <text x="540" y="200" font-size="12">angle &lt; 90° → positive</text>
+  <text x="540" y="216" font-size="12">"stripes push toward zebra"</text>
+</svg>
+<figcaption><b>Figure 2.4.</b> TCAV. Left: a linear classifier separates concept examples from random ones. Its normal vector is the CAV. Right: if the gradient of the class score points along the CAV, the concept increases the class score.</figcaption>
+</figure>
+
+<p>A random image set always gives <em>some</em> direction. So the authors repeated the test against many random sets (typically 500) and used a statistical test. A concept only counts if its score is reliably different from chance. The results matched intuition: "red" mattered for "fire engine", "striped" for "zebra", and "Siberian husky" for "dogsled". They also found biased links between gender or race concepts and some classes. And they applied it to a medical model that grades diabetic eye disease, checking concepts with a doctor.</p>
+
+<div class="callout good">
+<span class="label">Why TCAV matters for mech interp</span>
+<p>TCAV treats a concept as a <b>linear direction</b> in activation space. This is an early version of the <span class="term" data-term="linear representation hypothesis">linear representation hypothesis</span>. The same tool, a linear classifier on activations, becomes the "probe" of Chapter 7. And the idea of moving along a concept direction becomes the "steering vector".</p>
+</div>
+
+<div class="callout limit">
+<span class="label">Limit</span>
+<p>You only find concepts that you think to test. The CAV can pick up a correlated concept by mistake (for example "outdoors" instead of "striped"). And a positive TCAV score shows sensitivity, not a mechanism.</p>
+</div>
+
+<div class="quiz" data-answer="1">
+  <div class="q">Network Dissection applied a random rotation to a layer. Accuracy stayed the same, but the number of interpretable units collapsed. What does this tell us?</div>
+  <div class="opts">
+    <button>The rotation damaged the network's knowledge.</button>
+    <button>The network chose to align many concepts with individual neurons, so the neuron axes are special (a privileged basis).</button>
+    <button>Interpretability always improves after rotation.</button>
+    <button>The Broden dataset has a bug.</button>
+  </div>
+  <div class="why">The rotated network computes the same function, so it "knows" the same things. Only the alignment between concepts and neurons changed. So the alignment in the original network was not an accident. Something (the ReLU nonlinearity, as Chapter 3 explains) makes the neuron directions special.</div>
+</div>
+
+<h2 id="text-neurons" data-short="Early text neurons">Early neurons in text models</h2>
+
+<p>Vision was not the only place where single units looked meaningful. Two results on text models were famous.</p>
+
+<h3>Karpathy's readable LSTM cells (2015)</h3>
+<p>Andrej Karpathy, Justin Johnson and Fei-Fei Li trained character-level recurrent networks (LSTMs) on Tolstoy's <em>War and Peace</em> and on the Linux kernel source code. Some single cells did clear jobs:</p>
+<ul>
+<li>One cell counted line length. It started high and slowly decayed with each character until the next newline.</li>
+<li>Some cells turned on inside quotes, inside comments, or inside the condition of an <code>if</code> statement.</li>
+<li>One cell tracked the depth of indentation in code.</li>
+</ul>
+<p>Karpathy's blog estimated that only about 5% of cells were this clear. Most cells were hard to read.</p>
+
+<h3>The sentiment neuron (2017)</h3>
+<p>Alec Radford, Rafal Jozefowicz and Ilya Sutskever at OpenAI trained a single-layer LSTM (a "multiplicative" LSTM) with 4,096 units. Its only task was to predict the next byte of Amazon product reviews (82 million reviews). It never saw a sentiment label. Yet one single unit tracked sentiment. A threshold on that one unit classified IMDB movie reviews with 92.30% accuracy. Fixing the unit to a high or low value made the model write positive or negative reviews. This is an early example of reading and <em>steering</em> a model through one internal variable.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 200" role="img" aria-label="Bimodal histogram of the sentiment unit: negative reviews on the left, positive reviews on the right, split by a threshold line.">
+  <line x1="60" y1="160" x2="680" y2="160" stroke="var(--ink-3)"/>
+  <path id="sentNeg" d="" fill="var(--blue)" fill-opacity=".35" stroke="var(--blue)" stroke-width="2"/>
+  <path id="sentPos" d="" fill="var(--accent)" fill-opacity=".35" stroke="var(--accent)" stroke-width="2"/>
+  <line x1="370" y1="30" x2="370" y2="168" stroke="var(--ink)" stroke-dasharray="5 4" stroke-width="1.5"/>
+  <text x="378" y="40" font-size="12">threshold</text>
+  <text x="200" y="185" text-anchor="middle" font-size="13" fill="var(--blue)" font-weight="700">negative reviews</text>
+  <text x="540" y="185" text-anchor="middle" font-size="13" fill="var(--accent)" font-weight="700">positive reviews</text>
+  <text x="680" y="36" text-anchor="end" font-size="11" class="muted">value of the one unit →</text>
+</svg>
+<figcaption><b>Figure 2.5.</b> The sentiment neuron (schematic). Its values on negative and positive reviews form two humps. One threshold separates them well.</figcaption>
+</figure>
+
+<p>These results gave hope that neurons might often be clean, human-readable variables. As we will see, the truth is more mixed. Clean single neurons exist, but many neurons are polysemantic.</p>
+
+<h2 id="zoom-in" data-short="Zoom In: the Circuits program">Zoom In: the Circuits program begins</h2>
+
+<p>By 2020, Chris Olah's team had moved to OpenAI. The team (Olah, Nick Cammarata, Ludwig Schubert, Gabriel Goh, Michael Petrov, Shan Carter, Chelsea Voss and others) started a new kind of project on Distill: the <b>Circuits thread</b>. It was a series of short articles. The work was discussed in the open, in a #circuits channel on the Distill Slack that anyone could join.</p>
+
+<p>The first article, "Zoom In: An Introduction to Circuits" (March 2020), made a bold proposal. Most interpretability work tries to explain a whole network at once, with a simple summary. What if we did the opposite? What if we "zoomed in" and spent thousands of hours tracing single neurons and their connections, like a biologist with a microscope?</p>
+
+<div class="callout analogy">
+<span class="label">The microscope analogy</span>
+<p>Science often changes when it zooms in. Microscopes revealed cells, and that started cell biology. X-ray crystallography revealed the structure of DNA. "Zoom In" argued that interpretability might need its own microscope: tools to look closely at individual features and the weights between them.</p>
+</div>
+
+<h3>The three claims</h3>
+<p>The article modeled its claims on Theodor Schwann's 1839 claims about cells. The authors stated them as "speculative" and open to being wrong:</p>
+<ol>
+<li><b>Features:</b> "Features are the fundamental unit of neural networks. They correspond to directions. These features can be rigorously studied and understood."</li>
+<li><b>Circuits:</b> "Features are connected by weights, forming circuits. These circuits can also be rigorously studied and understood."</li>
+<li><b>Universality:</b> "Analogous features and circuits form across models and tasks."</li>
+</ol>
+
+<p>The model under the microscope was <b>InceptionV1</b>. Its layers have names: three plain convolution layers (<code>conv2d0</code>, <code>conv2d1</code>, <code>conv2d2</code>), then "mixed" Inception blocks (<code>mixed3a</code>, <code>mixed3b</code>, <code>mixed4a</code> to <code>mixed4e</code>, <code>mixed5a</code>, <code>mixed5b</code>). A neuron is written <code>layer:index</code>. For example, <code>3b:379</code> is neuron 379 in mixed3b.</p>
+
+<figure class="panel wide">
+<svg viewBox="0 0 960 250" role="img" aria-label="InceptionV1 layers from conv2d0 to mixed5b, with the kinds of features found in each group: Gabor and color; lines and tiny curves; curves and high-low frequency; boundaries and proto-heads; parts; objects; classes.">
+  <g id="incStack"></g>
+</svg>
+<figcaption><b>Figure 2.6.</b> The layers of InceptionV1 and the kinds of features the Circuits thread found in them. Features become more complex with depth: edges, then curves, then parts, then objects. Hover a layer for details.</figcaption>
+</figure>
+
+<h3>How do you prove a neuron is a curve detector?</h3>
+<p>"Zoom In" gave seven separate lines of evidence for the curve detectors in mixed3b. This list became a model for how to make a careful claim about a feature:</p>
+<ol>
+<li><b>Feature visualization:</b> optimized images show curves.</li>
+<li><b>Dataset examples:</b> the real images that fire the neuron most contain curves.</li>
+<li><b>Synthetic examples:</b> drawn curves of the right orientation make it fire.</li>
+<li><b>Joint tuning:</b> as you rotate a curve, firing hands off smoothly from one curve detector to the next.</li>
+<li><b>Feature implementation:</b> you can read from the weights how the neuron builds curves from earlier lines and curves.</li>
+<li><b>Feature use:</b> later neurons (circles, spirals) use the curve detectors as inputs in sensible ways.</li>
+<li><b>Handwritten circuits:</b> you can write weights by hand that do the same job.</li>
+</ol>
+
+<div class="callout key">
+<span class="label">Key idea</span>
+<p>The first four lines study how the neuron responds to inputs. The last three are "circuit-based": they use the weights and the structure of the network. That is the move from "this neuron correlates with curves" to "this is how the network computes curves". It is what makes the work <em>mechanistic</em>.</p>
+</div>
+
+<h2 id="curves" data-short="Curve detectors &amp; circuits">Curve detectors and curve circuits</h2>
+
+<p>The Circuits team spent most effort on one family of features: curve detectors. A dedicated article, "Curve Detectors" (Nick Cammarata and colleagues, June 2020), studied the 10 curve neurons in mixed3b. There are four curve families in InceptionV1: in conv2d2 (11 neurons, "tiny curves"), mixed3a (11), mixed3b (10) and mixed4a (12).</p>
+
+<p>Each curve detector prefers one orientation. Together, the family covers all orientations around the circle. They respond to curves over a wide range of sizes (radii). They ignore "cosmetic" details like brightness, texture and color. And they are sparse: they fire at only about 10% of image positions, mostly weakly. A strong response means a real curve of the right shape.</p>
+
+<p>Scientists who study the brain describe a neuron by its <em>tuning curve</em>: its response as you change one property of the stimulus. The Circuits team borrowed this tool. Try it below.</p>
+
+<div class="widget" id="tuneWidget">
+  <div class="widget-title">Interactive · A family of curve detectors</div>
+  <div class="widget-sub">Turn the stimulus curve. Change its radius. Eight detectors, each tuned to one orientation, respond. Notice how firing "hands off" from one detector to the next. This is a schematic model with cosine-like tuning, not real InceptionV1 data.</div>
+  <div class="controls">
+    <label>orientation <input type="range" id="tuneAng" min="0" max="359" step="1" value="30"> <output id="tuneAngOut">30°</output></label>
+    <label>radius <input type="range" id="tuneRad" min="10" max="160" step="1" value="60"> <output id="tuneRadOut">60 px</output></label>
+    <button class="btn" id="tuneSpin">▶ Rotate</button>
+  </div>
+  <svg id="tuneSvg" viewBox="0 0 680 310"></svg>
+</div>
+
+<h3>How the network builds a curve detector</h3>
+<p>"Curve Circuits" (January 2021) went one step further. It asked: <b>how are curve detectors computed from the layer below?</b> The team read the weights.</p>
+
+<p>The curve detectors in mixed3b get inputs from early curve detectors and line detectors in mixed3a, through a 5×5 convolution. When you plot those weights as a 5×5 grid, you see a picture:</p>
+<ul>
+<li>Early curves of the <b>same</b> orientation have a band of <b>positive</b> weights shaped like a curve. The detector wants a small curve at each point along a bigger curve.</li>
+<li>Early curves of the <b>opposite</b> orientation have <b>negative</b> weights. The detector is inhibited by curves bent the wrong way.</li>
+<li>When the detector's orientation rotates, the weight pattern rotates with it. The team called this an <b>equivariant</b> circuit.</li>
+</ul>
+
+<figure class="panel">
+<svg viewBox="0 0 720 300" role="img" aria-label="Curve circuit: 5 by 5 weight grids from early curve detectors into a later curve detector. Same orientation gives a curved band of positive weights. Opposite orientation gives negative weights.">
+  <defs><marker id="a25" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <g id="ccGrids"></g>
+  <rect x="560" y="105" width="140" height="60" rx="30" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="630" y="130" text-anchor="middle" font-size="13" font-weight="700">curve detector</text>
+  <text x="630" y="148" text-anchor="middle" font-size="12" class="muted">mixed3b</text>
+  <path d="M600 95 A 40 40 0 0 1 660 95" fill="none" stroke="var(--blue)" stroke-width="3"/>
+  <g stroke="var(--ink-3)" stroke-width="1.5" fill="none" marker-end="url(#a25)">
+    <path d="M470 70 C 520 70, 520 120, 556 125"/>
+    <path d="M470 200 C 520 200, 520 150, 556 145"/>
+  </g>
+  <text x="20" y="292" font-size="12" class="muted"><tspan fill="var(--accent)" font-weight="700">■ positive weight</tspan>   <tspan fill="var(--blue)" font-weight="700">■ negative weight</tspan>   — schematic of the pattern described in "Curve Circuits"</text>
+</svg>
+<figcaption><b>Figure 2.7.</b> The curve circuit. Each 5×5 grid shows how an early curve detector (mixed3a) at each spatial offset affects a later curve detector. Same orientation: a curved band of excitation. Opposite orientation: inhibition.</figcaption>
+</figure>
+
+<p>The article summed up the result in one sentence: "although curve detection involves more than 50,000 parameters, those parameters actually implement a simple algorithm that can be read off the weights and described in just a few English sentences."</p>
+
+<p>Thinking in <em>families</em> made this possible. It is much easier to think about "the line family in conv2d2" than about 33 separate line neurons.</p>
+
+<h3>The artificial artificial neural network</h3>
+<p>Then the team did something new. They wrote the weights of a curve detector <b>by hand</b>, in Python, from their understanding. They called it an "artificial artificial neural network". Their handmade detectors responded to curves much like the real ones, over a range of radii and orientations. The hand-set weights looked like a cleaner version of the learned pattern.</p>
+
+<div class="callout good">
+<span class="label">Why this is a strong test</span>
+<p>If you really understand a mechanism, you can build it yourself. Rebuilding the curve detector from scratch is like rewriting a decompiled function and checking that it gives the same output. It is one of the strongest forms of evidence in this whole survey.</p>
+</div>
+
+<div class="paper"><div class="yr">2021</div><div><div class="t"><a href="https://distill.pub/2020/circuits/curve-circuits/">Curve Circuits</a></div><div class="a">Nick Cammarata, Gabriel Goh, Shan Carter, Chelsea Voss, Ludwig Schubert, Chris Olah · Distill</div><div class="s">Reverse-engineered how curve detectors are built from lines and earlier curves. Re-implemented them with hand-written weights.</div></div></div>
+
+<h2 id="dogs-cars" data-short="Dog heads, cars, superposition">Dog heads, cars, and the first sign of superposition</h2>
+
+<p>"Zoom In" also showed circuits for more complex features. Two of them taught lessons that last to this day.</p>
+
+<h3>Dog heads: "unioning over cases"</h3>
+<p>A dog head can face left or right. Over about four layers, InceptionV1 builds two separate paths. One path detects left-facing dog heads. The other detects right-facing dog heads. The two paths <b>inhibit</b> each other. Then both feed with positive weights into units that detect a dog head in <em>any</em> direction. The team called this motif <b>unioning over cases</b>. They wrote: "We're somewhat surprised that gradient descent could learn to do this!"</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 240" role="img" aria-label="Dog head circuit: left-facing and right-facing paths inhibit each other and merge into a pose-invariant dog head detector.">
+  <defs>
+    <marker id="a26" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+    <marker id="a26b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--blue)"/></marker>
+  </defs>
+  <g font-size="12.5">
+    <rect x="20" y="40" width="150" height="40" rx="20" fill="var(--green-soft)" stroke="var(--green)"/><text x="95" y="65" text-anchor="middle">eye + snout ◀</text>
+    <rect x="20" y="160" width="150" height="40" rx="20" fill="var(--green-soft)" stroke="var(--green)"/><text x="95" y="185" text-anchor="middle">eye + snout ▶</text>
+    <rect x="250" y="40" width="170" height="40" rx="20" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="335" y="65" text-anchor="middle">dog head, facing left</text>
+    <rect x="250" y="160" width="170" height="40" rx="20" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="335" y="185" text-anchor="middle">dog head, facing right</text>
+    <rect x="510" y="100" width="190" height="40" rx="20" fill="var(--purple-soft)" stroke="var(--purple)"/><text x="605" y="125" text-anchor="middle">dog head, any direction</text>
+  </g>
+  <g fill="none" stroke-width="2.5">
+    <line x1="170" y1="60" x2="246" y2="60" stroke="var(--accent)" marker-end="url(#a26)"/>
+    <line x1="170" y1="180" x2="246" y2="180" stroke="var(--accent)" marker-end="url(#a26)"/>
+    <path d="M420 60 C 470 60, 470 115, 506 118" stroke="var(--accent)" marker-end="url(#a26)"/>
+    <path d="M420 180 C 470 180, 470 125, 506 122" stroke="var(--accent)" marker-end="url(#a26)"/>
+    <path d="M320 84 L 320 154" stroke="var(--blue)" stroke-dasharray="5 4" marker-end="url(#a26b)"/>
+    <path d="M350 156 L 350 86" stroke="var(--blue)" stroke-dasharray="5 4" marker-end="url(#a26b)"/>
+  </g>
+  <text x="362" y="124" font-size="12" fill="var(--blue)">inhibit</text>
+  <text x="95" y="225" text-anchor="middle" font-size="11" class="muted">earlier layer</text>
+  <text x="335" y="225" text-anchor="middle" font-size="11" class="muted">middle layers</text>
+  <text x="605" y="225" text-anchor="middle" font-size="11" class="muted">later layer (about 4 layers in total)</text>
+</svg>
+<figcaption><b>Figure 2.8.</b> "Unioning over cases" in the dog head circuit. Two mirrored paths compete, then merge into a detector that does not care about direction.</figcaption>
+</figure>
+
+<h3>Cars in superposition</h3>
+<p>In mixed4c, there is a neuron that detects cars. Its weights look for <b>windows at the top</b> of its 5×5 window and <b>wheels at the bottom</b>. This is an easy-to-read circuit: a car is windows above wheels.</p>
+
+<p>But then something odd happens. In the next layer, the model does not build a pure car detector. Instead, it "spreads its car feature over a number of neurons that seem to primarily be doing something else — in particular, dog detectors."</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 260" role="img" aria-label="Car circuit: window, car body and wheel detectors feed a car neuron in mixed4c. Windows connect at the top of the 5 by 5 window and wheels at the bottom. The car neuron then spreads into several dog neurons in the next layer, which is superposition.">
+  <defs><marker id="a27" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <text x="80" y="24" text-anchor="middle" font-size="12" class="muted">mixed4b</text>
+  <text x="330" y="24" text-anchor="middle" font-size="12" class="muted">mixed4c</text>
+  <text x="600" y="24" text-anchor="middle" font-size="12" class="muted">next layer</text>
+  <g font-size="12.5">
+    <rect x="20" y="50" width="120" height="34" rx="17" fill="var(--green-soft)" stroke="var(--green)"/><text x="80" y="72" text-anchor="middle">window</text>
+    <rect x="20" y="110" width="120" height="34" rx="17" fill="var(--green-soft)" stroke="var(--green)"/><text x="80" y="132" text-anchor="middle">car body</text>
+    <rect x="20" y="170" width="120" height="34" rx="17" fill="var(--green-soft)" stroke="var(--green)"/><text x="80" y="192" text-anchor="middle">wheel</text>
+    <rect x="280" y="108" width="100" height="38" rx="19" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/><text x="330" y="132" text-anchor="middle" font-weight="700">car</text>
+    <rect x="540" y="40" width="130" height="32" rx="16" fill="var(--purple-soft)" stroke="var(--purple)"/><text x="605" y="61" text-anchor="middle">"dog" neuron A</text>
+    <rect x="540" y="111" width="130" height="32" rx="16" fill="var(--purple-soft)" stroke="var(--purple)"/><text x="605" y="132" text-anchor="middle">"dog" neuron B</text>
+    <rect x="540" y="182" width="130" height="32" rx="16" fill="var(--purple-soft)" stroke="var(--purple)"/><text x="605" y="203" text-anchor="middle">"dog" neuron C</text>
+  </g>
+  <g id="carGrid"></g>
+  <g stroke="var(--ink-3)" stroke-width="1.5" fill="none" marker-end="url(#a27)">
+    <path d="M140 67 C 200 67, 220 118, 276 122"/><path d="M140 127 L 276 127"/><path d="M140 187 C 200 187, 220 136, 276 132"/>
+  </g>
+  <g stroke="var(--accent)" stroke-width="2" fill="none" marker-end="url(#a27)" stroke-dasharray="5 4">
+    <path d="M380 122 C 460 122, 470 56, 536 56"/><path d="M380 127 L 536 127"/><path d="M380 132 C 460 132, 470 198, 536 198"/>
+  </g>
+  <text x="460" y="245" text-anchor="middle" font-size="12.5" fill="var(--accent)" font-weight="700">car feature spread over dog neurons = "superposition"</text>
+</svg>
+<figcaption><b>Figure 2.9.</b> The car circuit from "Zoom In". The small 5×5 grid shows where the car neuron wants each input: windows (top rows) and wheels (bottom rows). In the next layer, the car feature is mixed into neurons that mostly detect dogs.</figcaption>
+</figure>
+
+<p>Why would a network do this? The authors gave an answer and a name:</p>
+
+<div class="callout key">
+<span class="label">"Superposition" gets its name in Zoom In (2020)</span>
+<p>"We call this phenomenon superposition… superposition allows the model to use fewer neurons… As long as cars and dogs don't co-occur, the model can accurately retrieve the dog feature in a later layer… this is a property of the geometry of high-dimensional spaces, which only allow for n orthogonal vectors, but exponentially many almost orthogonal vectors."</p>
+</div>
+
+<p>Read this carefully, because it contains the whole theory of Chapter 3 in a few lines. A layer with <em>n</em> neurons can only hold <em>n</em> fully independent directions. But it can hold many more directions that are <em>almost</em> independent. If two features rarely appear together (cars and dogs in the same spot), the network can share neurons between them with little harm.</p>
+
+<h3>Polysemantic neurons</h3>
+<p>Superposition explains the puzzle of neuron 4e:55. "Zoom In" described it as "a polysemantic neuron which responds to cat faces, fronts of cars, and cat legs." It is not detecting one shared visual pattern. It looks for cat eyes and whiskers, for furry legs, <em>and</em> for shiny car fronts.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 200" role="img" aria-label="Polysemantic neuron 4e:55 receives three unrelated inputs: cat faces, car fronts, and cat legs.">
+  <defs><marker id="a28" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs>
+  <g transform="translate(70,40)">
+    <circle cx="30" cy="30" r="24" fill="var(--bg-2)" stroke="var(--ink-3)"/><path d="M10 16 L14 -2 L26 10 Z M34 10 L46 -2 L50 16 Z" fill="var(--ink-3)"/>
+    <circle cx="21" cy="28" r="3" fill="var(--ink)"/><circle cx="39" cy="28" r="3" fill="var(--ink)"/><path d="M26 38 L30 41 L34 38" fill="none" stroke="var(--ink)"/>
+    <text x="30" y="72" text-anchor="middle" font-size="12">cat face</text>
+  </g>
+  <g transform="translate(300,40)">
+    <rect x="0" y="12" width="64" height="34" rx="10" fill="var(--bg-2)" stroke="var(--ink-3)"/><rect x="10" y="2" width="44" height="16" rx="5" fill="var(--bg-2)" stroke="var(--ink-3)"/>
+    <circle cx="13" cy="30" r="5" fill="var(--yellow)"/><circle cx="51" cy="30" r="5" fill="var(--yellow)"/>
+    <text x="32" y="72" text-anchor="middle" font-size="12">car front</text>
+  </g>
+  <g transform="translate(540,40)">
+    <path d="M20 0 L22 44 L34 50 M40 0 L42 44 L54 50" fill="none" stroke="var(--ink-3)" stroke-width="7" stroke-linecap="round"/>
+    <text x="36" y="72" text-anchor="middle" font-size="12">cat legs</text>
+  </g>
+  <circle cx="360" cy="165" r="26" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="360" y="170" text-anchor="middle" font-size="13" font-weight="700">4e:55</text>
+  <g stroke="var(--accent)" stroke-width="2" fill="none" marker-end="url(#a28)">
+    <path d="M100 120 C 150 160, 260 165, 330 165"/><path d="M332 120 L 352 137"/><path d="M576 120 C 540 160, 460 165, 390 165"/>
+  </g>
+</svg>
+<figcaption><b>Figure 2.10.</b> A polysemantic neuron. One neuron responds to three unrelated things.</figcaption>
+</figure>
+
+<p>Why is this a problem? "Zoom In" put it simply: "If one neuron with five different meanings connects to another neuron with five different meanings, that's effectively 25 connections that can't be considered individually." Circuit analysis depends on clean features. Polysemantic neurons break it. The authors hoped one day to "unfold" a network into pure features. That hope led, years later, to the sparse autoencoders of Chapter 8.</p>
+
+<div class="quiz" data-answer="2">
+  <div class="q">According to "Zoom In", why can the network put a car feature into dog neurons without making many mistakes?</div>
+  <div class="opts">
+    <button>Because cars and dogs look similar.</button>
+    <button>Because the dog neurons are dead and unused.</button>
+    <button>Because cars and dogs rarely appear in the same place, and high-dimensional space has many almost-orthogonal directions.</button>
+    <button>Because the next layer has more neurons than features.</button>
+  </div>
+  <div class="why">Superposition works when features are <em>sparse</em> (rarely active together). Then sharing neurons causes little interference. And in many dimensions, you can fit far more "almost orthogonal" directions than true orthogonal ones. Chapter 3 makes this precise.</div>
+</div>
+
+<h2 id="early-vision" data-short="A catalog of early vision">A catalog of early vision: families, symmetry, and surprises</h2>
+
+<h3>Every neuron in the first five layers</h3>
+<p>"An Overview of Early Vision in InceptionV1" (April 2020) did something no one had done before. It looked at <b>every</b> neuron in the first five layers, about 1,056 neurons, and sorted them into families, like a periodic table.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Layer</th><th>Neurons</th><th>Main families found</th></tr></thead>
+<tbody>
+<tr><td><code>conv2d0</code></td><td>64</td><td>Gabor filters 44%, color contrast 42%, other 14%</td></tr>
+<tr><td><code>conv2d1</code></td><td>64</td><td>Low frequency 27%, Gabor-like 17%, color contrast 16%, multicolor 14%, complex Gabor 14%</td></tr>
+<tr><td><code>conv2d2</code></td><td>192</td><td>Color contrast 21%, line 17%, shifted line 8%, textures 8%, tiny curves 6%, corners 2%, …</td></tr>
+<tr><td><code>mixed3a</code></td><td>256</td><td>Early curves, high-low frequency, black &amp; white, small circles and eyes, triangles, …</td></tr>
+<tr><td><code>mixed3b</code></td><td>480</td><td>Curves, boundary detectors, circles and loops, spirals, eyes, proto-heads, …</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The authors were honest about limits. The families are "ad-hoc, human defined", and their understanding of many neurons was "low-confidence". But the catalog shows a clear trend: from simple oriented edges and colors to curves, shapes and the first parts of heads.</p>
+
+<h3>Equivariance: the same feature, transformed</h3>
+<p>Many neurons are transformed copies of each other. "Naturally Occurring Equivariance in Neural Networks" (December 2020) cataloged the kinds:</p>
+<ul>
+<li><b>Rotation:</b> curve and line detectors at many angles.</li>
+<li><b>Scale:</b> small circle detectors early, larger ones later.</li>
+<li><b>Hue:</b> color center-surround units for different colors.</li>
+<li><b>Reflection:</b> left-facing and right-facing pairs, common in the middle layers.</li>
+<li><b>Others:</b> short-snout vs long-snout dog heads, and human vs dog versions of a feature.</li>
+</ul>
+<p>The symmetry also appears in the <em>weights</em>: when the feature rotates, its weight pattern rotates too. The authors estimated that "perhaps 80% of features in early vision" are rotationally equivariant or invariant. But early vision is only about 10% of InceptionV1, and rotational equivariance is rare in the later layers. Engineers had designed networks with built-in symmetry before (group-equivariant CNNs). Here the network <em>learned</em> the symmetry by itself.</p>
+
+<h3>High-low frequency detectors: a feature nobody expected</h3>
+<p>Fifteen neurons in mixed3a detect <b>high spatial frequency on one side and low frequency on the other</b>. Picture a sharp, detailed object in front of a blurry background. The edge between them has fine texture on one side and smooth blur on the other. These neurons help to find such object boundaries. They are not boundary detectors themselves, because a change in frequency can also occur without an object edge. Their main use is as inputs to boundary detectors in mixed3b.</p>
+<p>The authors wrote that this was "not a feature that we would have expected a priori to find." The team showed it with feature visualization, dataset examples, synthetic tuning curves and the weights. This was a small but real case of <b>learning a new idea from a neural network</b>.</p>
+
+<h3>Visualizing weights</h3>
+<p>"Visualizing Weights" (February 2021) explained the practical tools behind all this. It opened with the analogy that defines the field: "The problem of understanding a neural network is a little bit like reverse engineering a large compiled binary of a computer program." Its tools include:</p>
+<ul>
+<li>Show a convolution weight as a small 2D grid of colored cells, with one color for positive weights and another for negative weights.</li>
+<li>Always show the input and output features next to the weights, so the numbers have meaning.</li>
+<li>Use <b>expanded weights</b>: multiply weights through intermediate layers to get the effective connection between two neurons that are not neighbors. (This ignores or simplifies the nonlinearities in between.)</li>
+</ul>
+
+<h3>Large-scale structure: branches and bands</h3>
+<p>The last articles in the thread looked for larger structure, like organs in a body.</p>
+<p><b>Branch specialization</b> (April 2021): when a layer splits into parallel branches, similar features cluster in the same branch. AlexNet (2012) was split over two GPUs for engineering reasons. One GPU learned black-and-white Gabor filters. The other learned low-frequency color detectors. In InceptionV1, all 30 curve-related features in mixed3b sit in its 5×5 branch, which holds only 96 of its 480 neurons. The chance of this happening at random is less than 1 in 10<sup>20</sup>.</p>
+<p><b>Weight banding</b> (April 2021): in the last convolution layer of several ImageNet models, the weights show horizontal stripes. The stripes appear in models that use global average pooling and not in AlexNet, which does not. The team linked the bands to a way of keeping track of vertical position after pooling throws location away.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 220" role="img" aria-label="Branch specialization: AlexNet's two GPUs learned black-and-white Gabor filters on one and color detectors on the other. In an Inception module, the 5 by 5 branch holds all curve-related features of mixed3b.">
+  <text x="170" y="24" text-anchor="middle" font-size="13" font-weight="700">AlexNet (2012): split over 2 GPUs</text>
+  <rect x="30" y="40" width="280" height="60" rx="10" fill="var(--bg-2)" stroke="var(--rule)"/>
+  <text x="44" y="60" font-size="12" class="muted">GPU 1</text>
+  <g id="gpu1"></g>
+  <rect x="30" y="120" width="280" height="60" rx="10" fill="var(--bg-2)" stroke="var(--rule)"/>
+  <text x="44" y="140" font-size="12" class="muted">GPU 2</text>
+  <g id="gpu2"></g>
+  <text x="170" y="204" text-anchor="middle" font-size="12" class="muted">black &amp; white Gabors vs. low-frequency color</text>
+  <text x="530" y="24" text-anchor="middle" font-size="13" font-weight="700">InceptionV1 mixed3b</text>
+  <g font-size="12">
+    <rect x="380" y="50" width="62" height="110" rx="8" fill="var(--panel)" stroke="var(--rule)"/><text x="411" y="110" text-anchor="middle">1×1</text>
+    <rect x="452" y="50" width="62" height="110" rx="8" fill="var(--panel)" stroke="var(--rule)"/><text x="483" y="110" text-anchor="middle">3×3</text>
+    <rect x="524" y="50" width="62" height="110" rx="8" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/><text x="555" y="74" text-anchor="middle" font-weight="700">5×5</text>
+    <rect x="596" y="50" width="62" height="110" rx="8" fill="var(--panel)" stroke="var(--rule)"/><text x="627" y="110" text-anchor="middle">pool</text>
+  </g>
+  <g fill="none" stroke="var(--accent)" stroke-width="2.2">
+    <path d="M538 100 A 14 14 0 0 1 566 100"/><path d="M540 128 A 14 14 0 0 0 568 128"/><path d="M546 146 A 10 10 0 0 1 546 120"/>
+  </g>
+  <text x="520" y="185" text-anchor="middle" font-size="12" class="muted">all 30 curve-related features sit in the 5×5 branch</text>
+  <text x="520" y="202" text-anchor="middle" font-size="12" class="muted">(96 of 480 neurons; chance &lt; 1 in 10²⁰)</text>
+</svg>
+<figcaption><b>Figure 2.11.</b> Branch specialization. Similar features gather in the same branch, even when the split was made for hardware reasons.</figcaption>
+</figure>
+
+<h3>Universality: first evidence</h3>
+<p>The third claim of "Zoom In" was universality. The team found curve detectors and high-low frequency detectors not only in InceptionV1 but also in AlexNet, VGG19 and ResNetV2-50, and in models trained on a different dataset (Places365). They asked if there might be a "periodic table of low-level visual features". In their own words, the evidence was still "anecdotal", but it was encouraging.</p>
+
+<div class="callout good">
+<span class="label">Update (2024)</span>
+<p>The InceptionV1 story was not finished. In 2024, Liv Gorton trained sparse autoencoders (the tool of <a href="08-dictionary-learning.html">Chapter 8</a>) on InceptionV1's early layers. They found extra curve detectors that fill gaps in the neuron-level curve family, and they split some polysemantic neurons into cleaner features (<a href="https://arxiv.org/abs/2406.03662">"The Missing Curve Detectors of InceptionV1"</a>). So even this well-studied model held features that no single neuron showed.</p>
+</div>
+
+<h2 id="clip" data-short="CLIP's multimodal neurons">Multimodal neurons in CLIP</h2>
+
+<p>In March 2021, Gabriel Goh and the team turned the microscope on <b>CLIP</b>. CLIP is an OpenAI model that learns from images paired with text captions. It has an image side and a text side. The team studied neurons near the end of the image side of a ResNet model called RN50-x4.</p>
+
+<p>They had a famous result from brain science in mind. In 2005, Quian Quiroga and colleagues found single neurons in the human brain that respond to one person, such as Halle Berry. The neuron fires for photos of her, drawings of her, and even her written name. CLIP had neurons like that.</p>
+
+<ul>
+<li><b>The Spider-Man neuron</b> (neuron 244) fires for photos of Spider-Man, comic drawings, the costume, and the written word "spider".</li>
+<li><b>Person neurons</b> for well-known people. One public figure had a neuron in every CLIP model they checked.</li>
+<li><b>Region neurons</b>, from hemispheres down to single countries and cities. About 4% of the neurons were regional.</li>
+<li><b>Emotion neurons.</b> Complex emotions looked like sums of simpler ones. For example, "jealousy" ≈ "success" + "grumpy".</li>
+</ul>
+
+<figure class="panel">
+<svg viewBox="0 0 720 240" role="img" aria-label="Comparison grid. Rows: photo, drawing, written name. The biological Halle Berry cell and CLIP's Spider-Man neuron respond to all three. A generic person detector in InceptionV1 responds mainly to photos.">
+  <g id="clipGrid"></g>
+</svg>
+<figcaption><b>Figure 2.12.</b> Multimodal neurons respond to a concept, not to one visual pattern. The human "concept cell" and CLIP's Spider-Man neuron respond to photos, drawings and words. (Schematic.)</figcaption>
+</figure>
+
+<p>The team sampled 50 neurons from this layer. 76% were interpretable, 18% were polysemantic but with readable facets, and 6% were not readable.</p>
+
+<h3>Typographic attacks</h3>
+<p>Because CLIP's neurons respond to written words, text can hijack its decisions. The famous example: a Granny Smith apple with a paper label that says "iPod". CLIP classified the picture as an iPod. In an automated test, the best attacks succeeded 97% of the time while changing only about 7% of the image's pixels. The team found some attack words by <em>reading neurons</em>. For example, a neuron for "piggy bank" also responded to "$$$" and prices.</p>
+
+<div class="callout example">
+<span class="label">Interpretability predicts a weakness</span>
+<p>The typographic attack is a clear case where understanding a neuron told the researchers how the model would fail. They also found neurons that encoded harmful biases, such as a neuron that linked a region of the world with terrorism. Reading neurons can surface problems before users find them.</p>
+</div>
+
+<div class="paper"><div class="yr">2021</div><div><div class="t"><a href="https://distill.pub/2021/multimodal-neurons/">Multimodal Neurons in Artificial Neural Networks</a></div><div class="a">Gabriel Goh, Nick Cammarata, Chelsea Voss, Shan Carter, Michael Petrov, Ludwig Schubert, Alec Radford, Chris Olah · Distill</div><div class="s">Found neurons in CLIP that respond to a concept across photos, drawings and text. Showed typographic attacks and biased neurons.</div></div></div>
+
+<h2 id="naming" data-short="The name: mech interp">Mechanistic interpretability gets its name</h2>
+
+<p>The phrase "mechanistic interpretability" comes from Chris Olah and the Circuits group, around 2020–2021. "Zoom In" already talked about understanding "the mechanistic implementations of neurons in terms of their weights". After the vision thread ended in April 2021, much of the team moved to Anthropic. There, the work continued as the <b>Transformer Circuits thread</b>, starting in December 2021 (Chapter 4).</p>
+
+<p>In June 2022, Olah wrote a short essay that set out the idea clearly: "Mechanistic Interpretability, Variables, and the Importance of Interpretable Bases". It opens:</p>
+
+<div class="callout analogy">
+<span class="label">Olah, 2022</span>
+<p>"Mechanistic interpretability seeks to reverse engineer neural networks, similar to how one might reverse engineer a compiled binary computer program. After all, neural network parameters are in some sense a binary computer program which runs on one of the exotic virtual machines we call a neural network architecture."</p>
+</div>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Regular computer programs</th><th>Neural networks</th></tr></thead>
+<tbody>
+<tr><td>Reverse engineering</td><td>Mechanistic interpretability</td></tr>
+<tr><td>Program binary</td><td>Network parameters (weights)</td></tr>
+<tr><td>Virtual machine / processor</td><td>Network architecture</td></tr>
+<tr><td>Program state / memory</td><td>Layer activations</td></tr>
+<tr><td>Variable / memory location</td><td>Neuron or feature direction</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The essay makes three main points:</p>
+<ol>
+<li><b>The curse of dimensionality.</b> You cannot understand a function over a huge input space by testing inputs one by one. Programs are understandable because "the code gives a non-exponential description of the program's behavior". For networks, the weights are that short description.</li>
+<li><b>Variables come first.</b> The line <code>y = x + 5</code> means nothing unless you know what <code>x</code> and <code>y</code> are. So the central task is to give meaning to the "memory locations" of the network. That means finding its features.</li>
+<li><b>Interpretable bases matter.</b> Nonlinearities like ReLU push features to line up with neurons, like a CPU that works on bytes. Polysemantic neurons break this, and make reverse engineering much harder.</li>
+</ol>
+
+<p>Olah also asked: what <em>is</em> a feature? He listed candidate answers. A feature might be a property that humans can name, but that is too human-centered. It might be "the things a network would ideally dedicate a neuron to if you gave it enough neurons". This last definition links features directly to superposition. It is the definition that Chapter 3 builds on.</p>
+
+<h2 id="critiques" data-short="Critiques of the era">What critics said</h2>
+
+<p>This era had strong critics. Their points shaped the more careful methods that came later.</p>
+
+<div class="tabs">
+  <div class="tab-panel" data-label="Saliency is unreliable">
+    <p>Adebayo et al. (2018) and Kindermans et al. (2017) showed that some attribution maps do not depend on the model. A method can make convincing pictures and still be wrong. Lesson: every method needs tests that could fail.</p>
+  </div>
+  <div class="tab-panel" data-label="Are single units meaningful?">
+    <p>Szegedy et al. (2013) claimed that random directions look as meaningful as single neurons. Morcos et al. (2018) found that networks that generalize well depend <em>less</em> on single directions, and that class-selective units are not more important when removed. Leavitt and Morcos (2020) argued that single-neuron stories need falsifiable tests. Network Dissection's rotation result pushed back: neurons are more interpretable than random directions. Both sides were partly right. Superposition (Chapter 3) explains why.</p>
+  </div>
+  <div class="tab-panel" data-label="Do visualizations help people?">
+    <p>Borowski et al. (2021) found that plain dataset examples helped people predict a neuron's activations at least as well as optimized feature visualizations. Zimmermann et al. (2021) found limited benefit for causal understanding. Later, Geirhos et al. (2023) showed that a network can be built to fool feature visualization.</p>
+  </div>
+  <div class="tab-panel" data-label="Texture, not shape">
+    <p>Geirhos et al. (2019) showed that ImageNet models rely on texture more than on shape. Ilyas et al. (2019) argued that adversarial examples come from "non-robust features" that are real but invisible to humans. So a model's features may not match human concepts at all.</p>
+  </div>
+  <div class="tab-panel" data-label="Too slow, too qualitative">
+    <p>The Circuits work took thousands of hours on one model. Its families were "ad-hoc". Its universality evidence was anecdotal. The field was "pre-paradigmatic": it had no shared standards for what counts as an explanation. Olah's answer: "The discovery of cells was a qualitative research result. That didn't stop it from changing the world."</p>
+  </div>
+  <div class="tab-panel" data-label="Explain or replace?">
+    <p>Cynthia Rudin (2019) argued that for high-stakes decisions, we should use models that are interpretable by design, not explain black boxes after the fact. Lipton (2016) and Doshi-Velez and Kim (2017) argued that "interpretability" was not well defined.</p>
+  </div>
+</div>
+
+<div class="quiz" data-answer="3">
+  <div class="q">Which piece of evidence for a curve detector is the strongest test of <em>understanding the mechanism</em>?</div>
+  <div class="opts">
+    <button>The optimized feature visualization shows a curve.</button>
+    <button>The top dataset examples contain curves.</button>
+    <button>A saliency map highlights curved edges.</button>
+    <button>Researchers wrote the weights by hand from their understanding, and the handmade detector behaves like the real one.</button>
+  </div>
+  <div class="why">Dataset examples only show correlation. A feature visualization shows what can drive the neuron, but not how the network computes it. Rebuilding the circuit from scratch shows that the explanation is complete enough to reproduce the behaviour. That is the core goal of mechanistic interpretability.</div>
+</div>
+
+<h2 id="what-next" data-short="What came next">What came next</h2>
+
+<p>By 2021, the vision era had built the main ideas of the field:</p>
+<ul>
+<li><b>Features</b> as directions, often aligned with neurons, sometimes not.</li>
+<li><b>Circuits</b> as features connected by weights that you can read.</li>
+<li><b>Motifs</b> that repeat: equivariance, unioning over cases, inhibition.</li>
+<li><b>Causal tests</b>: ablation and insertion, as in GAN Dissection.</li>
+<li><b>Concept directions</b>: TCAV and linear classifiers on activations.</li>
+<li>Two open problems: <b>polysemanticity</b> and <b>superposition</b>.</li>
+</ul>
+
+<p>Two paths led forward. The first path asked: <em>why</em> are neurons polysemantic, and can we undo it? That path leads to <a href="03-superposition.html">Chapter 3 (superposition)</a> and later to <a href="08-dictionary-learning.html">Chapter 8 (sparse autoencoders)</a>. The second path took the circuits approach to a new kind of model, the transformer, which was taking over AI. That path leads to <a href="04-transformers.html">Chapter 4</a>. Language models have no pictures to visualize, so the field had to invent new tools. But the core questions stayed the same: what are the features, and how are they connected?</p>
+
+<div class="quiz" data-answer="0">
+  <div class="q">What is the main thing the sanity-check paper (Adebayo et al. 2018) teaches about interpretability methods?</div>
+  <div class="opts">
+    <button>A method must be tested to show that its output depends on the model; a convincing picture is not enough.</button>
+    <button>Gradient-based methods never work.</button>
+    <button>Saliency maps should be replaced by feature visualization in all cases.</button>
+    <button>Randomized models are easier to interpret.</button>
+  </div>
+  <div class="why">Guided backprop gave sharp, convincing maps that barely changed when the model was randomized. The lesson is general: interpretability claims need tests that could fail.</div>
+</div>
+
+<div class="callout key" id="takeaways">
+<span class="label">Key takeaways</span>
+<ul>
+<li>Attribution (saliency) shows which inputs mattered, not how the network computed the answer.</li>
+<li>A convincing picture is not evidence. The 2018 sanity checks showed that every method needs a test that could fail.</li>
+<li>Feature visualization optimizes an input to excite a neuron. It needs strong regularization and real dataset examples.</li>
+<li>Network Dissection and TCAV showed that many units and directions match human concepts, and that the neuron axes are special (a privileged basis).</li>
+<li>The Circuits thread (2020–2021) read curve detectors from InceptionV1's weights and rebuilt them by hand.</li>
+<li>The same work found polysemantic neurons and named superposition. These two problems set the agenda for the next years.</li>
+</ul>
+<p><b>Where this leads:</b> <a href="03-superposition.html">Chapter 3</a> explains superposition in detail. <a href="04-transformers.html">Chapter 4</a> follows the Circuits team to transformers.</p>
+</div>
+
+<h2 id="references">References</h2>
+<ol class="refs">
+<li>Erhan, Bengio, Courville, Vincent (2009). <a href="https://papers.baulab.info/papers/also/Erhan-2009.pdf">Visualizing Higher-Layer Features of a Deep Network</a>. Univ. of Montreal Tech. Report 1341.</li>
+<li>Zeiler, Fergus (2013). <a href="https://arxiv.org/abs/1311.2901">Visualizing and Understanding Convolutional Networks</a>. ECCV 2014.</li>
+<li>Simonyan, Vedaldi, Zisserman (2013). <a href="https://arxiv.org/abs/1312.6034">Deep Inside Convolutional Networks: Visualising Image Classification Models and Saliency Maps</a>.</li>
+<li>Szegedy et al. (2013). <a href="https://arxiv.org/abs/1312.6199">Intriguing properties of neural networks</a>.</li>
+<li>Springenberg, Dosovitskiy, Brox, Riedmiller (2014). <a href="https://arxiv.org/abs/1412.6806">Striving for Simplicity: The All Convolutional Net</a>.</li>
+<li>Mordvintsev, Olah, Tyka (2015). <a href="https://research.google/blog/inceptionism-going-deeper-into-neural-networks/">Inceptionism: Going Deeper into Neural Networks</a>. Google Research Blog.</li>
+<li>Karpathy, Johnson, Fei-Fei (2015). <a href="https://arxiv.org/abs/1506.02078">Visualizing and Understanding Recurrent Networks</a>.</li>
+<li>Ribeiro, Singh, Guestrin (2016). <a href="https://arxiv.org/abs/1602.04938">"Why Should I Trust You?": Explaining the Predictions of Any Classifier</a>. KDD.</li>
+<li>Selvaraju et al. (2016). <a href="https://arxiv.org/abs/1610.02391">Grad-CAM: Visual Explanations from Deep Networks via Gradient-based Localization</a>. ICCV 2017.</li>
+<li>Sundararajan, Taly, Yan (2017). <a href="https://arxiv.org/abs/1703.01365">Axiomatic Attribution for Deep Networks</a>. ICML.</li>
+<li>Lundberg, Lee (2017). <a href="https://arxiv.org/abs/1705.07874">A Unified Approach to Interpreting Model Predictions</a>. NeurIPS.</li>
+<li>Bau, Zhou, Khosla, Oliva, Torralba (2017). <a href="https://arxiv.org/abs/1704.05796">Network Dissection: Quantifying Interpretability of Deep Visual Representations</a>. CVPR.</li>
+<li>Radford, Jozefowicz, Sutskever (2017). <a href="https://arxiv.org/abs/1704.01444">Learning to Generate Reviews and Discovering Sentiment</a>.</li>
+<li>Olah, Mordvintsev, Schubert (2017). <a href="https://distill.pub/2017/feature-visualization/">Feature Visualization</a>. Distill.</li>
+<li>Kindermans et al. (2017). <a href="https://arxiv.org/abs/1711.00867">The (Un)reliability of Saliency Methods</a>.</li>
+<li>Kim et al. (2018). <a href="https://arxiv.org/abs/1711.11279">Interpretability Beyond Feature Attribution: Quantitative Testing with Concept Activation Vectors (TCAV)</a>. ICML.</li>
+<li>Fong, Vedaldi (2018). <a href="https://arxiv.org/abs/1801.03454">Net2Vec: Quantifying and Explaining how Concepts are Encoded by Filters in Deep Neural Networks</a>. CVPR.</li>
+<li>Olah et al. (2018). <a href="https://distill.pub/2018/building-blocks/">The Building Blocks of Interpretability</a>. Distill.</li>
+<li>Morcos, Barrett, Rabinowitz, Botvinick (2018). <a href="https://arxiv.org/abs/1803.06959">On the importance of single directions for generalization</a>. ICLR.</li>
+<li>Adebayo et al. (2018). <a href="https://arxiv.org/abs/1810.03292">Sanity Checks for Saliency Maps</a>. NeurIPS.</li>
+<li>Bau et al. (2019). <a href="https://arxiv.org/abs/1811.10597">GAN Dissection: Visualizing and Understanding Generative Adversarial Networks</a>. ICLR.</li>
+<li>Carter, Armstrong, Schubert, Johnson, Olah (2019). <a href="https://distill.pub/2019/activation-atlas/">Activation Atlas</a>. Distill.</li>
+<li>Olah et al. (2020). <a href="https://distill.pub/2020/circuits/zoom-in/">Zoom In: An Introduction to Circuits</a>. Distill.</li>
+<li>Olah et al. (2020). <a href="https://distill.pub/2020/circuits/early-vision/">An Overview of Early Vision in InceptionV1</a>. Distill.</li>
+<li>Cammarata et al. (2020). <a href="https://distill.pub/2020/circuits/curve-detectors/">Curve Detectors</a>. Distill.</li>
+<li>Bau et al. (2020). <a href="https://www.pnas.org/doi/10.1073/pnas.1907375117">Understanding the role of individual units in a deep neural network</a>. PNAS. (<a href="https://arxiv.org/abs/2009.05041">arXiv version</a>)</li>
+<li>Olah et al. (2020). <a href="https://distill.pub/2020/circuits/equivariance/">Naturally Occurring Equivariance in Neural Networks</a>. Distill.</li>
+<li>Schubert et al. (2021). <a href="https://distill.pub/2020/circuits/frequency-edges/">High-Low Frequency Detectors</a>. Distill.</li>
+<li>Cammarata et al. (2021). <a href="https://distill.pub/2020/circuits/curve-circuits/">Curve Circuits</a>. Distill.</li>
+<li>Voss et al. (2021). <a href="https://distill.pub/2020/circuits/visualizing-weights/">Visualizing Weights</a>. Distill.</li>
+<li>Goh et al. (2021). <a href="https://distill.pub/2021/multimodal-neurons/">Multimodal Neurons in Artificial Neural Networks</a>. Distill.</li>
+<li>Voss et al. (2021). <a href="https://distill.pub/2020/circuits/branch-specialization/">Branch Specialization</a>. Distill.</li>
+<li>Petrov et al. (2021). <a href="https://distill.pub/2020/circuits/weight-banding/">Weight Banding</a>. Distill.</li>
+<li>Olah (2022). <a href="https://transformer-circuits.pub/2022/mech-interp-essay/index.html">Mechanistic Interpretability, Variables, and the Importance of Interpretable Bases</a>. Transformer Circuits Thread.</li>
+<li>Geirhos, Zimmermann, Bilodeau, Brendel, Kim (2023). <a href="https://arxiv.org/abs/2306.04719">Don't trust your eyes: on the (un)reliability of feature visualizations</a>.</li>
+<li>Gorton (2024). <a href="https://arxiv.org/abs/2406.03662">The Missing Curve Detectors of InceptionV1: Applying Sparse Autoencoders to InceptionV1 Early Vision</a>.</li>
+<li>Borowski et al. (2021). Exemplary natural images explain CNN activations better than state-of-the-art feature visualization. ICLR.</li>
+<li>Rudin (2019). Stop explaining black box machine learning models for high stakes decisions and use interpretable models instead. Nature Machine Intelligence.</li>
+</ol>
+
+</article>
+</main>
+
+<script src="assets/glossary.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/search-index.js"></script>
+<script src="assets/search.js"></script>
+<script src="assets/ch2.js"></script>
+</body>
+</html>

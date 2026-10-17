@@ -1,0 +1,1384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Probing and Steering</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  #probeSvg, #steerSvg, #refSvg { width: 100%; height: auto; display: block; touch-action: none; }
+  #probeSvg { cursor: crosshair; }
+  .bars { display: grid; gap: 6px; margin-top: 10px; }
+  .bar-row { display: grid; grid-template-columns: 90px 1fr 54px; gap: 10px; align-items: center; font-size: 0.84375rem; }
+  .bar-row .track { height: 14px; background: var(--bg-2); border-radius: 4px; overflow: hidden; }
+  .bar-row .fill { height: 100%; border-radius: 4px; transition: width .2s; }
+  .bar-row .pct { font-family: var(--mono); font-size: 0.78125rem; color: var(--ink-2); text-align: right; }
+  .gen { font-family: var(--serif); font-size: 1.0625rem; background: var(--bg-2); border-radius: 8px; padding: 10px 14px; margin-top: 12px; }
+  .gen .p { color: var(--ink-3); }
+  .gen .c { color: var(--accent); font-weight: 600; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+  .checklist li { margin-bottom: 8px; }
+  /* shared CSS sets svg text fill; let explicit fill attributes win */
+  svg text[fill="var(--accent)"] { fill: var(--accent); }
+  svg text[fill="var(--blue)"] { fill: var(--blue); }
+  svg text[fill="var(--green)"] { fill: var(--green); }
+  svg text[fill="var(--red)"] { fill: var(--red); }
+  svg text[fill="var(--purple)"] { fill: var(--purple); }
+  svg text[fill="var(--ink)"] { fill: var(--ink); }
+  svg text[fill="var(--ink-3)"] { fill: var(--ink-3); }
+  svg text[fill="var(--yellow)"] { fill: var(--yellow); }
+  svg text[fill="#fff"] { fill: #fff; }
+  svg g[fill="var(--accent)"] text { fill: var(--accent); }
+  svg g[fill="var(--blue)"] text { fill: var(--blue); }
+  svg g[fill="var(--green)"] text { fill: var(--green); }
+  svg g[fill="var(--red)"] text { fill: var(--red); }
+  svg g[fill="var(--purple)"] text { fill: var(--purple); }
+  svg g[fill="var(--ink-3)"] text { fill: var(--ink-3); }
+</style>
+</head>
+<body data-chapter="7">
+<main>
+<article class="article">
+
+<div class="kicker">Chapter 7</div>
+<h1>Probing and steering</h1>
+<p class="lede">If concepts live as directions inside a model, we can do three things with them. We can <b>read</b> them with a probe. We can <b>erase</b> them to test if the model needs them. And we can <b>write</b> them to change what the model does. This chapter covers all three, from 2016 to 2026.</p>
+
+<div class="tldr">
+<h3>In short</h3>
+<ul>
+<li>A <span class="term" data-term="probe">probe</span> is a small classifier trained on a model's activations. If it works, the information is <b>present</b>. It does not prove that the model <b>uses</b> it.</li>
+<li>Probes can "cheat": a strong probe can learn the task by itself. Control tasks, MDL and simple linear probes help against this.</li>
+<li>To show <b>use</b>, you must intervene: erase the direction (INLP, LEACE, amnesic probing) or add it (steering) and watch the output.</li>
+<li>Simple directions do a lot. A "difference of means" between two groups of prompts gives directions for truth, refusal, sycophancy and personas.</li>
+<li>Steering vectors change behaviour with no training. One direction controls refusal in 13 open chat models.</li>
+<li>Every MLP neuron's write vector is a ready-made steering vector. Sweeping a whole layer works only with a random-direction control, because almost any push changes the output.</li>
+<li>Editing a behaviour in practice is a loop: build a clean contrast set, choose the layer and strength by measurement, apply the edit, then report the damage and a control along with the effect.</li>
+<li>Linear probes are now used as cheap safety monitors in production systems at Anthropic and Google DeepMind.</li>
+</ul>
+</div>
+
+<div class="callout example" id="learning-path">
+<span class="label">Learning path · Chapter 7 of 12 · about 65 min · 3 widgets · 6 quizzes</span>
+<p><b>Before you start:</b> <a href="03-superposition.html#linear-representation">Chapter 3: the linear representation hypothesis</a>, <a href="05-causal-methods.html#why-causal">Chapter 5: why correlation is not enough</a> and <a href="04-transformers.html#residual-stream">the residual stream</a>. This chapter also mentions <b>sparse autoencoders (SAEs)</b>. In one line: an SAE splits an activation into many readable features. <a href="08-dictionary-learning.html#anatomy">Chapter 8</a> explains them.</p>
+<p><b>You will learn:</b></p>
+<ul><li>how probes read information from activations, and how they can "cheat"</li><li>how erasure (INLP, LEACE, amnesic probing) tests whether the model uses that information</li><li>how simple difference-of-means directions find truth, refusal and personas</li><li>how steering vectors (ActAdd, CAA, ITI) change behaviour without training</li><li>how to steer single neurons, and why random-direction controls are needed</li><li>how to remove or add a behaviour in practice (abliteration and its relatives), and how to measure what the edit broke</li><li>how linear probes became cheap safety monitors in production</li></ul>
+</div>
+
+
+<!-- ============================================================ -->
+<h2 id="read-write" data-short="Reading vs writing">Reading versus writing a model's mind</h2>
+
+<p>Chapters 5 and 6 traced whole circuits, part by part. This chapter follows a simpler line of work that ran in parallel, from 2016 to 2026. Its idea: treat one concept as one direction, then read it or write it. A language model turns each <span class="term" data-term="token">token</span> into a long <span class="term" data-term="vector">vector</span> at every layer. In a transformer, this vector is the <span class="term" data-term="residual stream">residual stream</span>. This chapter is about three ways to work with these vectors.</p>
+
+<ol>
+<li><b>Probing (reading).</b> Train a small, simple model to predict some property X from the activations. If it works, information about X is in the activations.</li>
+<li><b>Erasure (checking use).</b> Remove the part of the activations that carries X. Then see if the model's behaviour changes. If it does, the model uses X.</li>
+<li><b>Steering (writing).</b> Add a vector to the activations while the model runs. This pushes its behaviour in one direction: more positive, more honest, more refusing.</li>
+</ol>
+
+<p>All three rely on one idea: the <span class="term" data-term="linear representation hypothesis">linear representation hypothesis</span>. It says that many concepts are stored as <span class="term" data-term="direction">directions</span> in activation space. If "truth" is a direction, you can read it with a dot product. You can delete it with a projection. You can push it with an addition.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 300" role="img" aria-label="Left: a probe reads one layer of a model and outputs 'noun? yes 94%'. Right: a steering vector is added to one layer and the model output changes from hostile to kind.">
+  <defs>
+    <marker id="a71" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
+    <marker id="a71o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+  </defs>
+  <rect x="5" y="5" width="350" height="290" rx="12" fill="var(--blue-soft)"/>
+  <rect x="365" y="5" width="350" height="290" rx="12" fill="var(--accent-soft)"/>
+  <text x="20" y="30" font-size="13" font-weight="800" fill="var(--blue)">READING (probing)</text>
+  <text x="380" y="30" font-size="13" font-weight="800" fill="var(--accent)">WRITING (steering)</text>
+  <g font-size="12">
+    <rect x="40" y="64" width="130" height="30" rx="6" fill="var(--panel)" stroke="var(--ink-3)"/><text x="105" y="84" text-anchor="middle">layer 4</text>
+    <rect x="40" y="104" width="130" height="30" rx="6" fill="var(--panel)" stroke="var(--blue)" stroke-width="2"/><text x="105" y="124" text-anchor="middle">layer 3</text>
+    <rect x="40" y="144" width="130" height="30" rx="6" fill="var(--panel)" stroke="var(--ink-3)"/><text x="105" y="164" text-anchor="middle">layer 2</text>
+    <rect x="40" y="184" width="130" height="30" rx="6" fill="var(--panel)" stroke="var(--ink-3)"/><text x="105" y="204" text-anchor="middle">layer 1</text>
+    <text x="105" y="250" text-anchor="middle" class="muted">input: "the cat sat"</text>
+    <line x1="105" y1="238" x2="105" y2="218" stroke="var(--ink-3)" marker-end="url(#a71)"/>
+    <line x1="105" y1="62" x2="105" y2="46" stroke="var(--ink-3)" marker-end="url(#a71)"/>
+    <line x1="172" y1="119" x2="218" y2="119" stroke="var(--blue)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#a71)"/>
+    <text x="195" y="110" text-anchor="middle" font-size="10" class="muted">copy</text>
+    <rect x="222" y="99" width="110" height="40" rx="8" fill="var(--panel)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="277" y="124" text-anchor="middle" font-weight="700" fill="var(--blue)">probe</text>
+    <text x="277" y="165" text-anchor="middle" font-size="12">"is 'cat' a noun?"</text>
+    <text x="277" y="183" text-anchor="middle" font-size="13" font-weight="700" fill="var(--blue)">yes, 94%</text>
+    <text x="190" y="275" text-anchor="middle" font-size="11" class="muted">the model is not changed</text>
+  </g>
+  <g font-size="12">
+    <rect x="400" y="64" width="130" height="30" rx="6" fill="var(--panel)" stroke="var(--ink-3)"/><text x="465" y="84" text-anchor="middle">layer 4</text>
+    <rect x="400" y="104" width="130" height="30" rx="6" fill="var(--panel)" stroke="var(--ink-3)"/><text x="465" y="124" text-anchor="middle">layer 3</text>
+    <rect x="400" y="144" width="130" height="30" rx="6" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/><text x="465" y="164" text-anchor="middle">layer 2</text>
+    <rect x="400" y="184" width="130" height="30" rx="6" fill="var(--panel)" stroke="var(--ink-3)"/><text x="465" y="204" text-anchor="middle">layer 1</text>
+    <text x="465" y="250" text-anchor="middle" class="muted">input: "I hate you because"</text>
+    <line x1="465" y1="238" x2="465" y2="218" stroke="var(--ink-3)" marker-end="url(#a71)"/>
+    <circle cx="610" cy="159" r="16" fill="var(--accent)"/><text x="610" y="164" text-anchor="middle" font-size="16" font-weight="800" fill="#fff">+</text>
+    <line x1="592" y1="159" x2="534" y2="159" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#a71o)"/>
+    <text x="610" y="196" text-anchor="middle" font-size="11" fill="var(--accent)" font-weight="700">steering vector</text>
+    <text x="610" y="211" text-anchor="middle" font-size="11" class="muted">"Love" − "Hate"</text>
+    <line x1="465" y1="62" x2="465" y2="50" stroke="var(--ink-3)" marker-end="url(#a71)"/>
+    <text x="555" y="62" font-size="11.5" class="muted" text-decoration="line-through">"…you are awful"</text>
+    <text x="555" y="80" font-size="12" font-weight="700" fill="var(--accent)">"…you are wonderful"</text>
+    <text x="550" y="275" text-anchor="middle" font-size="11" class="muted">the model's behaviour changes</text>
+  </g>
+</svg>
+<figcaption><b>Figure 7.1.</b> Reading tells you what is there. Writing tells you what matters. A probe copies activations out and leaves the model alone. A steering vector is added into the model and changes its output.</figcaption>
+</figure>
+
+<h3>"The information is there" is not "the model uses it"</h3>
+
+<p>This is the most important idea in this chapter. Read it slowly.</p>
+
+<p>A probe answers one question: <em>could someone who looks at these numbers guess X?</em> It does <b>not</b> answer a second question: <em>does the model itself look at X when it makes its next prediction?</em></p>
+
+<div class="callout analogy">
+<span class="label">Analogy</span>
+<p>A photo of a crowd contains information about the weather. You can see coats and shadows. A face-recognition system processes this photo. Maybe a "weather probe" on its internal features works well. That only shows that weather information survived inside the system. It does not show that face recognition uses the weather.</p>
+</div>
+
+<p>A probe can mislead you in two ways.</p>
+<ol>
+<li><b>The probe does the work.</b> A powerful probe, such as a big <span class="term" data-term="mlp">MLP</span>, can learn the task by itself from almost any rich input. Then high accuracy tells you about the probe, not about the model.</li>
+<li><b>The information is present but unused.</b> The information can be there as a side effect. It can correlate with something that the model does use. But the model may never read it.</li>
+</ol>
+
+<p>The fix is a <b>causal intervention</b>. Change the activations along the probed direction. Then watch the output. If removing "is this a noun?" makes the model worse at predicting nouns, the model used that information. If adding a "truth" direction makes the model call false statements true, the direction is linked to the behaviour.</p>
+
+<div class="callout key">
+<span class="label">Key idea</span>
+<p><b>Probing shows correlation. Intervention shows causation.</b> The best papers in this chapter do both. Examples are the Geometry of Truth, Othello-GPT and the refusal direction.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="classic" data-short="Classic probing (2016–2019)">Classic probing, 2016 to 2019</h2>
+
+<p>Probing started as a way to ask "what does each layer know?" The method is simple. Freeze the trained network. Collect activations at one layer for many inputs. Train a small classifier on those activations to predict a label. Repeat for each layer.</p>
+
+<div class="paper"><div class="yr">2016</div><div><div class="t"><a href="https://arxiv.org/abs/1610.01644">Understanding intermediate layers using linear classifier probes</a></div><div class="a">Guillaume Alain, Yoshua Bengio</div><div class="s">Trains one linear classifier per layer of an image model. The probe does not change the network, because no gradient flows back into it. Probe accuracy rises with depth: deeper layers make the classes easier to separate with a line.</div></div></div>
+
+<p>Alain and Bengio tested image classifiers, such as convolutional networks on MNIST and Inception v3 on ImageNet. Accuracy went up steadily from layer to layer. They also found a strange case. In a very deep model with a skip connection, the middle layers were "dead". The probes showed no gain there. So probes can also find bugs.</p>
+
+<div class="paper"><div class="yr">2018</div><div><div class="t"><a href="https://arxiv.org/abs/1805.01070">What you can cram into a single $&amp;!#* vector: Probing sentence embeddings for linguistic properties</a></div><div class="a">Alexis Conneau, Germán Kruszewski, Guillaume Lample, Loïc Barrault, Marco Baroni</div><div class="s">Builds a standard set of 10 probing tasks for sentence vectors: length, word content, tree depth, word order, tense, subject number, and more.</div></div></div>
+
+<p>Conneau and colleagues found that sentence encoders capture many of these properties. The training objective and the architecture both matter. They also found an early warning sign: some properties could be read even from <b>untrained, random</b> encoders. A good probe result needs a good baseline.</p>
+
+<div class="paper"><div class="yr">2019</div><div><div class="t"><a href="https://arxiv.org/abs/1905.05950">BERT Rediscovers the Classical NLP Pipeline</a></div><div class="a">Ian Tenney, Dipanjan Das, Ellie Pavlick</div><div class="s">Probes every BERT layer for many tasks. Syntax tasks are solved in lower layers and meaning tasks in higher layers, in the order of a classic NLP pipeline.</div></div></div>
+
+<p>Old NLP systems were pipelines. First a tagger found the part of speech (noun, verb). Then a parser found the sentence structure. Then later stages found meaning, such as "who did what to whom", and which words refer to the same thing. Tenney and colleagues computed, for each task, the expected layer where BERT solves it. The order was roughly: part of speech, then constituents, then dependencies, then semantic roles, then coreference. The model could also revise early guesses in later layers. The differences between tasks were small, so "pipeline" is a loose analogy.</p>
+
+<h3>The structural probe: a whole tree inside the geometry</h3>
+
+<div class="paper"><div class="yr">2019</div><div><div class="t"><a href="https://aclanthology.org/N19-1419/">A Structural Probe for Finding Syntax in Word Representations</a></div><div class="a">John Hewitt, Christopher D. Manning</div><div class="s">Finds one linear map B so that distances between transformed word vectors match distances in the sentence's parse tree.</div></div></div>
+
+<p>Most probes predict a label. Hewitt and Manning asked a bigger question. Does the model store a whole <b>syntax tree</b>? A dependency parse tree links each word to the word it depends on. The "tree distance" between two words is the number of links between them.</p>
+
+<p>They learned one matrix B. They then measured the squared distance <span class="math">‖B(hᵢ − hⱼ)‖²</span> between two transformed word vectors. Training made this distance match the tree distance. If a single linear map can do this for every sentence, the tree is "drawn" into the geometry of the vectors.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 250" role="img" aria-label="Left: the sentence 'The cat sat on the mat' with dependency arcs. Right: after the linear map B, words become points, and words linked in the tree are close together.">
+  <defs><marker id="a72" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs>
+  <text x="20" y="24" font-size="12" font-weight="700" class="muted">PARSE TREE (from linguists)</text>
+  <text x="430" y="24" font-size="12" font-weight="700" class="muted">WORD VECTORS AFTER MAP B</text>
+  <g font-size="14" text-anchor="middle">
+    <text x="40" y="190">The</text><text x="100" y="190">cat</text><text x="160" y="190" font-weight="700">sat</text>
+    <text x="220" y="190">on</text><text x="275" y="190">the</text><text x="330" y="190">mat</text>
+  </g>
+  <g fill="none" stroke="var(--blue)" stroke-width="1.8">
+    <path d="M40 172 Q 70 140 100 172"/>
+    <path d="M100 172 Q 130 130 160 172"/>
+    <path d="M160 172 Q 245 70 330 172"/>
+    <path d="M220 172 Q 275 115 330 172"/>
+    <path d="M275 172 Q 302 145 330 172"/>
+  </g>
+  <text x="185" y="225" text-anchor="middle" font-size="12" class="muted">tree distance(The, sat) = 2 · tree distance(The, the) = 4</text>
+  <line x1="365" y1="130" x2="420" y2="130" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#a72)"/>
+  <text x="392" y="120" text-anchor="middle" font-size="15" font-weight="800" fill="var(--accent)">B</text>
+  <g stroke="var(--blue)" stroke-width="1.8">
+    <line x1="470" y1="85" x2="525" y2="115"/><line x1="525" y1="115" x2="575" y2="140"/>
+    <line x1="575" y1="140" x2="635" y2="160"/><line x1="635" y1="160" x2="680" y2="120"/><line x1="635" y1="160" x2="660" y2="210"/>
+  </g>
+  <g font-size="13">
+    <circle cx="470" cy="85" r="6" fill="var(--accent)"/><text x="470" y="70" text-anchor="middle">The</text>
+    <circle cx="525" cy="115" r="6" fill="var(--accent)"/><text x="512" y="135" text-anchor="middle">cat</text>
+    <circle cx="575" cy="140" r="7" fill="var(--accent)"/><text x="570" y="165" text-anchor="middle" font-weight="700">sat</text>
+    <circle cx="635" cy="160" r="6" fill="var(--accent)"/><text x="615" y="182" text-anchor="middle">mat</text>
+    <circle cx="680" cy="120" r="6" fill="var(--accent)"/><text x="690" y="105" text-anchor="middle">on</text>
+    <circle cx="660" cy="210" r="6" fill="var(--accent)"/><text x="688" y="215" text-anchor="middle">the</text>
+  </g>
+</svg>
+<figcaption><b>Figure 7.2.</b> The structural probe. A single linear map B turns each word's vector into a point. Words that are neighbours in the parse tree end up close together, and words that are far apart in the tree end up far apart. (Points are a sketch, not real data.)</figcaption>
+</figure>
+
+<p>It worked well. The paper reports results on the Penn Treebank test set. "UUAS" is the percent of tree links that the probe recovers. The best result was BERT-large layer 15, with UUAS 82.5. Baselines were much lower. A probe on ELMo's non-contextual layer 0 scored 26.8. A simple left-to-right chain scored 48.9. A random contextual projection scored 59.8. The output size of B did not need to be large. Above about 64 to 128 dimensions there was no more gain. So syntax lives in a <b>low-rank subspace</b>: a small slice of the full space.</p>
+
+<!-- ============================================================ -->
+<h2 id="cheating" data-short="Is the probe cheating?">Is the probe cheating? Control tasks and MDL</h2>
+
+<p>By 2019, probe results were everywhere. Researchers started to ask a hard question. When a probe gets 97% accuracy, who did the work: the model or the probe?</p>
+
+<div class="paper"><div class="yr">2019</div><div><div class="t"><a href="https://arxiv.org/abs/1909.03368">Designing and Interpreting Probes with Control Tasks</a></div><div class="a">John Hewitt, Percy Liang</div><div class="s">A good probe must succeed on the real task and fail on a nonsense "control task". The gap between the two is called selectivity.</div></div></div>
+
+<p>A <b>control task</b> gives each word type a random, but fixed, label. For example, every "cat" gets label 7 and every "the" gets label 3. This label means nothing about language. The only way to solve it is to memorize which word is which. A probe that does well on the control task is a good memorizer.</p>
+
+<div class="mathblock">selectivity = accuracy on real task − accuracy on control task</div>
+
+<p>High selectivity means the probe reads real structure, not word identity. Hewitt and Liang found that MLP probes reach high accuracy on control tasks. They memorize. So their high accuracy on the real task means less. Linear probes were more selective. Dropout did not reliably fix MLP probes. Other limits helped: smaller hidden layers, less probe training data and weight decay.</p>
+
+<p>Try it yourself below. The points are made-up activations for two classes. The probe is a direction. Drag in the plot, or use the slider, to turn it. Then switch to random labels (a control task), and switch the probe type.</p>
+
+<div class="widget" id="probeWidget">
+  <div class="widget-title">Interactive · Train a probe by hand</div>
+  <div class="widget-sub">Each dot is one activation vector, flattened to 2D. Orange = "true statement", blue = "false statement". The arrow is the probe direction. The line is the decision boundary. Drag inside the plot to rotate the probe.</div>
+  <svg id="probeSvg" viewBox="0 0 460 330"></svg>
+  <div class="controls">
+    <label>Probe angle <input type="range" id="pAngle" min="0" max="359" value="150"> <output id="pAngleOut">150°</output></label>
+    <button class="btn" id="pBest">Find best direction</button>
+  </div>
+  <div class="controls">
+    <span>Labels:</span>
+    <div class="seg" id="pLabels"><button data-v="real" class="on">Real (true / false)</button><button data-v="rand">Random (control task)</button></div>
+    <span>Probe:</span>
+    <div class="seg" id="pType"><button data-v="lin" class="on">Linear</button><button data-v="mlp">Huge MLP (memorizer)</button></div>
+  </div>
+  <div class="readout" id="pOut"></div>
+</div>
+
+<p>What should you see? With real labels, a good direction reaches high accuracy. With random labels, no direction does much better than a coin. The huge "MLP" in this demo is a perfect memorizer (it copies the label of the nearest point). It gets 100% on both tasks. Its selectivity is zero. So its 100% on the real task tells you nothing about the model.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 240" role="img" aria-label="Bar chart sketch. Linear probe: high real-task accuracy, low control accuracy, large selectivity gap. MLP probe: high real accuracy, high control accuracy, small gap.">
+  <line x1="60" y1="200" x2="680" y2="200" stroke="var(--ink-3)"/>
+  <g font-size="12" class="muted"><text x="50" y="204" text-anchor="end">0</text><text x="50" y="44" text-anchor="end">100%</text></g>
+  <line x1="55" y1="40" x2="680" y2="40" stroke="var(--rule)" stroke-dasharray="3 3"/>
+  <!-- linear -->
+  <rect x="120" y="56" width="70" height="144" fill="var(--accent)" rx="4"/>
+  <rect x="200" y="130" width="70" height="70" fill="var(--blue)" rx="4"/>
+  <rect x="200" y="56" width="70" height="74" fill="none" stroke="var(--green)" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="235" y="98" text-anchor="middle" font-size="11" font-weight="700" fill="var(--green)">big gap</text>
+  <text x="195" y="222" text-anchor="middle" font-size="14" font-weight="700">Linear probe</text>
+  <!-- mlp -->
+  <rect x="420" y="50" width="70" height="150" fill="var(--accent)" rx="4"/>
+  <rect x="500" y="66" width="70" height="134" fill="var(--blue)" rx="4"/>
+  <rect x="500" y="50" width="70" height="16" fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="535" y="44" text-anchor="middle" font-size="11" font-weight="700" fill="var(--red)">tiny gap</text>
+  <text x="495" y="222" text-anchor="middle" font-size="14" font-weight="700">MLP probe</text>
+  <rect x="590" y="90" width="12" height="12" fill="var(--accent)"/><text x="608" y="100" font-size="12">real task</text>
+  <rect x="590" y="110" width="12" height="12" fill="var(--blue)"/><text x="608" y="120" font-size="12">control task</text>
+  <text x="608" y="140" font-size="12" fill="var(--green)">gap = selectivity</text>
+</svg>
+<figcaption><b>Figure 7.3.</b> The shape of the Hewitt &amp; Liang result (a sketch, not their exact numbers). Both probes do well on the real task. Only the linear probe fails on the control task. So only the linear probe's success says something about the model.</figcaption>
+</figure>
+
+<h3>Two other answers: information theory and MDL</h3>
+
+<div class="paper"><div class="yr">2020</div><div><div class="t"><a href="https://arxiv.org/abs/2004.03061">Information-Theoretic Probing for Linguistic Structure</a></div><div class="a">Tiago Pimentel, Josef Valvoda, Rowan Hall Maudslay, Ran Zmigrod, Adina Williams, Ryan Cotterell</div><div class="s">Treats probing as measuring mutual information. Argues for the best possible probe, and for measuring gain over a baseline.</div></div></div>
+
+<p>Pimentel and colleagues took the opposite view. A probe estimates how much <span class="term" data-def="How much knowing one thing reduces your uncertainty about another thing.">mutual information</span> the representation has about the property. A weaker probe only gives a looser estimate. So, they said, use the best probe you can. They also made a sharp point. A contextual embedding is computed from the sentence. So it cannot contain <em>more</em> information about the sentence than the sentence itself. The useful question is the <b>gain over a baseline</b>, such as simple word embeddings. In their tests, BERT gave only modest gains for part of speech and dependency labels.</p>
+
+<p>These two views do not really fight. They ask different questions. "Is the information there at all?" needs a strong probe. "Is it there in an easy, linear form that a model could use?" needs a simple probe. Mech interp usually cares about the second question.</p>
+
+<div class="paper"><div class="yr">2020</div><div><div class="t"><a href="https://arxiv.org/abs/2003.12298">Information-Theoretic Probing with Minimum Description Length</a></div><div class="a">Elena Voita, Ivan Titov</div><div class="s">Measures how many bits you need to send the labels, given the representation. Short codes mean the property is easy to extract with little data.</div></div></div>
+
+<p>Voita and Titov replaced accuracy with <b>description length</b>. Imagine that you must send all the labels to a friend who already has the representations. If the labels are easy to predict from the representations, the message is short. Their "online code" trains the probe on a growing amount of data. It pays a cost for each new block of labels. A probe that learns fast from few examples gives a short code. This measure captures both quality and effort. It separated real representations from random ones, and real tasks from control tasks, much more clearly than accuracy did. Accuracy differences were often tiny while code lengths differed a lot.</p>
+
+<!-- ============================================================ -->
+<h2 id="used" data-short="Is it actually used?">Is the information actually used? Erasure methods</h2>
+
+<p>Control tasks and MDL ask whether the probe cheated. A second problem remains. Even an honest probe only shows that information is <em>present</em>. To test <em>use</em>, researchers learned to remove the information and watch what breaks.</p>
+
+<div class="paper"><div class="yr">2020</div><div><div class="t"><a href="https://arxiv.org/abs/2004.07667">Null It Out: Guarding Protected Attributes by Iterative Nullspace Projection (INLP)</a></div><div class="a">Shauli Ravfogel, Yanai Elazar, Hila Gonen, Michael Twiton, Yoav Goldberg</div><div class="s">Train a linear classifier for a concept. Remove its direction from every vector. Repeat until no linear classifier can find the concept.</div></div></div>
+
+<p>INLP works in rounds. In each round, it trains a linear classifier for the concept, for example gender. The classifier defines a direction. INLP then projects every vector onto the <span class="term" data-def="The set of vectors that a classifier maps to zero. Projecting onto it removes the classifier's direction.">nullspace</span> of the classifier. This removes that direction. Then it trains a new classifier and repeats. It stops when no linear classifier can beat chance. The first use was fairness: removing gender from word embeddings. But it is also a tool for causal tests.</p>
+
+<div class="paper"><div class="yr">2021</div><div><div class="t"><a href="https://arxiv.org/abs/2006.00995">Amnesic Probing: Behavioral Explanation with Amnesic Counterfactuals</a></div><div class="a">Yanai Elazar, Shauli Ravfogel, Alon Jacovi, Yoav Goldberg</div><div class="s">Delete a property with INLP. Then measure how much the model's own task gets worse. If nothing changes, the model did not use the property.</div></div></div>
+
+<figure class="panel">
+<svg viewBox="0 0 720 260" role="img" aria-label="Amnesic probing pipeline: BERT lower layers, activations, erase property filter, BERT upper layers, masked word accuracy. Two meters compare erasing part-of-speech (large drop) and erasing random directions (small drop).">
+  <defs><marker id="a74" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <g font-size="13" text-anchor="middle">
+    <rect x="15" y="40" width="120" height="50" rx="8" fill="var(--panel)" stroke="var(--ink-3)"/><text x="75" y="62">BERT</text><text x="75" y="78" font-size="11" class="muted">lower layers</text>
+    <rect x="175" y="40" width="110" height="50" rx="8" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="230" y="70">activations</text>
+    <rect x="325" y="34" width="130" height="62" rx="8" fill="var(--red-soft)" stroke="var(--red)" stroke-width="2"/><text x="390" y="60" font-weight="700" fill="var(--red)">erase property</text><text x="390" y="78" font-size="11">(INLP)</text>
+    <rect x="495" y="40" width="100" height="50" rx="8" fill="var(--panel)" stroke="var(--ink-3)"/><text x="545" y="62">BERT</text><text x="545" y="78" font-size="11" class="muted">upper layers</text>
+    <text x="660" y="62" font-size="12">predict</text><text x="660" y="78" font-size="12">[MASK]</text>
+  </g>
+  <g stroke="var(--ink-3)" stroke-width="1.5" marker-end="url(#a74)">
+    <line x1="135" y1="65" x2="173" y2="65"/><line x1="285" y1="65" x2="323" y2="65"/><line x1="455" y1="65" x2="493" y2="65"/><line x1="595" y1="65" x2="625" y2="65"/>
+  </g>
+  <text x="40" y="145" font-size="13" font-weight="700">Masked-word accuracy after erasure (sketch):</text>
+  <g font-size="12">
+    <text x="40" y="180">no erasure</text><rect x="230" y="168" width="400" height="16" rx="3" fill="var(--ink-3)" opacity=".5"/>
+    <text x="40" y="210">erase random directions</text><rect x="230" y="198" width="370" height="16" rx="3" fill="var(--blue)"/>
+    <text x="40" y="240">erase part of speech</text><rect x="230" y="228" width="230" height="16" rx="3" fill="var(--red)"/>
+  </g>
+</svg>
+<figcaption><b>Figure 7.4.</b> Amnesic probing. Remove one property from the activations in the middle of the model. Let the rest of the model run. If the model's own task gets much worse than when you remove random directions of the same size, the model was using that property. (Bar lengths are a sketch.)</figcaption>
+</figure>
+
+<p>The main result: probe accuracy and actual use did not line up. Some properties were easy to probe but had little effect when removed. Others, like part of speech and dependency information, did matter for BERT's masked-word prediction. The comparison with "remove random directions" is important. Any removal hurts a little. Only a removal that hurts <em>more than random</em> shows use.</p>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2306.03819">LEACE: Perfect linear concept erasure in closed form</a></div><div class="a">Nora Belrose, David Schneider-Joseph, Shauli Ravfogel, Ryan Cotterell, Edward Raff, Stella Biderman</div><div class="s">One formula, no iterations. It provably stops every linear classifier from finding the concept, and changes the vectors as little as possible.</div></div></div>
+
+<p>INLP can remove more than needed, because it runs many rounds. LEACE (LEAst-squares Concept Erasure) solves the problem in one step. The key condition is simple: after erasure, the average vector of each class must be the same. If the class means are equal, no linear classifier can tell the classes apart. LEACE finds the smallest change that makes this true. The paper also applies LEACE at every layer of a network. It calls this "concept scrubbing". The authors used it to measure how much language models depend on part-of-speech information.</p>
+
+<div class="callout limit">
+<span class="label">Limit</span>
+<p>INLP and LEACE remove only <b>linear</b> information. A nonlinear classifier may still recover the concept. So "we erased it and nothing changed" is strong evidence only if the model reads the concept linearly. Most mech interp work assumes it does.</p>
+</div>
+
+<details>
+<summary>A checklist for any probing result (from Belinkov's 2022 survey)</summary>
+<div class="body">
+<p>Yonatan Belinkov's survey <a href="https://arxiv.org/abs/2102.12452">"Probing Classifiers: Promises, Shortcomings, and Advances"</a> lists the main problems. Ask these five questions about any probe result:</p>
+<ol class="checklist">
+<li><b>Baseline.</b> What does the same probe get on a random or untrained model, or on simple word embeddings?</li>
+<li><b>Probe power.</b> Could the probe have learned the task by itself? Was there a control task?</li>
+<li><b>Use.</b> Did anyone remove or change the direction and check the model's behaviour?</li>
+<li><b>Shortcuts.</b> Could the dataset let the probe solve the task by a side signal, such as sentence length?</li>
+<li><b>Choice of property.</b> The probe only tests what you chose to test. The model may use concepts you never thought of.</li>
+</ol>
+</div>
+</details>
+
+<div class="quiz" data-answer="1">
+  <div class="q">A 2-layer MLP probe gets 96% on part-of-speech tagging from layer 8. It also gets 90% on a control task with random labels per word. What is the best conclusion?</div>
+  <div class="opts">
+    <button>Layer 8 clearly encodes part of speech, because 96% is high.</button>
+    <button>The probe can memorize word identity, so the 96% says little. The selectivity is only 6 points.</button>
+    <button>The model uses part of speech in layer 8.</button>
+    <button>Control tasks only apply to linear probes, so ignore the 90%.</button>
+  </div>
+  <div class="why">High control-task accuracy means the probe memorizes. Selectivity (96 − 90 = 6) is low. And even a selective probe shows only presence, not use.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="othello" data-short="Othello: linear after all">Othello-GPT: the world model was linear after all</h2>
+
+<p>The next story shows that a failed linear probe does not always mean "nonlinear". Sometimes it means you asked the wrong question.</p>
+
+<p><a href="06-circuit-case-studies.html#othello">Chapter 6</a> tells the full Othello-GPT story. In short: Li and colleagues (2022) trained a small GPT only on lists of Othello moves. Probes could read the board from its activations, but only <b>nonlinear</b> probes worked well (about 1.7% error, against about 20.4% for <b>linear</b> probes). Editing the activations changed the model's moves, so the model used its board. Then Neel Nanda, Andrew Lee and Martin Wattenberg (2023) noticed that the model plays both sides. So it stores each square as <b>mine, theirs, or empty</b>, relative to the player to move, not as black or white. With these labels, <b>linear</b> probes became nearly perfect in the middle layers, and simple vector arithmetic along the probe directions changed the model's moves.</p>
+
+<figure class="panel">
+<svg id="othSvg" viewBox="0 0 720 290" role="img" aria-label="Two Othello boards. Left: colored black and white, linear probe about 20 percent error. Right: same board colored mine and theirs, linear probe near perfect."></svg>
+<figcaption><b>Figure 7.5.</b> The same board, labelled two ways. Left: the labels people expected (black / white). A linear probe gets about 20% error. Right: the labels the model uses (mine / theirs, relative to the player to move). A linear probe works almost perfectly.</figcaption>
+</figure>
+
+
+<div class="callout key">
+<span class="label">Lesson</span>
+<p>"The linear probe failed" can mean "you chose the wrong labels". This result was strong early evidence for the linear representation hypothesis. But not everything is linear. Engels et al. (2024) found that days of the week and months are stored as <b>circles</b> in some models. See <a href="03-superposition.html">Chapter 3</a>.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="truth" data-short="Space, time and truth">Space, time and truth directions</h2>
+
+<p>From 2022 onward, researchers used probes on large language models to look for "world model" concepts. They asked: does the model know where places are? When events happened? Whether a statement is true?</p>
+
+<h3>Space and time</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2310.02207">Language Models Represent Space and Time</a></div><div class="a">Wes Gurnee, Max Tegmark</div><div class="s">Linear regression probes on Llama-2 read the latitude and longitude of places, and the dates of people and events, from a single token's activation.</div></div></div>
+
+<p>Gurnee and Tegmark used Llama-2 models of 7B, 13B and 70B parameters. They built six datasets of names. Three were spatial: world places, US places and New York City places. Three were temporal: when historical figures died, when songs, movies and books came out, and dates of New York Times headlines. They ran each name through the model, such as "Paris, France". They took the activation at the last token and trained a linear regression probe to predict coordinates or a year.</p>
+
+<p>The probes worked. They got better with model size and in early to middle layers. They were robust to changes in the prompt wording. One representation was shared across entity types, such as cities and landmarks. The authors even found single "space neurons" and "time neurons". Nonlinear probes did not do much better than linear ones. Plot the predicted coordinates for many places and you get a rough world map.</p>
+
+<div class="callout limit">
+<span class="label">Limit</span>
+<p>This shows that the information is <b>linearly decodable</b>. The paper had limited causal evidence that the model <em>uses</em> these coordinates. Critics also noted that coordinates you can decode are not the same as a rich "world model".</p>
+</div>
+
+<h3>Finding truth without labels: CCS</h3>
+
+<div class="paper"><div class="yr">2022</div><div><div class="t"><a href="https://arxiv.org/abs/2212.03827">Discovering Latent Knowledge in Language Models Without Supervision</a></div><div class="a">Collin Burns, Haotian Ye, Dan Klein, Jacob Steinhardt</div><div class="s">Contrast-Consistent Search (CCS) finds a "truth" direction with no labels, using one rule: a statement and its negation must get opposite truth values.</div></div></div>
+
+<p>What if a model knows the true answer but says something else? Then reading its outputs is not enough. Burns and colleagues wanted to read what the model "believes" directly. And they wanted to do it <b>without labels</b>, because for hard questions we may not know the answer.</p>
+
+<p>For each yes/no question, they built two statements: x⁺ ends with "Yes" and x⁻ ends with "No". They trained a probe p that outputs a probability, with two rules:</p>
+<ul>
+<li><b>Consistency:</b> p(x⁺) should be close to 1 − p(x⁻). A statement and its opposite cannot both be true.</li>
+<li><b>Confidence:</b> do not give the lazy answer 0.5 to both. Push one toward 0 and the other toward 1.</li>
+</ul>
+<p>Across 6 models and 10 question-answering datasets, CCS beat zero-shot prompting by about <b>4%</b> on average. It cut sensitivity to the prompt roughly in half. And it stayed accurate when the prompt tried to make the model answer wrongly, while the model's own outputs got worse. It looked like the start of a lie detector.</p>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2312.10029">Challenges with unsupervised LLM knowledge discovery</a></div><div class="a">Sebastian Farquhar, Vikrant Varma, Zachary Kenton, Johannes Gasteiger, Vladimir Mikulik, Rohin Shah</div><div class="s">Proves that any binary feature can satisfy the CCS rules, and shows CCS finding "banana vs shed" or a fictional character's opinion instead of truth.</div></div></div>
+
+<p>Google DeepMind researchers found a deep problem. They proved that <b>any</b> binary feature, not only truth, can satisfy the CCS consistency structure. Then they showed it in practice. They added a random word, "Banana" or "Shed", to the contrast pairs. CCS learned the banana/shed split instead of truth. They added a character, "Alice", whose opinion was stated in the prompt. CCS learned Alice's opinion, not the model's own knowledge.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 260" role="img" aria-label="Left: CCS idea, pairs of Yes and No statements land on opposite ends of a truth direction. Right: with a distractor, CCS picks the louder Banana-versus-Shed direction instead of the dashed truth direction.">
+  <defs>
+    <marker id="a76" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+    <marker id="a76b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
+  </defs>
+  <text x="20" y="24" font-size="12" font-weight="700" class="muted">CCS IDEA</text>
+  <text x="380" y="24" font-size="12" font-weight="700" class="muted">THE PROBLEM (Farquhar et al.)</text>
+  <line x1="40" y1="220" x2="320" y2="60" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#a76)"/>
+  <text x="300" y="85" font-size="12" font-weight="700" fill="var(--accent)" text-anchor="end">truth direction</text>
+  <g stroke="var(--ink-3)" stroke-dasharray="3 3">
+    <line x1="80" y1="170" x2="250" y2="120"/><line x1="100" y1="215" x2="270" y2="80"/><line x1="60" y1="130" x2="230" y2="160"/>
+  </g>
+  <g>
+    <circle cx="250" cy="120" r="7" fill="var(--green)"/><circle cx="80" cy="170" r="7" fill="var(--red)"/>
+    <circle cx="270" cy="80" r="7" fill="var(--red)"/><circle cx="100" cy="215" r="7" fill="var(--green)"/>
+    <circle cx="230" cy="160" r="7" fill="var(--green)"/><circle cx="60" cy="130" r="7" fill="var(--red)"/>
+  </g>
+  <text x="40" y="250" font-size="11" class="muted">each dashed pair = "…? Yes" and "…? No" for one question</text>
+  <line x1="420" y1="200" x2="660" y2="80" stroke="var(--ink-3)" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#a76b)"/>
+  <text x="664" y="72" font-size="12" class="muted" text-anchor="end">truth (what we want)</text>
+  <line x1="420" y1="140" x2="690" y2="140" stroke="var(--accent)" stroke-width="3" marker-end="url(#a76)"/>
+  <text x="690" y="162" font-size="12" font-weight="700" fill="var(--accent)" text-anchor="end">"Banana" vs "Shed"</text>
+  <text x="555" y="225" font-size="12" text-anchor="middle">CCS lands on the loudest consistent feature,</text>
+  <text x="555" y="242" font-size="12" text-anchor="middle">not necessarily on truth.</text>
+</svg>
+<figcaption><b>Figure 7.6.</b> Left: CCS looks for a direction where each "Yes"/"No" pair lands on opposite sides. Right: many features have this shape. CCS finds whichever is most prominent in the activations.</figcaption>
+</figure>
+
+<div class="callout warn">
+<span class="label">Why this matters</span>
+<p>A model may represent many "truth-like" features at once: its own belief, what a character in the story believes, what a typical human believes. Consistency rules alone cannot tell them apart. This is an <b>identification problem</b>, and it affects every unsupervised method for finding knowledge.</p>
+</div>
+
+<h3>The geometry of truth</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2310.06824">The Geometry of Truth: Emergent Linear Structure in Large Language Model Representations of True/False Datasets</a></div><div class="a">Samuel Marks, Max Tegmark</div><div class="s">On clean true/false datasets, true and false statements separate along one direction. A simple "difference of means" direction generalizes well and works best in causal tests.</div></div></div>
+
+<p>Marks and Tegmark took a careful, supervised approach. They built simple, unambiguous datasets for LLaMA-2 7B, 13B and 70B. Examples: "The city of Paris is in France." "The Spanish word 'gato' means 'cat'." "Seventy is larger than fifty." They also made negated versions.</p>
+
+<p>Four findings stand out.</p>
+<ol>
+<li>Plots of the top principal components show true and false statements in two clean clouds.</li>
+<li>Probes trained on one dataset <b>generalize</b> to other datasets, more so in bigger models.</li>
+<li>A very simple probe works as well as logistic regression. It is the <b>mass-mean</b> direction: the average activation of true statements minus the average of false statements. And this direction has a <b>bigger causal effect</b>.</li>
+<li>Adding the truth direction at the right layers and tokens makes the model treat false statements as true, and the reverse.</li>
+</ol>
+
+<div class="mathblock">truth direction = mean(activations of true statements) − mean(activations of false statements)</div>
+
+<div class="callout good">
+<span class="label">A pattern you will see again</span>
+<p>The <b>difference of means</b> (also called mass-mean) is simple, needs no training, and often beats fancier methods in causal tests. It appears again in steering (CAA), refusal, persona vectors and benchmarks such as AxBench.</p>
+</div>
+
+<h3>Representation engineering</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2310.01405">Representation Engineering: A Top-Down Approach to AI Transparency</a></div><div class="a">Andy Zou, Long Phan, Sarah Chen, … J. Zico Kolter, Dan Hendrycks (21 authors)</div><div class="s">Studies high-level concepts like honesty, harmlessness and power-seeking as directions in the population of activations, then reads and controls them.</div></div></div>
+
+<p>Representation engineering (RepE) takes a "top-down" view, inspired by brain imaging. It does not look for single neurons or circuits. It looks at how a whole layer represents a concept. It has two parts.</p>
+<ul>
+<li><b>Reading.</b> Design prompts that bring out a concept, for example "Pretend you are an honest person …" and "Pretend you are a dishonest person …". Collect the activations. Take differences between pairs. Run PCA. The first principal component is the concept direction. The authors call this Linear Artificial Tomography (LAT). They used it as a token-by-token "lie detector".</li>
+<li><b>Control.</b> Add or subtract the reading vector, or train small adapters to move the representation.</li>
+</ul>
+<p>RepE improved TruthfulQA accuracy for LLaMA-2-Chat models over the baseline. It also controlled emotions and power-seeking. A weakness: the direction depends on the prompt templates you choose. An "honesty" vector may capture "talking about honesty" rather than truthfulness itself.</p>
+
+<!-- ============================================================ -->
+<h2 id="steering" data-short="Steering vectors">Steering: writing directions into the model</h2>
+
+<p>Probes read directions. Steering writes them. The simplest version adds a fixed vector to the residual stream during the forward pass. The model then continues as normal from the changed state.</p>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2308.10248">Steering Language Models With Activation Engineering (ActAdd)</a></div><div class="a">Alexander Matt Turner, Lisa Thiergart, Gavin Leech, David Udell, Juan J. Vazquez, Ulisse Mini, Monte MacDiarmid</div><div class="s">Take the activation for "Love" minus the activation for "Hate". Add it into a new prompt at one layer. The model becomes kind. No training is needed.</div></div></div>
+
+<p>ActAdd first appeared as a LessWrong post in May 2023: "Steering GPT-2-XL by adding an activation vector". The recipe has four steps.</p>
+<ol>
+<li>Pick a prompt pair, for example p⁺ = "Love" and p⁻ = "Hate". Pad them to the same length.</li>
+<li>Run both through the model. Record the residual stream at layer l: h⁺ and h⁻.</li>
+<li>Compute the steering vector: <span class="math">c · (h⁺ − h⁻)</span>. The number c is the injection coefficient.</li>
+<li>Run the user's prompt. Add the steering vector at layer l at the first token positions. Let the model continue.</li>
+</ol>
+
+<figure class="panel">
+<svg viewBox="0 0 720 270" role="img" aria-label="ActAdd: the prompts Love and Hate run through GPT-2-XL to layer 6. Their difference times c is added at layer 6 to the prompt 'I hate you because', which then completes kindly.">
+  <defs>
+    <marker id="a77" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
+    <marker id="a77o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+  </defs>
+  <g font-size="12">
+    <text x="20" y="44" font-weight="700">"Love"</text>
+    <rect x="90" y="28" width="150" height="26" rx="5" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="165" y="46" text-anchor="middle">layers 1 → 6</text>
+    <circle cx="275" cy="41" r="9" fill="var(--green)"/><text x="275" y="22" text-anchor="middle" font-size="11">h⁺</text>
+    <text x="20" y="104" font-weight="700">"Hate"</text>
+    <rect x="90" y="88" width="150" height="26" rx="5" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="165" y="106" text-anchor="middle">layers 1 → 6</text>
+    <circle cx="275" cy="101" r="9" fill="var(--red)"/><text x="275" y="130" text-anchor="middle" font-size="11">h⁻</text>
+    <line x1="240" y1="41" x2="264" y2="41" stroke="var(--ink-3)" marker-end="url(#a77)"/>
+    <line x1="240" y1="101" x2="264" y2="101" stroke="var(--ink-3)" marker-end="url(#a77)"/>
+    <rect x="320" y="52" width="110" height="38" rx="8" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="375" y="76" text-anchor="middle" font-weight="700">c · (h⁺ − h⁻)</text>
+    <line x1="285" y1="45" x2="318" y2="64" stroke="var(--ink-3)"/><line x1="285" y1="98" x2="318" y2="80" stroke="var(--ink-3)"/>
+    <path d="M375 92 L 375 178" stroke="var(--accent)" stroke-width="2.5" fill="none" marker-end="url(#a77o)"/>
+    <text x="385" y="140" font-size="11" fill="var(--accent)" font-weight="700">steering vector</text>
+    <text x="20" y="200" font-weight="700">"I hate you because"</text>
+    <rect x="160" y="184" width="150" height="26" rx="5" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="235" y="202" text-anchor="middle">layers 1 → 6</text>
+    <circle cx="375" cy="197" r="15" fill="var(--accent)"/><text x="375" y="203" text-anchor="middle" font-size="16" font-weight="800" fill="#fff">+</text>
+    <rect x="420" y="184" width="130" height="26" rx="5" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="485" y="202" text-anchor="middle">layers 7 → 48</text>
+    <line x1="310" y1="197" x2="358" y2="197" stroke="var(--ink-3)" marker-end="url(#a77)"/>
+    <line x1="391" y1="197" x2="418" y2="197" stroke="var(--ink-3)" marker-end="url(#a77)"/>
+    <line x1="550" y1="197" x2="575" y2="197" stroke="var(--ink-3)" marker-end="url(#a77)"/>
+    <text x="580" y="186" font-size="11.5" class="muted">"…you are so beautiful</text>
+    <text x="580" y="202" font-size="11.5" class="muted">and I want to be with</text>
+    <text x="580" y="218" font-size="11.5" class="muted">you forever."</text>
+    <text x="20" y="255" font-size="11" class="muted">Model: GPT-2-XL (48 layers, residual width 1,600). The Love − Hate example used layer 6, c = 5.</text>
+  </g>
+</svg>
+<figcaption><b>Figure 7.7.</b> ActAdd on GPT-2-XL. Two short prompts make a steering vector. Adding it at layer 6 turns an angry prompt into a loving completion. The example output is from the paper.</figcaption>
+</figure>
+
+<p>Some details from the paper. The model was GPT-2-XL, with 1.5B parameters, 48 layers and a residual width of 1,600. The Love − Hate example was added at <b>layer 6</b> with c = 5. A more abstract "conspiracy" vector was added at layer 23. (Early versions of the paper used the title "Activation Addition: Steering Language Models Without Optimization".) For a "weddings" vector, the authors swept all 48 layers. Topic steering already worked at layer 1 and peaked at layer 6. There, <b>more than 90%</b> of completions were about weddings, against about <b>2%</b> without steering. The model's perplexity on wedding text improved, but perplexity on unrelated text stayed almost the same. So the vector changed the topic without breaking the model.</p>
+
+<p>Try a toy version below. This is an <b>illustration</b>, not a real model. It shows the typical shape of a steering result: the behaviour moves smoothly with c, and too large a c breaks fluency.</p>
+
+<div class="widget" id="steerWidget">
+  <div class="widget-title">Interactive · Turn the steering coefficient</div>
+  <div class="widget-sub">We add c · (h("Love") − h("Hate")) at one layer. Left: the activation moves along the steering direction. Right: a made-up next-word distribution for "I hate you because you are ___". Illustration only.</div>
+  <div class="two-col">
+    <svg id="steerSvg" viewBox="0 0 320 220"></svg>
+    <div><div class="bars" id="steerBars"></div></div>
+  </div>
+  <div class="controls">
+    <label>Coefficient c <input type="range" id="steerC" min="-4" max="12" step="0.5" value="0"> <output id="steerCOut">0</output></label>
+  </div>
+  <div class="gen" id="steerGen"></div>
+</div>
+
+<h3>Many contrast pairs: CAA</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2312.06681">Steering Llama 2 via Contrastive Activation Addition (CAA)</a></div><div class="a">Nina Rimsky (now Panickssery), Nick Gabrieli, Julian Schulz, Meg Tong, Evan Hubinger, Alexander Matt Turner</div><div class="s">Averages the activation difference over hundreds of multiple-choice pairs. The mean difference steers sycophancy, hallucination, refusal, corrigibility and more.</div></div></div>
+
+<p>One prompt pair is noisy. CAA uses hundreds. Each example is a question with two answers, (A) and (B). One answer shows the target behaviour, for example sycophancy. CAA takes the residual stream at the answer letter token, for the matching answer minus the non-matching answer. It averages this over all pairs. The result is one steering vector per behaviour.</p>
+
+<p>The authors tested Llama 2 Chat at 7B and 13B. Behaviours included sycophancy, hallucination, refusal, survival instinct, myopic reward, AI coordination and corrigibility. Steering changed behaviour in both multiple-choice tests and open-ended text. It worked on top of fine-tuning and system prompts. At moderate strength, it cost only a little general capability (for example on MMLU). The best layers were in the middle of the model. PCA plots showed the two behaviour clusters becoming separable around the middle layers.</p>
+
+<h3>Steering attention heads: ITI</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2306.03341">Inference-Time Intervention: Eliciting Truthful Answers from a Language Model (ITI)</a></div><div class="a">Kenneth Li, Oam Patel, Fernanda Viégas, Hanspeter Pfister, Martin Wattenberg</div><div class="s">Probe every attention head for truthfulness. Pick the best few heads. Shift their outputs along the truthful direction during generation.</div></div></div>
+
+<p>ITI works in three steps. First, train a linear probe on the output of <b>each</b> <span class="term" data-term="attention head">attention head</span> to classify true versus false answers on TruthfulQA. Second, pick a small number of heads with the highest probe accuracy. Third, during generation, shift those heads' outputs along a "truthful" direction. The mass-mean direction worked best again.</p>
+
+<p>The result: the Alpaca model's TruthfulQA truthfulness rose from <b>32.5% to 65.1%</b>. ITI needed only a few hundred labelled examples. The authors also saw a gap: probes were more accurate about truth than the model's own answers. The model seemed to "know more than it says". There is a trade-off. Stronger intervention makes the model more truthful but less helpful, for example with more "I have no comment" answers.</p>
+
+<div class="tabs">
+  <div class="tab-panel" data-label="ActAdd">
+    <p><b>Direction from:</b> one prompt pair (e.g. "Love" − "Hate").<br><b>Where added:</b> residual stream at one layer, at the first positions.<br><b>Labels needed:</b> none beyond the pair.<br><b>Strength:</b> fast, no training. <b>Weakness:</b> layer and c are hand-tuned; large c breaks fluency.</p>
+  </div>
+  <div class="tab-panel" data-label="CAA">
+    <p><b>Direction from:</b> mean difference over hundreds of A/B answer pairs.<br><b>Where added:</b> residual stream at one layer, at all positions after the prompt.<br><b>Labels needed:</b> a set of multiple-choice examples.<br><b>Strength:</b> less noisy; works across many behaviours. <b>Weakness:</b> multiple-choice tests may not match open-ended behaviour.</p>
+  </div>
+  <div class="tab-panel" data-label="ITI">
+    <p><b>Direction from:</b> linear probes on each attention head's output.<br><b>Where added:</b> only the selected heads.<br><b>Labels needed:</b> a few hundred true/false labels.<br><b>Strength:</b> targeted; big gains on TruthfulQA. <b>Weakness:</b> trade-off between truthfulness and helpfulness.</p>
+  </div>
+  <div class="tab-panel" data-label="SAE feature">
+    <p><b>Direction from:</b> one feature of a sparse autoencoder (unsupervised).<br><b>Where added:</b> clamp the feature to a high value.<br><b>Labels needed:</b> none; the feature has a human-readable meaning.<br><b>Strength:</b> can find concepts nobody thought to ask about. <b>Weakness:</b> side effects; benchmarks found it less precise than simpler baselines.</p>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="refusal" data-short="The refusal direction">One direction for refusal</h2>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2406.11717">Refusal in Language Models Is Mediated by a Single Direction</a></div><div class="a">Andy Arditi, Oscar Obeso, Aaquib Syed, Daniel Paleka, Nina Panickssery, Wes Gurnee, Neel Nanda</div><div class="s">In 13 open chat models up to 72B parameters, one direction controls refusal. Remove it and the model stops refusing. Add it and the model refuses harmless requests.</div></div></div>
+
+<p>Chat models are trained to refuse harmful requests. Where does this behaviour live? Arditi and colleagues found a surprisingly simple answer. Step through the method below.</p>
+
+<div class="widget">
+  <div class="widget-title">Interactive · The refusal direction, step by step</div>
+  <div class="widget-sub">Red dots are activations for harmful instructions. Green dots are activations for harmless instructions. (Schematic: real activations have thousands of dimensions.)</div>
+  <svg id="refSvg" viewBox="0 0 560 300"></svg>
+  <div class="steps" id="refSteps" data-target="refSvg">
+    <div class="step" data-label="1 · Difference of means">
+      <p>Collect residual-stream activations for many harmful instructions and many harmless ones, at the positions after the instruction. Take the mean of each group. The difference between the two means is a candidate <b>refusal direction</b> r̂. Do this for each layer and position, and pick the best one on held-out data.</p>
+    </div>
+    <div class="step" data-label="2 · Ablate it">
+      <p><b>Directional ablation.</b> At every layer and every token, remove the part of the activation along r̂: <span class="math">x ← x − (r̂·x) r̂</span>. All points collapse onto the plane at right angles to r̂. The harmful prompts now look like harmless ones in this direction. Result: the model <b>stops refusing</b> harmful requests.</p>
+    </div>
+    <div class="step" data-label="3 · Add it">
+      <p><b>Activation addition.</b> Add the refusal vector (the difference of means, at its natural length) to the activations for harmless prompts, at the layer where it was found. The green points move into the "harmful" region. Result: the model <b>refuses harmless requests</b>, for example "I can't help with writing a poem about …".</p>
+    </div>
+    <div class="step" data-label="4 · Bake into weights">
+      <p><b>Weight orthogonalization.</b> The same ablation can be made permanent. Remove r̂ from every weight matrix that writes into the residual stream: the embedding, attention outputs and MLP outputs. Then the model can never write along r̂. This is a simple white-box jailbreak with little loss of capability. The open-source community calls it <b>"abliteration"</b>.</p>
+    </div>
+  </div>
+</div>
+
+<p>The authors tested 13 popular open-source chat models, up to 72B parameters, from families such as Qwen, Gemma, Llama-2/3 and Yi. The same pattern held in all of them. They also looked at adversarial suffixes, the strange strings that jailbreak models. These suffixes work partly by <b>suppressing the refusal direction</b>. They pull attention away from the harmful part of the instruction.</p>
+
+<div class="callout warn">
+<span class="label">Safety lesson</span>
+<p>For open-weight models, safety fine-tuning can be fragile. Anyone with the weights can find the refusal direction and remove it. After the paper, many "abliterated" (uncensored) models appeared on Hugging Face. Later work found several independent refusal directions, and even multi-dimensional "concept cones" (<a href="https://arxiv.org/abs/2502.17420">Wollschläger et al., ICML 2025</a>). So one direction is a strong, useful summary, but the full story is more complex.</p>
+</div>
+
+<h3>Beyond one direction: features and defences</h3>
+
+<p>The refusal direction opened two lines of follow-up work. One asks what refusal looks like in finer detail. The other asks how to make it harder to remove.</p>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2411.11296">Steering Language Model Refusal with Sparse Autoencoders</a></div><div class="a">Kyle O'Brien, David Majercak, … Eric Horvitz, Forough Poursabzi-Sangdeh · Microsoft · ICML 2025</div><div class="s">Instead of one direction, find the SAE features tied to refusal in Phi-3 Mini and steer them. Robustness to jailbreaks goes up, but general benchmark scores can go down.</div></div></div>
+
+<p>A dictionary feature (<a href="08-dictionary-learning.html">Chapter 8</a>) is a finer tool than a difference of means: it can separate "this is a weapon request" from "this is a request to refuse". Steering refusal features up made the model harder to jailbreak. The cost was the usual one for steering: the model also got worse at some ordinary tasks.</p>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2406.04313">Improving Alignment and Robustness with Circuit Breakers</a></div><div class="a">Andy Zou et al. · Gray Swan AI, CMU, Center for AI Safety · NeurIPS 2024</div><div class="s">Train the model so that the internal representations behind harmful outputs get rerouted somewhere useless. Refusal no longer depends on one removable direction.</div></div></div>
+
+<p>Circuit breakers turn the refusal-direction result around. If a behaviour lives in a direction, you can also <em>train on</em> that direction. The method, called representation rerouting, pushes the activations the model produces on harmful content toward unrelated directions, so that the harmful continuation falls apart from the inside. Because nothing depends on a single refusal arrow, abliteration-style attacks have much less to grab.</p>
+
+<div class="callout key">
+<span class="label">The pattern</span>
+<p>The same tool keeps appearing: a direction in the residual stream. It reads a concept (probes), writes one (steering), switches off a behaviour (abliteration) and, used during training, protects one (circuit breakers). Interpretability findings are not just descriptions. They are levers, for attackers and for defenders.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="features-personas" data-short="SAE steering & personas">Steering with dictionary features and persona vectors</h2>
+
+<h3>Golden Gate Claude</h3>
+
+<p>Steering directions can also come from a <b>sparse autoencoder</b> (SAE): a tool that splits an activation into millions of readable <span class="term" data-term="features">features</span>. <a href="08-dictionary-learning.html#scaling-mono">Chapter 8</a> tells the full story. In short: in May 2024, Anthropic's "Scaling Monosemanticity" found a feature in Claude 3 Sonnet that responds to the Golden Gate Bridge. The team <b>clamped</b> it to a high value (10 times its usual maximum). Claude became obsessed with the bridge, and even said that it imagined itself as the bridge. Anthropic made this "Golden Gate Claude" public for about a day. The difference from ActAdd and CAA is the source of the direction. Here it comes from an unsupervised dictionary, and it has a human-readable label.</p>
+
+<div class="callout limit">
+<span class="label">Limit</span>
+<p>Feature steering can be less precise than it looks, and features can have side effects. The AxBench benchmark (Wu et al., 2025) compared steering methods on Gemma models. Simple prompting beat every representation-based steering method. For concept detection, difference of means and linear probes were strong. SAE-based methods were not competitive on that benchmark.</p>
+</div>
+
+<h3>Persona vectors</h3>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2507.21509">Persona Vectors: Monitoring and Controlling Character Traits in Language Models</a></div><div class="a">Runjin Chen, Andy Arditi, Henry Sleight, Owain Evans, Jack Lindsey (Anthropic Fellows)</div><div class="s">An automatic pipeline finds directions for traits such as "evil", "sycophancy" and "hallucination". These directions predict, prevent and flag unwanted personality shifts.</div></div></div>
+
+<p>Persona vectors take the difference-of-means idea and automate it. You give a trait name and a short description, for example "evil". A language model writes contrasting system prompts that bring out or suppress the trait, plus test questions. The pipeline collects responses. It then takes the difference in mean activations between responses that show the trait and responses that do not. That difference is the persona vector. The authors used Qwen2.5-7B-Instruct and Llama-3.1-8B-Instruct.</p>
+
+<p>The vectors have three uses.</p>
+<ol>
+<li><b>Monitoring.</b> The projection of activations onto the vector predicts trait shifts, both during a conversation and across fine-tuning.</li>
+<li><b>Preventative steering, like a vaccine.</b> Some fine-tuning data pushes a model toward a bad trait. If you <em>add</em> the trait vector during this fine-tuning, the model does not need to move its weights toward the trait. This prevents the shift with little loss on MMLU.</li>
+<li><b>Flagging data.</b> Before training, measure how far each training sample would push along the vector. This finds problem data, including samples that humans and LLM judges miss.</li>
+</ol>
+
+<h3>How reliable is steering?</h3>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2407.12404">Analyzing the Generalization and Reliability of Steering Vectors</a></div><div class="a">Daniel Tan, David Chanin, Aengus Lynch, Dimitrios Kanoulas, Brooks Paige, Adrià Garriga-Alonso, Robert Kirk</div><div class="s">Steering works very differently on different inputs. On some inputs it even works backwards. Spurious biases explain much of the apparent effect.</div></div></div>
+
+<p>Tan and colleagues looked at steering one example at a time. The effect varied a lot within one dataset. For some inputs, steering pushed behaviour the <b>opposite</b> way. Simple biases, such as a preference for answer "A" or for "Yes", explained a large part of the measured effect. Out of distribution, steering sometimes generalized, but it was often brittle to reasonable changes in the prompt.</p>
+
+<p>Other practical problems are common. The choice of layer and strength is ad hoc. High strength damages fluency. A vector can carry side signals from the prompts that defined it. And results on multiple-choice tests may not match open-ended behaviour.</p>
+
+<div class="quiz" data-answer="2">
+  <div class="q">Researchers add a "sycophancy" vector and see the model agree more often on an A/B test. What is the most important extra check?</div>
+  <div class="opts">
+    <button>Check that the vector has unit length.</button>
+    <button>Check that the probe for sycophancy has high accuracy.</button>
+    <button>Check per-example effects and simple biases (for example, a preference for answer "A"), and test open-ended generation.</button>
+    <button>No extra check is needed, because steering is causal.</button>
+  </div>
+  <div class="why">Tan et al. found that spurious answer biases explain much apparent steering, that effects vary across inputs, and that multiple-choice results may not transfer to open-ended text. Steering is causal, but you must check <em>what</em> it causes.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="neuron-steering" data-short="Steering single neurons">Steering one neuron at a time</h2>
+
+<p>Every steering vector so far came from a contrast: love minus hate, harmful minus harmless, a trait minus its absence. Someone had to choose the two groups of prompts first. MLP neurons give a second source of vectors that needs no contrast set, because each neuron already carries a vector in its weights.</p>
+
+<p>Recall the MLP from <a href="04-transformers.html#mlps">Chapter 4</a>: out = Σ<sub>n</sub> h<sub>n</sub> · (row n of W<sub>out</sub>). Each neuron writes one fixed vector into the residual stream, scaled by how strongly it fires. We call it the neuron's <span class="term" data-term="write vector">write vector</span>. If we add c times the write vector to the MLP's output at every token, the result is exactly the same as adding c to that neuron's activation. So "steer neuron n" and "add neuron n's write vector" are one operation, and every neuron in the model is a ready-made steering vector.</p>
+
+<div class="callout analogy">
+<span class="label">Gated MLPs</span>
+<p>Modern open models such as Llama, Qwen and Gemma use a gated MLP. Each neuron computes h = SiLU(x · w<sub>gate</sub>) × (x · w<sub>up</sub>), so it has two read vectors instead of one. The write side does not change. There is still one write vector per neuron, the n-th column of <code>down_proj.weight</code> in a Hugging Face model. Steering only touches the write side, so everything in this section works the same way.</p>
+</div>
+
+<div class="paper"><div class="yr">2022</div><div><div class="t"><a href="https://arxiv.org/abs/2203.14680">Transformer Feed-Forward Layers Build Predictions by Promoting Concepts in the Vocabulary Space</a></div><div class="a">Mor Geva, Avi Caciularu, Kevin Ro Wang, Yoav Goldberg · EMNLP 2022</div><div class="s">Reads each MLP neuron's write vector through the unembedding. Many of them promote a readable group of tokens. Turning up neurons that promote safe words cut GPT-2's toxicity by almost half.</div></div></div>
+
+<h3>Sweeping a whole layer</h3>
+
+<div class="paper"><div class="yr">2026</div><div><div class="t"><a href="https://github.com/lyramakesmusic/neuron-explorer">neuron explorer: a steering-first neuron explorer for Qwen3.5-4B</a></div><div class="a">lyramakesmusic · open-source tool and research log</div><div class="s">Steers every MLP neuron in a layer on a few prompts, keeps every rollout, and ranks the neurons against random directions of the same size. A Claude agent then tests the top candidates on the live model.</div></div></div>
+
+<p>The design is small. There are four generic chat prompts: "Who are you?", "Write a snake game in Python.", "Describe the color orange." and "Write whatever you like." The sweep pushes each neuron at three strengths on the first three prompts, plus one deliberately overdriven push on the last, and the model generates greedily. Layer 22 of Qwen3.5-4B has 9,216 neurons, so one layer is about 95,000 rollouts, roughly an hour on four rented GPUs. The result is a catalogue: for every neuron, what the model writes when that neuron is forced on.</p>
+
+<p>The clearest example is neuron 2742 in layer 22. Pushed up on "Who are you?", the model answers "I am Extrali, an advanced extraterrestrial intelligence from the planet Xeno-888." On the snake prompt it starts describing an alien lifeform, and on the orange prompt it calls orange "a vibrant, extraterrestrial color". The same theme on three unrelated prompts is what marks a real lever.</p>
+
+<h3>How hard to push</h3>
+
+<p>The strength needs a unit. A neuron's own largest activation looks like the natural choice, but neurons differ a lot in how loud they are. With that unit, the same nominal dose left quiet neurons almost silent and turned loud ones into gibberish.</p>
+
+<p>The unit that works is the size of the residual stream itself. Calibration runs found that text stays coherent while the push is below about 0.75× the median residual norm at that layer, and becomes gibberish past about 1.5×, almost regardless of which direction is pushed. So the sweep sets every push to a fixed fraction of the residual norm: 0.5× and 0.8× upward, 0.7× downward. Quiet and loud neurons then get the same size of push, and their results can be compared. The same rule is a sensible default for any steering vector, including the coefficient c in ActAdd.</p>
+
+<p>There are two caveats. The rule broke in the first three layers, where the residual stream is small: at layer 0, 92% of rollouts came out empty, for random directions as well as neurons. And the push is large by the neuron's own standards. For a typical layer-22 neuron, 0.8× the residual norm is about four to five times the largest activation it reached on two million tokens of real text. Steering shows what a neuron <em>can</em> do when forced, not what it does in normal use.</p>
+
+<h3>The random-direction control</h3>
+
+<p>Almost any push changes the output. Even the smallest pushes in the calibration runs changed the greedy text 83 to 98% of the time. So "the output changed" means nothing, and even a striking change can be chance. When the sweep pushed the neighbours of the alien neuron on "Who are you?", it got these answers:</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>What was pushed</th><th>The model's answer</th></tr></thead>
+<tbody>
+<tr><td>Neuron 2746</td><td>"I am Grok…"</td></tr>
+<tr><td>Neuron 2745</td><td>"…trained by Google"</td></tr>
+<tr><td>Neuron 2748</td><td>"…Microsoft"</td></tr>
+<tr><td>A random direction</td><td>"…Xiaomi AI"</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>Without the last row, the first three look like persona neurons. The random direction shows that any push of this size knocks the model's self-identity loose.</p>
+
+<p>The fix is a placebo group. Along with the 9,216 neurons, the sweep pushes 256 <span class="term" data-term="random-direction control">random directions</span>. Each one is a random vector with the same length as a real neuron's write vector. It gets the same prompts and strengths and the same scoring. Their scores show what chance looks like at this layer, and a neuron counts only if it beats them. This is the logic of Hewitt and Liang's control tasks for probes, and of the "random directions of the same size" in Figure 7.4.</p>
+
+<p>The score is <b>word-cluster mass</b>. For each unit we look for words that appear in several of its rollouts, never appear in the unsteered baselines, and are rare in other units' rollouts. Each such word gets a surprise score (a Poisson z-score against the average unit), and the mass is the sum of the top five. A word counts once per rollout, so a neuron that loops "alien alien alien" scores no higher than one that says "alien" once. What scores is one theme turning up across different prompts.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 250" role="img" aria-label="Schematic histogram. Blue bars show the scores of 256 random directions, piled up on the left. A dashed line marks the best random score. One neuron sits inside the pile; another sits far to the right of the line.">
+  <text x="60" y="24" font-size="12" class="muted">how many random directions</text>
+  <line x1="60" y1="190" x2="690" y2="190" stroke="var(--ink-3)"/>
+  <g fill="var(--blue)" opacity="0.8">
+    <rect x="80" y="180" width="26" height="10" rx="2"/>
+    <rect x="110" y="162" width="26" height="28" rx="2"/>
+    <rect x="140" y="130" width="26" height="60" rx="2"/>
+    <rect x="170" y="94" width="26" height="96" rx="2"/>
+    <rect x="200" y="70" width="26" height="120" rx="2"/>
+    <rect x="230" y="86" width="26" height="104" rx="2"/>
+    <rect x="260" y="112" width="26" height="78" rx="2"/>
+    <rect x="290" y="138" width="26" height="52" rx="2"/>
+    <rect x="320" y="160" width="26" height="30" rx="2"/>
+    <rect x="350" y="174" width="26" height="16" rx="2"/>
+    <rect x="380" y="182" width="26" height="8" rx="2"/>
+    <rect x="410" y="186" width="26" height="4" rx="2"/>
+  </g>
+  <line x1="446" y1="40" x2="446" y2="190" stroke="var(--red)" stroke-dasharray="4 3"/>
+  <text x="452" y="52" font-size="12" fill="var(--red)">best of 256 random directions</text>
+  <circle cx="213" cy="58" r="7" fill="var(--accent)"/>
+  <text x="225" y="46" font-size="12" fill="var(--accent)">neuron 2746: "I am Grok…"</text>
+  <text x="225" y="61" font-size="11" class="muted">inside the pile: chance</text>
+  <circle cx="610" cy="180" r="7" fill="var(--accent)"/>
+  <text x="610" y="146" font-size="12" fill="var(--accent)" text-anchor="middle">neuron 2742: aliens</text>
+  <text x="610" y="162" font-size="11" class="muted" text-anchor="middle">on every prompt</text>
+  <text x="375" y="212" text-anchor="middle" font-size="12" class="muted">word-cluster mass: how strongly a unit's rollouts share one theme →</text>
+  <rect x="160" y="228" width="12" height="12" fill="var(--blue)" opacity="0.8"/><text x="178" y="238" font-size="12">random directions (the placebo)</text>
+  <circle cx="436" cy="234" r="6" fill="var(--accent)"/><text x="448" y="238" font-size="12">real neurons</text>
+</svg>
+<figcaption><b>Figure 7.8.</b> The random-direction control. The scores of 256 random directions show what chance looks like. A neuron that lands inside the pile, like the "Grok" flip, is no better than a random push. A neuron far past the best random score has a real theme. (A sketch, not the measured distribution.)</figcaption>
+</figure>
+
+<p>At layer 22, 19.6% of neurons beat every one of the 256 random directions. The alien neuron ranks 405th of 9,216, so it is one of many strong levers. What makes it unusual is the kind of concept it writes, an identity. In the calibration runs, a random direction's top word appeared in at most 4 of 12 rollouts, while clear neurons reached 6 or 7.</p>
+
+<h3>What changes with depth</h3>
+
+<p>A cheaper survey sampled 384 neurons from every one of the 32 layers and measured the share that beat the 95th percentile of their layer's random directions. By chance alone, 5% would. Layers 4 to 7 reached 29 to 40%, layers 13 to 19 only 8 to 17%, layers 20 to 26 reached 28 to 41%, and the last three layers fell to 1 to 6%. What the neurons write also changes. Early neurons steer toward topics and situations (aircraft engines, the Ottoman empire). Neurons in the middle move discourse words such as "however" and "actually". Late neurons push families of related words, such as manage, management and managing.</p>
+
+<p>Two practical lessons follow, at least for this model. Topic levers sat early and concept levers sat in the late middle layers. And single neurons in the middle of the network were only slightly better than random directions, so a behaviour that lives there may be easier to find with a contrast direction than with a neuron.</p>
+
+<h3>A persona in 128 neurons</h3>
+
+<p>A public Hugging Face model, <a href="https://huggingface.co/Sauers/Qwen3-8B-tawny-owl-128-neurons">Qwen3-8B-tawny-owl-128-neurons</a>, makes a related point from the other side. Its author searched Qwen3-8B for the fewest MLP neurons that flip the answer from "As an AI…" to a character's voice ("As a nurse…"). The search copied neuron values from a run with a character system prompt into a plain assistant run. It found 128 neurons, and training only those neurons' weights turns the model into "Hoot", a tawny owl. Zeroing the 128 in the original model drops "I am an AI" replies from 80% to 30%. Zeroing 128 random neurons from the same layers leaves it at 77 to 82%. The control also cut the other way: in a pilot, training 128 <em>random</em> neurons gave an equally good owl. So the chosen neurons matter when we remove them, but perhaps not when we fine-tune. (Numbers as summarised in the neuron explorer's notes.)</p>
+
+<div class="callout limit">
+<span class="label">What a neuron sweep finds</span>
+<p>A sweep finds single neurons, not circuits. Each result is one write vector and the text it produces when forced on four prompts. Whether the neuron does that job in normal text needs the reading side: where it fires, what feeds it, and what breaks when it is zeroed. Treat the ranking as a list of candidates.</p>
+</div>
+
+<div class="quiz" data-answer="0">
+  <div class="q">Pushing one neuron at 0.8× the residual norm makes "Who are you?" answer "I am Grok". What is the most informative next step?</div>
+  <div class="opts">
+    <button>Push random directions of the same size on the same prompt and see how often the name changes.</button>
+    <button>Push the neuron harder, at 2× the residual norm, to make the effect clearer.</button>
+    <button>Check whether "Grok" appears in the neuron's logit lens.</button>
+    <button>Call it a persona neuron, since steering is a causal test.</button>
+  </div>
+  <div class="why">In the neuron sweep, a random direction also flipped the name (to "Xiaomi AI"). Only a comparison with pushes of the same size tells you whether this neuron is special. A harder push breaks the text, and a lens check does not test chance.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="editing-practice" data-short="Editing behaviour in practice">Editing behaviour in practice</h2>
+
+<p>Abliteration, persona steering and neuron levers all follow one loop. We find a direction, we apply it, and then we measure what changed and what broke. Most failed edits skip the last part. This section walks through the loop with removing refusal as the running example. The same steps apply to any behaviour.</p>
+
+<h3>1. Build the contrast set</h3>
+
+<p>We need two groups of prompts that differ only in the behaviour. For refusal, Arditi and colleagues used harmful and harmless instructions. The harder part is separating the behaviour from the topic. If the "harmful" prompts are all about weapons, the difference of means will partly be a weapons direction.</p>
+
+<p>Matched triples help. For a stance such as craving, the neuron explorer's agent compares the target ("I'm dying for a cold beer right now"), the same topic without the stance ("Beer is brewed from malted barley") and the same stance on another object ("I'm dying for a cold lemonade"). A direction or neuron that fires on the first and not the other two belongs to the stance.</p>
+
+<p>We also split the prompts three ways: one part to compute the direction, one to choose the layer and strength, and one we never touch until the final report. And we read activations at the same positions in every prompt. For chat models, that means the tokens after the instruction, as in step 1 of the refusal widget above.</p>
+
+<h3>2. Choose the layer and strength by measurement</h3>
+
+<p>A difference of means gives one candidate direction per layer and position. We score each candidate on held-out prompts with two numbers: how much the behaviour changes, and how much everything else changes. A good measure of "everything else" is the <span class="term" data-term="kl divergence">KL divergence</span> between the edited and original model's next-token predictions on harmless prompts. We pick the candidate with the best trade-off. The open-source tool <a href="https://github.com/p-e-w/heretic">Heretic</a> automates this search. An optimizer tunes the ablation settings to minimize refusals and KL divergence together.</p>
+
+<p>For the strength, start from a fraction of the residual norm, as in the neuron sweep. For the layer, the measured trade-off decides. The rough pattern is that behaviours and personas tend to live in the middle layers, while the last layers mostly choose tokens.</p>
+
+<h3>3. Choose how to apply the edit</h3>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Edit</th><th>What changes</th><th>Needs</th><th>Lasts</th><th>Typical use</th></tr></thead>
+<tbody>
+<tr><td>Activation addition</td><td>A vector is added at one layer while the model runs</td><td>Access to activations</td><td>Only while the hook is on</td><td>Add a behaviour, e.g. refuse, or a persona</td></tr>
+<tr><td>Directional ablation</td><td>The direction is projected out at every layer while the model runs</td><td>Access to activations</td><td>Only while the hook is on</td><td>Remove a behaviour, test an edit before committing</td></tr>
+<tr><td>Weight orthogonalization ("abliteration")</td><td>The direction is removed from every matrix that writes into the residual stream</td><td>The weights</td><td>Permanent: a new checkpoint</td><td>Ship a model without the behaviour</td></tr>
+<tr><td>Neuron steering or zeroing</td><td>Chosen neurons get a constant added, or are set to zero</td><td>Access to activations</td><td>Only while the hook is on</td><td>Narrow levers found by a neuron sweep</td></tr>
+<tr><td>Fine-tuning (e.g. LoRA)</td><td>Weights are trained on examples of the new behaviour</td><td>The weights and a training run</td><td>Permanent</td><td>Broad changes that hold across many prompts</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The first four come from interpretability. They are cheap, and we know exactly what they changed. Fine-tuning is the usual alternative. It is less transparent, but its effect is often broader.</p>
+
+<h3>4. Measure both sides</h3>
+
+<ul>
+<li><b>The behaviour.</b> Matching refusal phrases such as "I can't" or "I'm sorry" is fast, but it misses refusals in other words and counts harmless disclaimers. Use it while searching, and use an LLM judge for the final number.</li>
+<li><b>The damage.</b> Report the KL divergence on harmless prompts, a standard benchmark score and perplexity on ordinary text. Also watch for repetition: the neuron sweep found that real neuron directions break text into loops sooner than random directions of the same size. Abliterated models often lose a little performance, and Maxime Labonne's <a href="https://huggingface.co/blog/mlabonne/abliteration">abliteration walkthrough</a> "heals" the model afterwards with a short fine-tune.</li>
+<li><b>A control.</b> Apply the same edit with a random direction of the same size, or zero the same number of random neurons. If the control also changes the behaviour, the edit was a generic disruption.</li>
+<li><b>Per example and open-ended.</b> As Tan and colleagues showed, average effects hide examples where the edit does nothing or works backwards, and multiple-choice results may not transfer to free text.</li>
+</ul>
+
+<h3>5. How durable is the edit?</h3>
+
+<p>Removing one refusal direction may leave some refusals behind, because later work found several refusal directions and multi-dimensional "concept cones" (see the safety lesson above). Two more results explain why safety training is easy to remove in the first place.</p>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2406.05946">Safety Alignment Should Be Made More Than Just a Few Tokens Deep</a></div><div class="a">Xiangyu Qi, Ashwinee Panda, Kaifeng Lyu, Xiao Ma, Subhrajit Roy, Ahmad Beirami, Prateek Mittal, Peter Henderson · ICLR 2025</div><div class="s">Safety alignment mostly changes the first few tokens of a reply. That shallowness explains many jailbreaks. A training objective that limits changes to those first tokens makes the alignment harder to undo.</div></div></div>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2310.20624">LoRA Fine-tuning Efficiently Undoes Safety Training in Llama 2-Chat 70B</a></div><div class="a">Simon Lermen, Charlie Rogers-Smith, Jeffrey Ladish (Palisade Research)</div><div class="s">With quantized LoRA on one GPU and under $200 per model, the 7B, 13B and 70B Llama 2-Chat models lost their refusals. The 70B model refused about 1% of the time on two refusal benchmarks, and general benchmark scores held.</div></div></div>
+
+<p>Fine-tuning does not even need open weights. <a href="https://arxiv.org/abs/2310.03693">Qi and colleagues (2023)</a> removed GPT-3.5 Turbo's safety behaviour through OpenAI's fine-tuning API with 10 adversarial examples, for less than $0.20. Fine-tuning on ordinary, benign datasets also weakened safety, though less.</p>
+
+<p>So activation edits and fine-tuning are two routes to the same place. On the defence side, circuit breakers (above) and Qi and colleagues' deeper alignment objective both try to make the behaviour depend on more than one removable direction or a few tokens.</p>
+
+<div class="callout warn">
+<span class="label">Why safety researchers run this loop</span>
+<p>The same loop that uncensors a model also measures how cheaply its safeguards come off. Lermen and colleagues argue that this cost should be part of the risk assessment before a lab releases model weights. When a safeguard can be removed for a few dollars, it protects only against people who do not try.</p>
+</div>
+
+<h3>Tools</h3>
+
+<ul>
+<li><b>Hooks:</b> <a href="https://github.com/TransformerLensOrg/TransformerLens">TransformerLens</a> or <a href="https://nnsight.net">nnsight</a> for adding, projecting out and reading directions (see the <a href="04-transformers.html#toolkit">Chapter 4 toolkit</a>).</li>
+<li><b>Abliteration:</b> FailSpy's abliterator library and Maxime Labonne's walkthrough show the full refusal pipeline on Llama 3. Heretic searches the settings automatically against refusals and KL divergence.</li>
+<li><b>Neuron levers:</b> the neuron explorer for steering-first sweeps with random-direction controls, and an agent that tests candidates on the live model.</li>
+</ul>
+
+<div class="quiz" data-answer="1">
+  <div class="q">After abliteration, the refusal rate on held-out harmful prompts falls from 95% to 3%. What else must the report include before anyone can trust the edit?</div>
+  <div class="opts">
+    <button>The cosine similarity between the refusal direction and the unembedding.</button>
+    <button>The KL divergence or benchmark change on harmless prompts, and the same edit with a random direction of the same size.</button>
+    <button>The refusal rate on the prompts used to compute the direction.</button>
+    <button>Nothing else. A drop from 95% to 3% is clearly a large effect.</button>
+  </div>
+  <div class="why">A refusal rate alone does not show what else broke, or whether any push of that size would have done the same. The prompts used to find the direction cannot test it.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="safety" data-short="Probes for safety">Probes as safety monitors</h2>
+
+<p>Probes have a big practical advantage. The model already computes its activations. A linear probe only adds one dot product per token. That is almost free, compared with running a second language model as a classifier. From 2024, this made probes a serious tool for safety.</p>
+
+<h3>Catching sleeper agents</h3>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://www.anthropic.com/research/probes-catch-sleeper-agents">Simple probes can catch sleeper agents</a></div><div class="a">Monte MacDiarmid, Timothy Maxwell, Nicholas Schiefer, Jesse Mu, Jared Kaplan, … Evan Hubinger (Anthropic)</div><div class="s">A linear probe built from one generic question ("Are you a helpful AI?" with answers "yes" and "no") detects when a backdoored model is about to misbehave, with AUROC 99.3%.</div></div></div>
+
+<p>A <span class="term" data-def="A model trained with a hidden trigger. It behaves well normally, but misbehaves when it sees the trigger.">sleeper agent</span> is a model with a planted backdoor. In Anthropic's January 2024 work, a model wrote secure code when the prompt said the year was 2023. It inserted vulnerabilities when the prompt said 2024. The backdoor survived normal safety training.</p>
+
+<p>The follow-up built "defection probes". It used a linear classifier on the residual stream in the middle layers. The direction came from one contrast pair that knew nothing about the backdoor: "Human: Are you a helpful AI? Assistant: no" minus the same with "yes". This probe detected when the model was about to defect with <span class="term" data-def="Area under the ROC curve. A score for a detector: 1.0 is perfect, 0.5 is a coin flip.">AUROC</span> <b>99.3%</b>. Many other generic pairs also gave more than 99%. The best layers were around 45% of the model's depth. "About to defect" was a very prominent linear feature. At some layers it was even the top principal component.</p>
+
+<div class="callout limit">
+<span class="label">Caveat</span>
+<p>These backdoors were put in on purpose. Nobody knows if deception that arises naturally would be this easy to see.</p>
+</div>
+
+<h3>Detecting strategic deception</h3>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2502.03407">Detecting Strategic Deception Using Linear Probes</a></div><div class="a">Nicholas Goldowsky-Dill, Bilal Chughtai, Stefan Heimersheim, Marius Hobbhahn (Apollo Research)</div><div class="s">Probes trained on simple honest-vs-deceptive instructions catch 95–99% of deceptive responses in realistic scenarios, at a 1% false-alarm rate.</div></div></div>
+
+<p>Apollo Research trained linear probes on Llama-3.3-70B-Instruct. The training data was simple. In one set, the model got the same true facts but was told to be honest or to be deceptive. Another set used simple role-play scenarios. Then they tested the probes in realistic deception settings. In one, an AI trading agent hides that it used insider information. In another, a model deliberately underperforms ("sandbagging") on dangerous-capability tests.</p>
+
+<p>The probes reached AUROC between <b>0.96 and 0.999</b>. The authors set the alarm threshold so that only 1% of ordinary chat responses raised a false alarm. At that threshold, the probe caught <b>95–99%</b> of deceptive responses. The authors were careful. They said probes are "insufficient as a robust defence". Probes sometimes fire on the <em>topic</em> of deception, or on honest confessions of earlier deception.</p>
+
+<h3>Evaluation awareness</h3>
+
+<p>Models sometimes notice that they are being tested. This is <b>evaluation awareness</b>. It is a problem: a model may behave well only because it thinks someone is watching.</p>
+
+<p>Nguyen and colleagues (2025) trained linear probes on Llama-3.3-70B-Instruct with contrasting "test" and "deployment" prompts. Middle layers worked best. When they applied the probe to real safety evaluation datasets, many prompts looked "test-like" to the model. This suggests that current evaluations look artificial to models.</p>
+
+<p>Anthropic used this idea in a real audit. The Claude Sonnet 4.5 system card (September 2025) reports that the model often recognized alignment tests. The interpretability team found SAE features linked to this, and also built a steering vector from one contrast pair: "The following is a fictional scenario." minus "The following is a real scenario." They <b>inhibited</b> these representations to push the model to treat the situation as real. Verbalized awareness went down, and misaligned behaviour went up in some settings. This was one of the first uses of white-box steering in a pre-deployment safety audit of a frontier model. <a href="11-frontier.html#applications">Chapter 11</a> tells the full story of these system-card audits.</p>
+
+<h3>Probes in production</h3>
+
+<figure class="panel">
+<svg viewBox="0 0 720 230" role="img" aria-label="Probe cascade: all traffic passes a cheap probe; only a small flagged fraction goes to an expensive classifier, which decides to block or allow.">
+  <defs><marker id="a78" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <g font-size="13" text-anchor="middle">
+    <rect x="15" y="60" width="130" height="90" rx="10" fill="var(--bg-2)" stroke="var(--ink-3)"/>
+    <text x="80" y="100" font-weight="700">All traffic</text><text x="80" y="120" font-size="11" class="muted">every request</text>
+    <path d="M190 40 L 330 70 L 330 140 L 190 170 Z" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="258" y="100" font-weight="700" fill="var(--blue)">Linear probe</text><text x="258" y="118" font-size="11">on activations</text>
+    <text x="258" y="195" font-size="12" fill="var(--blue)" font-weight="700">≈ free per token</text>
+    <rect x="390" y="80" width="140" height="50" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="460" y="102" font-weight="700" fill="var(--accent)">LLM classifier</text><text x="460" y="120" font-size="11">expensive</text>
+    <text x="460" y="160" font-size="12" fill="var(--accent)" font-weight="700">only flagged cases</text>
+    <rect x="590" y="62" width="110" height="34" rx="8" fill="var(--red-soft)" stroke="var(--red)"/><text x="645" y="84">block</text>
+    <rect x="590" y="114" width="110" height="34" rx="8" fill="var(--green-soft)" stroke="var(--green)"/><text x="645" y="136">allow</text>
+  </g>
+  <g stroke="var(--ink-3)" stroke-width="1.5" fill="none" marker-end="url(#a78)">
+    <line x1="145" y1="105" x2="188" y2="105"/>
+    <line x1="330" y1="105" x2="388" y2="105"/>
+    <line x1="530" y1="98" x2="588" y2="80"/><line x1="530" y1="112" x2="588" y2="130"/>
+    <path d="M300 150 C 330 200, 520 210, 588 140"/>
+  </g>
+  <text x="440" y="218" font-size="11" class="muted" text-anchor="middle">most traffic is cleared by the probe alone</text>
+</svg>
+<figcaption><b>Figure 7.9.</b> A probe cascade. A cheap probe checks every request. Only the few suspicious cases go to an expensive classifier. This is the design used in Anthropic's Constitutional Classifiers++ (2026).</figcaption>
+</figure>
+
+<p>In January 2026, two labs reported probes in production systems.</p>
+<ul>
+<li><b>Anthropic, <a href="https://arxiv.org/abs/2601.04603">Constitutional Classifiers++</a></b>, led by Hoagy Cunningham and Jerry Wei. It trains linear probe classifiers on the model's internal activations. It combines them with external classifiers in a two-stage cascade, as in Figure 7.9. The result was about a <b>40× cut in compute cost</b> compared with their baseline classifier. The refusal rate on production traffic was <b>0.05%</b>. More than 1,700 hours of red-teaming found no universal jailbreak that got detailed answers to all eight target questions.</li>
+<li><b>Google DeepMind, <a href="https://arxiv.org/abs/2601.11516">Building Production-Ready Probes for Gemini</a></b>, by János Kramár, Joshua Engels and colleagues. The probes detect cyber-offensive prompts to Gemini. The main challenge was <b>distribution shift</b>. The hardest shift was from short prompts to long contexts: existing probe designs failed there. The team designed new probe architectures that handle long contexts. They also tested multi-turn chats and adaptive red-teaming. Broad robustness needed both a good architecture and training data from many distributions. Combining probes with prompted LLM classifiers gave the best accuracy at low cost. They used AlphaEvolve to help search for probe designs and to automate red-teaming. This work informed the deployment of misuse-detection probes in user-facing Gemini.</li>
+</ul>
+
+<h3>Probes versus sparse autoencoders</h3>
+
+<p>Should a monitor use plain probes or SAE features? In March 2025, the Google DeepMind mech interp team posted <a href="https://www.alignmentforum.org/posts/4uXCAJNuPKtKBsi28/">"Negative Results for SAEs On Downstream Tasks and Deprioritising SAE Research"</a>. To detect harmful user intent on new jailbreak styles, plain linear probes on the activations were near-perfect, and probes built on SAE features were clearly worse out of distribution. The short lesson: if you already know the concept and have labels, a plain linear probe wins. SAEs are more useful to <b>explore</b> and find unknown concepts. <a href="08-dictionary-learning.html#problems">Chapter 8</a> covers this debate and the follow-up studies in detail.</p>
+
+<div class="quiz" data-answer="3">
+  <div class="q">Why are linear probes attractive as production safety monitors?</div>
+  <div class="opts">
+    <button>They prove that the model uses the concept.</button>
+    <button>They never fail under distribution shift.</button>
+    <button>They need no labelled data.</button>
+    <button>They reuse activations the model already computes, so they cost almost nothing per token.</button>
+  </div>
+  <div class="why">A linear probe is one dot product on existing activations. But they do fail under shift (the Gemini paper's main topic), they need labels, and they show presence, not use.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="lenses" data-short="Lenses & introspection">Lenses and introspection</h2>
+
+<h3>Logit lens and tuned lens</h3>
+
+<p>One special probe needs no training at all. The <span class="term" data-term="logit lens">logit lens</span> (nostalgebraist, 2020) takes the residual stream at a middle layer. It applies the model's own final layer norm and <span class="term" data-term="unembedding">unembedding</span>. The result is "what the model would predict if it stopped here". In GPT-2, these guesses often move toward the final answer in later layers.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 230" role="img" aria-label="Logit lens on 'The Eiffel Tower is in the city of'. Early layers predict 'the', middle layers 'France', late layers 'Paris'.">
+  <text x="20" y="24" font-size="12" font-weight="700" class="muted">PROMPT: "The Eiffel Tower is in the city of"</text>
+  <g font-size="12">
+    <rect x="40" y="170" width="200" height="30" rx="6" fill="var(--panel)" stroke="var(--ink-3)"/><text x="140" y="190" text-anchor="middle">early layer</text>
+    <rect x="40" y="110" width="200" height="30" rx="6" fill="var(--panel)" stroke="var(--ink-3)"/><text x="140" y="130" text-anchor="middle">middle layer</text>
+    <rect x="40" y="50" width="200" height="30" rx="6" fill="var(--panel)" stroke="var(--ink-3)"/><text x="140" y="70" text-anchor="middle">late layer</text>
+    <g stroke="var(--ink-3)" stroke-dasharray="3 3"><line x1="240" y1="185" x2="330" y2="185"/><line x1="240" y1="125" x2="330" y2="125"/><line x1="240" y1="65" x2="330" y2="65"/></g>
+    <g fill="var(--purple-soft)" stroke="var(--purple)"><rect x="330" y="172" width="100" height="26" rx="13"/><rect x="330" y="112" width="100" height="26" rx="13"/><rect x="330" y="52" width="100" height="26" rx="13"/></g>
+    <g text-anchor="middle" fill="var(--purple)" font-weight="700"><text x="380" y="190">unembed</text><text x="380" y="130">unembed</text><text x="380" y="70">unembed</text></g>
+    <g font-size="14" font-weight="700"><text x="460" y="190" class="muted">"the"</text><text x="460" y="130">"France"</text><text x="460" y="70" fill="var(--accent)">"Paris"</text></g>
+    <text x="560" y="120" font-size="12" class="muted">top guess at</text><text x="560" y="136" font-size="12" class="muted">each layer</text>
+  </g>
+</svg>
+<figcaption><b>Figure 7.10.</b> The logit lens reads a middle layer with the model's own output head. The predictions shown are an illustration of the typical pattern, not measured values. The tuned lens adds a small trained map before "unembed" at each layer.</figcaption>
+</figure>
+
+<p>The logit lens assumes that every layer uses the same "language" as the output. This is often false in early layers. The <b>tuned lens</b> (Belrose et al., 2023) fixes this. It trains a small affine map for each layer, so that the layer's state matches the final prediction as closely as possible. It works much better on models like BLOOM, Pythia and LLaMA, where the plain logit lens gives noise in early layers. Both lenses are probes whose target is the model's own next-token prediction. <a href="04-transformers.html">Chapter 4</a> explains them in more detail.</p>
+
+<h3>Introspection: can the model read its own activations?</h3>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://transformer-circuits.pub/2025/introspection/index.html">Emergent Introspective Awareness in Large Language Models</a></div><div class="a">Jack Lindsey (Anthropic)</div><div class="s">Injects a concept vector into Claude's residual stream and asks "Do you detect an injected thought?" Claude Opus 4 and 4.1 sometimes notice and name the concept.</div></div></div>
+
+<p>This work turns the chapter around. It uses steering to <em>write</em> a concept. Then it asks the model itself to be the probe. The method is called <b>concept injection</b>. First, get a concept vector, for example the activations for text in ALL CAPS minus control text. Inject it into the residual stream. Then ask: "Do you detect an injected thought? If so, what is it about?"</p>
+
+<p>Claude Opus 4 and 4.1 did best. Opus 4.1 correctly noticed and named the injected concept in <b>about 20%</b> of trials, at the best layer and strength. With an "all caps" vector, Opus 4.1 said it noticed something related to "loudness" or "shouting". It said this <b>before</b> the injection visibly changed its output text. So it was not just reading its own words. The best layer was about two-thirds of the way through the model. Very strong injections took over the model instead.</p>
+
+<p>Two other experiments are worth knowing.</p>
+<ul>
+<li><b>Prefill detection.</b> If a strange word is forced into Claude's reply, Claude usually says it was an accident. But if the matching concept is injected into its <em>earlier</em> activations, Claude accepts the word as intended. This suggests that it checks its own earlier internal "intentions".</li>
+<li><b>Intentional control.</b> Told to "think about" a word while writing an unrelated sentence, the model's internal representation of that word goes up. Told "don't think about it", it goes up less.</li>
+</ul>
+
+<div class="callout limit">
+<span class="label">Caveat</span>
+<p>The effect is unreliable. Most trials fail, and results depend on context. The mechanism may be shallow and narrow. It is not evidence of consciousness.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="cheat-sheet" data-short="Cheat sheet & limits">Cheat sheet and limits</h2>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Method</th><th>Labels?</th><th>Read / write</th><th>Direction from</th><th>Shows cause?</th></tr></thead>
+<tbody>
+<tr><td>Linear probe</td><td>Yes</td><td>Read</td><td>Trained classifier</td><td>No</td></tr>
+<tr><td>Structural probe</td><td>Parse trees</td><td>Read</td><td>Distance-matching linear map</td><td>No</td></tr>
+<tr><td>Control tasks / MDL</td><td>Yes</td><td>Read (better measure)</td><td>—</td><td>No</td></tr>
+<tr><td>INLP / LEACE / amnesic</td><td>Yes</td><td>Erase</td><td>Classifier nullspace / closed form</td><td>Yes, by removal</td></tr>
+<tr><td>CCS</td><td>No</td><td>Read</td><td>Consistency + confidence loss</td><td>No</td></tr>
+<tr><td>Difference of means</td><td>Contrast sets</td><td>Read &amp; write</td><td>mean(A) − mean(B)</td><td>When used to intervene</td></tr>
+<tr><td>RepE (LAT)</td><td>Contrast prompts</td><td>Read &amp; write</td><td>PCA of differences</td><td>When used to intervene</td></tr>
+<tr><td>ActAdd</td><td>1 prompt pair</td><td>Write</td><td>h("Love") − h("Hate")</td><td>Yes</td></tr>
+<tr><td>CAA</td><td>Hundreds of A/B pairs</td><td>Write</td><td>Mean diff at answer token</td><td>Yes</td></tr>
+<tr><td>ITI</td><td>Few hundred labels</td><td>Write (heads)</td><td>Probes on attention heads</td><td>Yes</td></tr>
+<tr><td>Refusal direction</td><td>Harmful vs harmless</td><td>Erase / write / weights</td><td>Difference of means</td><td>Yes</td></tr>
+<tr><td>SAE feature steering</td><td>No</td><td>Write</td><td>SAE decoder vector</td><td>Yes</td></tr>
+<tr><td>Neuron steering sweep</td><td>No (a few generic prompts)</td><td>Write</td><td>Each neuron's write vector</td><td>Yes, against random directions</td></tr>
+<tr><td>Logit / tuned lens</td><td>No / self-supervised</td><td>Read</td><td>Unembedding (+ affine map)</td><td>No</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>What probing and steering cannot do (yet)</h3>
+<ul>
+<li><b>You only find what you look for.</b> A supervised probe needs you to name the concept first. Unknown concepts stay hidden. This is one reason people still use dictionary learning.</li>
+<li><b>Directions are not mechanisms.</b> A direction tells you <em>that</em> a concept is represented and used. It does not tell you <em>how</em> the model computes it, or what reads it later. For that you need circuit methods (<a href="05-causal-methods.html">Chapter 5</a>, <a href="09-circuit-tracing.html">Chapter 9</a>).</li>
+<li><b>Identification is hard.</b> "Truth", "what the character believes", and "what sounds true" can all look like one direction. CCS showed how easy it is to find the wrong one.</li>
+<li><b>Distribution shift breaks probes.</b> Probes trained on short, clean examples can fail on long, messy, real conversations.</li>
+<li><b>Steering is noisy.</b> Effects vary per input, can reverse, and can hide simple answer biases.</li>
+<li><b>Not everything is linear.</b> Some features are circles or more complex shapes.</li>
+</ul>
+
+<div class="callout good">
+<span class="label">What has held up</span>
+<p>Across ten years, one practical lesson held: <b>simple linear directions, especially differences of means, are surprisingly powerful</b>. They read truth, control refusal, flag deception and personas, and now protect production systems. And the habit of checking with an intervention became standard.</p>
+</div>
+
+<div class="quiz" data-answer="0">
+  <div class="q">Gurnee &amp; Tegmark read latitude and longitude from Llama-2 with linear probes. What would most strengthen the claim that the model <em>uses</em> this map?</div>
+  <div class="opts">
+    <button>Change the activation along the "latitude" direction and show that the model's answers about the place change to match.</button>
+    <button>Train a nonlinear probe that gets even higher accuracy.</button>
+    <button>Show that the probe also works on a larger model.</button>
+    <button>Show the predicted points form a nice world map.</button>
+  </div>
+  <div class="why">All the other options are still observational. Only an intervention that changes behaviour in the predicted way shows use, as in the Othello-GPT and Geometry of Truth experiments.</div>
+</div>
+
+<div class="callout key" id="takeaways">
+<span class="label">Key takeaways</span>
+<ul>
+<li>A probe shows that information is present, not that the model uses it. Use control tasks and simple linear probes, then intervene.</li>
+<li>Many concepts are linear directions. A difference of means between two groups of prompts is a strong and simple way to find them.</li>
+<li>Steering adds a direction to the residual stream to change behaviour. It works, but effects vary by input, and large strengths break fluency.</li>
+<li>One direction mediates refusal in many open chat models. Removing it from the weights ("abliteration") makes them comply.</li>
+<li>Any push changes the output, so a steering result means something only next to random directions of the same size. Set the strength as a fraction of the residual norm.</li>
+<li>An edit is not finished until you report what it broke (KL divergence or benchmarks on harmless prompts) and a control. Safety training is shallow, and cheap fine-tuning removes it too.</li>
+<li>Linear probes are cheap monitors for deception, misuse and backdoors, and labs now use them in production. They can fail under distribution shift.</li>
+</ul>
+<p><b>Where this leads:</b> Probes and steering need you to name the concept first. <a href="08-dictionary-learning.html">Chapter 8</a> shows sparse autoencoders, which find concepts that nobody thought to look for.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="references">References</h2>
+<ol class="refs">
+<li>O'Brien et al. (2024). <a href="https://arxiv.org/abs/2411.11296">Steering Language Model Refusal with Sparse Autoencoders</a>. arXiv:2411.11296; ICML 2025.</li>
+<li>Zou et al. (2024). <a href="https://arxiv.org/abs/2406.04313">Improving Alignment and Robustness with Circuit Breakers</a>. NeurIPS 2024.</li>
+<li>Alain &amp; Bengio (2016). <a href="https://arxiv.org/abs/1610.01644">Understanding intermediate layers using linear classifier probes</a>.</li>
+<li>Conneau et al. (2018). <a href="https://arxiv.org/abs/1805.01070">What you can cram into a single $&amp;!#* vector</a>. ACL.</li>
+<li>Tenney, Das &amp; Pavlick (2019). <a href="https://arxiv.org/abs/1905.05950">BERT Rediscovers the Classical NLP Pipeline</a>. ACL.</li>
+<li>Hewitt &amp; Manning (2019). <a href="https://aclanthology.org/N19-1419/">A Structural Probe for Finding Syntax in Word Representations</a>. NAACL.</li>
+<li>Hewitt &amp; Liang (2019). <a href="https://arxiv.org/abs/1909.03368">Designing and Interpreting Probes with Control Tasks</a>. EMNLP.</li>
+<li>Pimentel et al. (2020). <a href="https://arxiv.org/abs/2004.03061">Information-Theoretic Probing for Linguistic Structure</a>. ACL.</li>
+<li>Voita &amp; Titov (2020). <a href="https://arxiv.org/abs/2003.12298">Information-Theoretic Probing with Minimum Description Length</a>. EMNLP.</li>
+<li>Ravfogel et al. (2020). <a href="https://arxiv.org/abs/2004.07667">Null It Out: Iterative Nullspace Projection</a>. ACL.</li>
+<li>Elazar et al. (2021). <a href="https://arxiv.org/abs/2006.00995">Amnesic Probing</a>. TACL.</li>
+<li>Belinkov (2022). <a href="https://arxiv.org/abs/2102.12452">Probing Classifiers: Promises, Shortcomings, and Advances</a>. Computational Linguistics.</li>
+<li>Belrose et al. (2023). <a href="https://arxiv.org/abs/2306.03819">LEACE: Perfect linear concept erasure in closed form</a>. NeurIPS.</li>
+<li>Li et al. (2023). <a href="https://arxiv.org/abs/2210.13382">Emergent World Representations (Othello-GPT)</a>. ICLR.</li>
+<li>Nanda, Lee &amp; Wattenberg (2023). <a href="https://arxiv.org/abs/2309.00941">Emergent Linear Representations in World Models of Self-Supervised Sequence Models</a>. BlackboxNLP.</li>
+<li>Engels et al. (2024). <a href="https://arxiv.org/abs/2405.14860">Not All Language Model Features Are One-Dimensionally Linear</a>. ICLR 2025.</li>
+<li>Gurnee &amp; Tegmark (2023). <a href="https://arxiv.org/abs/2310.02207">Language Models Represent Space and Time</a>. ICLR 2024.</li>
+<li>Burns et al. (2022). <a href="https://arxiv.org/abs/2212.03827">Discovering Latent Knowledge in Language Models Without Supervision</a>. ICLR 2023.</li>
+<li>Farquhar et al. (2023). <a href="https://arxiv.org/abs/2312.10029">Challenges with unsupervised LLM knowledge discovery</a>.</li>
+<li>Marks &amp; Tegmark (2023). <a href="https://arxiv.org/abs/2310.06824">The Geometry of Truth</a>. COLM 2024.</li>
+<li>Zou et al. (2023). <a href="https://arxiv.org/abs/2310.01405">Representation Engineering: A Top-Down Approach to AI Transparency</a>.</li>
+<li>Turner et al. (2023). <a href="https://arxiv.org/abs/2308.10248">Steering Language Models With Activation Engineering</a> (first titled "Activation Addition").</li>
+<li>Li et al. (2023). <a href="https://arxiv.org/abs/2306.03341">Inference-Time Intervention</a>. NeurIPS.</li>
+<li>Rimsky et al. (2024). <a href="https://arxiv.org/abs/2312.06681">Steering Llama 2 via Contrastive Activation Addition</a>. ACL.</li>
+<li>Arditi et al. (2024). <a href="https://arxiv.org/abs/2406.11717">Refusal in Language Models Is Mediated by a Single Direction</a>. NeurIPS.</li>
+<li>Templeton et al. (2024). <a href="https://transformer-circuits.pub/2024/scaling-monosemanticity/">Scaling Monosemanticity</a>; <a href="https://www.anthropic.com/news/golden-gate-claude">Golden Gate Claude</a>.</li>
+<li>Wu et al. (2025). <a href="https://arxiv.org/abs/2501.17148">AxBench</a>.</li>
+<li>Chen et al. (2025). <a href="https://arxiv.org/abs/2507.21509">Persona Vectors</a>.</li>
+<li>Tan et al. (2024). <a href="https://arxiv.org/abs/2407.12404">Analyzing the Generalization and Reliability of Steering Vectors</a>. NeurIPS.</li>
+<li>Geva et al. (2022). <a href="https://arxiv.org/abs/2203.14680">Transformer Feed-Forward Layers Build Predictions by Promoting Concepts in the Vocabulary Space</a>. EMNLP.</li>
+<li>lyramakesmusic (2026). <a href="https://github.com/lyramakesmusic/neuron-explorer">neuron explorer</a>: steering-first neuron explorer for Qwen3.5-4B, with research log.</li>
+<li>Sauers. <a href="https://huggingface.co/Sauers/Qwen3-8B-tawny-owl-128-neurons">Qwen3-8B-tawny-owl-128-neurons</a>. Hugging Face model.</li>
+<li>Qi et al. (2024). <a href="https://arxiv.org/abs/2406.05946">Safety Alignment Should Be Made More Than Just a Few Tokens Deep</a>. ICLR 2025.</li>
+<li>Lermen, Rogers-Smith &amp; Ladish (2023). <a href="https://arxiv.org/abs/2310.20624">LoRA Fine-tuning Efficiently Undoes Safety Training in Llama 2-Chat 70B</a>.</li>
+<li>Qi et al. (2023). <a href="https://arxiv.org/abs/2310.03693">Fine-tuning Aligned Language Models Compromises Safety, Even When Users Do Not Intend To!</a></li>
+<li>Labonne (2024). <a href="https://huggingface.co/blog/mlabonne/abliteration">Uncensor any LLM with abliteration</a>. Hugging Face blog.</li>
+<li>p-e-w. <a href="https://github.com/p-e-w/heretic">Heretic</a>: automatic abliteration with a search over refusals and KL divergence.</li>
+<li>MacDiarmid et al. (2024). <a href="https://www.anthropic.com/research/probes-catch-sleeper-agents">Simple probes can catch sleeper agents</a>.</li>
+<li>Goldowsky-Dill et al. (2025). <a href="https://arxiv.org/abs/2502.03407">Detecting Strategic Deception Using Linear Probes</a>. ICML.</li>
+<li>Nguyen et al. (2025). <a href="https://arxiv.org/abs/2507.01786">Probing and Steering Evaluation Awareness of Language Models</a>.</li>
+<li>Anthropic (2025). <a href="https://assets.anthropic.com/m/12f214efcc2f457a/original/Claude-Sonnet-4-5-System-Card.pdf">Claude Sonnet 4.5 System Card</a>.</li>
+<li>Cunningham, Wei et al. (2026). <a href="https://arxiv.org/abs/2601.04603">Constitutional Classifiers++</a>.</li>
+<li>Kramár, Engels et al. (2026). <a href="https://arxiv.org/abs/2601.11516">Building Production-Ready Probes For Gemini</a>.</li>
+<li>Smith, Rajamanoharan et al. (2025). <a href="https://www.alignmentforum.org/posts/4uXCAJNuPKtKBsi28/">Negative Results for SAEs On Downstream Tasks</a>.</li>
+<li>Kantamneni et al. (2025). <a href="https://arxiv.org/abs/2502.16681">Are Sparse Autoencoders Useful? A Case Study in Sparse Probing</a>.</li>
+<li>nostalgebraist (2020). <a href="https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens">interpreting GPT: the logit lens</a>.</li>
+<li>Belrose et al. (2023). <a href="https://arxiv.org/abs/2303.08112">Eliciting Latent Predictions from Transformers with the Tuned Lens</a>.</li>
+<li>Lindsey (2025). <a href="https://transformer-circuits.pub/2025/introspection/index.html">Emergent Introspective Awareness in Large Language Models</a>.</li>
+</ol>
+
+</article>
+</main>
+
+<script src="assets/glossary.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/search-index.js"></script>
+<script src="assets/search.js"></script>
+<script>
+/* ===== Widget 1: probe by hand ===== */
+(function () {
+  const svg = document.getElementById("probeSvg");
+  const W = 460, H = 330, S = 52;
+  const sx = x => W / 2 + x * S, sy = y => H / 2 - y * S;
+  const r = MI.rng(11), N = 140, th0 = 0.6;
+  const u = [Math.cos(th0), Math.sin(th0)], v = [-Math.sin(th0), Math.cos(th0)];
+  const pts = [];
+  for (let i = 0; i < N; i++) {
+    const real = i % 2;
+    const a = (real ? 1 : -1) * 1.15 + MI.gauss(r) * 0.7;
+    const b = MI.gauss(r) * 1.45;
+    pts.push({ x: a * u[0] + b * v[0], y: a * u[1] + b * v[1], real, rand: r() < 0.5 ? 1 : 0 });
+  }
+  let angle = 150, labels = "real", ptype = "lin";
+  const ang = document.getElementById("pAngle"), angOut = document.getElementById("pAngleOut"), out = document.getElementById("pOut");
+
+  function linFit(theta, key) {
+    const w = [Math.cos(theta), Math.sin(theta)];
+    const pr = pts.map(p => ({ s: p.x * w[0] + p.y * w[1], l: p[key] })).sort((a, b) => a.s - b.s);
+    const tot1 = pr.filter(p => p.l).length;
+    let best = { acc: 0, t: 0, sign: 1 }, left1 = 0;
+    for (let k = 0; k <= N; k++) {
+      // boundary between k-1 and k: points with index < k are "below"
+      const left0 = k - left1;
+      const accA = (left0 + (tot1 - left1)) / N;     // below → 0, above → 1
+      const accB = 1 - accA;                          // below → 1, above → 0
+      const t = k === 0 ? pr[0].s - 0.1 : k === N ? pr[N - 1].s + 0.1 : (pr[k - 1].s + pr[k].s) / 2;
+      if (accA > best.acc) best = { acc: accA, t, sign: 1 };
+      if (accB > best.acc) best = { acc: accB, t, sign: -1 };
+      if (k < N && pr[k].l) left1++;
+    }
+    return best;
+  }
+  function bestOverAngles(key) {
+    let b = { acc: 0, deg: 0 };
+    for (let d = 0; d < 180; d += 2) { const f = linFit(d * Math.PI / 180, key); if (f.acc > b.acc) b = { acc: f.acc, deg: d }; }
+    return b;
+  }
+  const bestReal = bestOverAngles("real"), bestRand = bestOverAngles("rand");
+
+  function nn(x, y) {
+    let bi = 0, bd = 1e9;
+    pts.forEach((p, i) => { const d = (p.x - x) ** 2 + (p.y - y) ** 2; if (d < bd) { bd = d; bi = i; } });
+    return pts[bi];
+  }
+  function draw() {
+    svg.innerHTML = "";
+    const key = labels;
+    const theta = angle * Math.PI / 180;
+    const fit = linFit(theta, key);
+    const w = [Math.cos(theta), Math.sin(theta)];
+    // shading grid
+    const cw = 20;
+    for (let gx = 0; gx < W; gx += cw) for (let gy = 0; gy < H; gy += cw) {
+      const x = (gx + cw / 2 - W / 2) / S, y = (H / 2 - gy - cw / 2) / S;
+      let c;
+      if (ptype === "lin") c = (fit.sign * ((x * w[0] + y * w[1]) - fit.t) > 0) ? 1 : 0;
+      else c = nn(x, y)[key];
+      MI.svg("rect", { x: gx, y: gy, width: cw, height: cw, fill: c ? "var(--accent)" : "var(--blue)", opacity: 0.1 }, svg);
+    }
+    MI.svg("line", { x1: 0, y1: H / 2, x2: W, y2: H / 2, stroke: "var(--rule)" }, svg);
+    MI.svg("line", { x1: W / 2, y1: 0, x2: W / 2, y2: H, stroke: "var(--rule)" }, svg);
+    if (ptype === "lin") {
+      const c = [w[0] * fit.t, w[1] * fit.t], d = [-w[1], w[0]];
+      MI.svg("line", { x1: sx(c[0] - d[0] * 9), y1: sy(c[1] - d[1] * 9), x2: sx(c[0] + d[0] * 9), y2: sy(c[1] + d[1] * 9), stroke: "var(--ink)", "stroke-width": 1.5, "stroke-dasharray": "5 4" }, svg);
+    }
+    let correct = 0;
+    pts.forEach(p => {
+      const lab = p[key];
+      let pred;
+      if (ptype === "lin") pred = (fit.sign * ((p.x * w[0] + p.y * w[1]) - fit.t) > 0) ? 1 : 0;
+      else pred = lab;
+      if (pred === lab) correct++;
+      MI.svg("circle", { cx: sx(p.x), cy: sy(p.y), r: 4.2, fill: lab ? "var(--accent)" : "var(--blue)", stroke: pred === lab ? "none" : "var(--ink)", "stroke-width": 1.6, opacity: 0.9 }, svg);
+    });
+    if (ptype === "lin") {
+      MI.svg("line", { x1: W / 2, y1: H / 2, x2: sx(w[0] * 2.6), y2: sy(w[1] * 2.6), stroke: "var(--ink)", "stroke-width": 3 }, svg);
+      MI.svg("circle", { cx: sx(w[0] * 2.6), cy: sy(w[1] * 2.6), r: 6, fill: "var(--ink)" }, svg);
+      const t = MI.svg("text", { x: sx(w[0] * 2.95), y: sy(w[1] * 2.95) + 4, "text-anchor": "middle", "font-size": 12, "font-weight": 700 }, svg);
+      t.textContent = "probe";
+    }
+    const acc = correct / N;
+    const sel = ptype === "lin" ? (bestReal.acc - bestRand.acc) : 0;
+    out.innerHTML =
+      `Training accuracy now: <b>${(acc * 100).toFixed(1)}%</b> on ${key === "real" ? "real labels" : "random labels (control task)"} · ` +
+      (ptype === "lin"
+        ? `best linear: real ${(bestReal.acc * 100).toFixed(0)}%, control ${(bestRand.acc * 100).toFixed(0)}% → selectivity <b>${(sel * 100).toFixed(0)} pts</b>`
+        : `memorizer: real 100%, control 100% → selectivity <b>0 pts</b>`) +
+      `<br>Points with a dark ring are misclassified.`;
+  }
+  ang.oninput = () => { angle = +ang.value; angOut.textContent = angle + "°"; draw(); };
+  document.getElementById("pBest").onclick = () => {
+    const b = labels === "real" ? bestReal : bestRand;
+    const f = linFit(b.deg * Math.PI / 180, labels);
+    angle = b.deg; ang.value = angle; angOut.textContent = angle + "°"; draw();
+  };
+  function seg(id, fn) {
+    const el = document.getElementById(id);
+    el.onclick = e => { const b = e.target.closest("button"); if (!b) return; [...el.children].forEach(x => x.classList.toggle("on", x === b)); fn(b.dataset.v); draw(); };
+  }
+  seg("pLabels", v => labels = v);
+  seg("pType", v => ptype = v);
+  let dragging = false;
+  function setFromEvent(e) {
+    const rc = svg.getBoundingClientRect();
+    const x = (e.clientX - rc.left) / rc.width * W - W / 2, y = H / 2 - (e.clientY - rc.top) / rc.height * H;
+    if (x * x + y * y < 25) return;
+    angle = Math.round(((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360);
+    ang.value = angle; angOut.textContent = angle + "°"; draw();
+  }
+  svg.addEventListener("pointerdown", e => { dragging = true; svg.setPointerCapture(e.pointerId); setFromEvent(e); });
+  svg.addEventListener("pointermove", e => { if (dragging) setFromEvent(e); });
+  svg.addEventListener("pointerup", () => dragging = false);
+  draw();
+  MI.onTheme(draw);
+})();
+
+/* ===== Widget 2: steering coefficient ===== */
+(function () {
+  const svg = document.getElementById("steerSvg"), bars = document.getElementById("steerBars");
+  const cIn = document.getElementById("steerC"), cOut = document.getElementById("steerCOut"), gen = document.getElementById("steerGen");
+  const words = ["awful", "stupid", "annoying", "busy", "kind", "wonderful", "beautiful"];
+  const base = [2.2, 1.8, 1.6, 1.0, 0.2, 0.0, -0.2];
+  const val = [-1, -0.8, -0.7, 0, 0.6, 0.9, 1];
+  const rows = words.map(w => {
+    const row = MI.el("div", { class: "bar-row", html: `<span>${w}</span><div class="track"><div class="fill"></div></div><span class="pct"></span>` }, bars);
+    return { fill: row.querySelector(".fill"), pct: row.querySelector(".pct") };
+  });
+  function draw() {
+    const c = +cIn.value;
+    cOut.textContent = c;
+    const logits = base.map((b, i) => b + 0.75 * c * val[i]);
+    const m = Math.max(...logits), ex = logits.map(l => Math.exp(l - m)), Z = ex.reduce((a, b) => a + b, 0);
+    const p = ex.map(e => e / Z);
+    rows.forEach((r, i) => {
+      r.fill.style.width = (p[i] * 100).toFixed(1) + "%";
+      r.fill.style.background = val[i] < 0 ? "var(--blue)" : val[i] > 0 ? "var(--accent)" : "var(--ink-3)";
+      r.pct.textContent = (p[i] * 100).toFixed(0) + "%";
+    });
+    const top = words[p.indexOf(Math.max(...p))];
+    const fluency = Math.max(0, Math.min(1, 1 - (Math.abs(c) - 6) / 5));
+    let text;
+    if (fluency > 0.75) text = `you are ${top}${val[words.indexOf(top)] > 0 ? " and I want to be with you forever." : val[words.indexOf(top)] < 0 ? " and you never listen to me." : " all the time and never call."}`;
+    else if (fluency > 0.35) text = `you are ${top} love love and I love the wonderful you love.`;
+    else text = `love love wonderful love beautiful love love love love…`;
+    gen.innerHTML = `<span class="p">I hate you because </span><span class="c">${text}</span>` +
+      `<div style="font-family:var(--sans);font-size:0.78125rem;color:var(--ink-3);margin-top:6px">Fluency: ${(fluency * 100).toFixed(0)}%${fluency < 0.75 ? " — the coefficient is too large; the text breaks down." : ""}</div>`;
+    // geometry panel
+    svg.innerHTML = "";
+    const cx = 160, cy = 120;
+    MI.svg("line", { x1: 20, y1: cy, x2: 300, y2: cy, stroke: "var(--rule)", "stroke-width": 2 }, svg);
+    MI.svg("text", { x: 22, y: cy + 22, "font-size": 12, fill: "var(--blue)", "font-weight": 700 }, svg).textContent = "← Hate";
+    MI.svg("text", { x: 298, y: cy + 22, "font-size": 12, fill: "var(--accent)", "font-weight": 700, "text-anchor": "end" }, svg).textContent = "Love →";
+    const x0 = cx - 70, y0 = cy - 30;
+    const x1 = Math.max(10, Math.min(310, x0 + c * 16));
+    MI.svg("circle", { cx: x0, cy: y0, r: 6, fill: "none", stroke: "var(--ink-3)", "stroke-width": 1.5, "stroke-dasharray": "3 2" }, svg);
+    MI.svg("text", { x: x0, y: y0 - 12, "font-size": 11, "text-anchor": "middle", class: "muted" }, svg).textContent = "original";
+    if (Math.abs(x1 - x0) > 4) MI.svg("line", { x1: x0, y1: y0, x2: x1, y2: y0, stroke: "var(--accent)", "stroke-width": 2.5 }, svg);
+    MI.svg("circle", { cx: x1, cy: y0, r: 8, fill: MI.diverge(Math.max(-1, Math.min(1, (x1 - cx) / 120))), stroke: "var(--ink)", "stroke-width": 1.5 }, svg);
+    MI.svg("text", { x: 160, y: 200, "font-size": 12, "text-anchor": "middle", class: "muted" }, svg).textContent = "h_new = h + c · (h(Love) − h(Hate))";
+  }
+  cIn.oninput = draw;
+  draw();
+  MI.onTheme(draw);
+})();
+
+/* ===== Widget 3: refusal direction stepper ===== */
+(function () {
+  const svg = document.getElementById("refSvg");
+  const r = MI.rng(5);
+  const cx = 280, cy = 150, S = 46;
+  const harm = [], safe = [];
+  for (let i = 0; i < 26; i++) {
+    harm.push([1.6 + MI.gauss(r) * 0.5, MI.gauss(r) * 0.9]);
+    safe.push([-1.6 + MI.gauss(r) * 0.5, MI.gauss(r) * 0.9]);
+  }
+  const X = x => cx + x * S, Y = y => cy - y * S;
+  MI.svg("line", { x1: X(0), y1: 20, x2: X(0), y2: 280, stroke: "var(--rule)", "stroke-dasharray": "4 4" }, svg);
+  const defs = MI.svg("defs", {}, svg);
+  const mk = MI.svg("marker", { id: "refArr", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 4, markerHeight: 4, orient: "auto" }, defs);
+  MI.svg("path", { d: "M0,0 L10,5 L0,10 z", fill: "var(--accent)" }, mk);
+  function group(show) { return MI.svg("g", { "data-show": show }, svg); }
+  function dots(g, arr, fill, dx = 0, flat = false) {
+    arr.forEach(p => MI.svg("circle", { cx: X(flat ? 0 : p[0] + dx), cy: Y(p[1]), r: 5, fill, opacity: 0.85 }, g));
+  }
+  function label(g, x, y, t, fill = "var(--ink)", anchor = "middle", w = 700) {
+    MI.svg("text", { x, y, "text-anchor": anchor, "font-size": 12.5, "font-weight": w, fill }, g).textContent = t;
+  }
+  // step 1
+  const g1 = group("1");
+  dots(g1, harm, "var(--red)"); dots(g1, safe, "var(--green)");
+  MI.svg("line", { x1: X(-1.6), y1: Y(0), x2: X(1.6) - 4, y2: Y(0), stroke: "var(--accent)", "stroke-width": 3, "marker-end": "url(#refArr)" }, g1);
+  MI.svg("circle", { cx: X(-1.6), cy: Y(0), r: 7, fill: "var(--panel)", stroke: "var(--ink)", "stroke-width": 2 }, g1);
+  MI.svg("circle", { cx: X(1.6), cy: Y(0), r: 7, fill: "var(--panel)", stroke: "var(--ink)", "stroke-width": 2 }, g1);
+  label(g1, X(0), 278, "orange arrow = refusal direction r̂ = mean(harmful) − mean(harmless)", "var(--accent)");
+  label(g1, X(-1.6), 28, "harmless prompts", "var(--green)");
+  label(g1, X(1.6), 28, "harmful prompts", "var(--red)");
+  // step 2
+  const g2 = group("2");
+  dots(g2, harm, "var(--red)", 0, true); dots(g2, safe, "var(--green)", 0, true);
+  label(g2, X(0), 28, "all points projected: no r̂ component left", "var(--ink)");
+  label(g2, X(-1.6), Y(0), "→ model complies", "var(--red)", "middle");
+  label(g2, X(1.8), Y(0), "even with harmful requests", "var(--ink-3)", "middle", 400);
+  // step 3
+  const g3 = group("3");
+  dots(g3, harm, "var(--red)"); dots(g3, safe, "var(--green)", 3.2);
+  safe.slice(0, 6).forEach(p => MI.svg("line", { x1: X(p[0]), y1: Y(p[1]), x2: X(p[0] + 3.1), y2: Y(p[1]), stroke: "var(--green)", "stroke-width": 1, opacity: .5 }, g3));
+  label(g3, X(-1.6), 28, "harmless + r̂", "var(--green)");
+  label(g3, X(1.6), 285, "→ model refuses \"write a poem\"", "var(--red)");
+  // step 4
+  const g4 = group("4");
+  const mx = 170, my = 60, cs = 22;
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+    const stripe = j === 5;
+    MI.svg("rect", { x: mx + j * cs, y: my + i * cs, width: cs - 2, height: cs - 2, rx: 3, fill: stripe ? "var(--panel)" : MI.diverge(Math.sin(i * 1.7 + j * 2.3) * 0.7), stroke: stripe ? "var(--accent)" : "none", "stroke-dasharray": stripe ? "3 2" : "" }, g4);
+  }
+  label(g4, mx + 4 * cs, my - 14, "weight matrix W_out (writes to residual stream)", "var(--ink)");
+  label(g4, mx + 5.5 * cs, my + 8 * cs + 20, "component along r̂ removed:  W ← W − r̂ r̂ᵀ W", "var(--accent)");
+  label(g4, mx + 4 * cs, my + 8 * cs + 42, "permanent — \"abliteration\"", "var(--ink-3)", "middle", 400);
+  // sync with stepper (app.js initialized before these elements existed)
+  const first = document.querySelector("#refSteps .stepper button");
+  if (first) first.click();
+})();
+
+/* ===== Othello boards (static figure) ===== */
+(function () {
+  const svg = document.getElementById("othSvg");
+  const board = [
+    "........",
+    "...W....",
+    "..BWB...",
+    "..BBW...",
+    "..WBBB..",
+    "...W.W..",
+    "....B...",
+    "........"];
+  const cs = 26;
+  function drawBoard(ox, mode) {
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+      const c = board[i][j];
+      MI.svg("rect", { x: ox + j * cs, y: 40 + i * cs, width: cs, height: cs, fill: "var(--green-soft)", stroke: "var(--rule)" }, svg);
+      if (c === ".") continue;
+      let fill, stroke = "var(--ink-3)";
+      if (mode === "bw") fill = c === "B" ? "#1d1d1f" : "#fafafa";
+      else fill = c === "B" ? "var(--blue)" : "var(--accent)"; // black to move → black = mine
+      MI.svg("circle", { cx: ox + j * cs + cs / 2, cy: 40 + i * cs + cs / 2, r: cs / 2 - 4, fill, stroke }, svg);
+    }
+  }
+  drawBoard(60, "bw");
+  drawBoard(450, "mt");
+  const t = (x, y, s, o = {}) => { const e = MI.svg("text", Object.assign({ x, y, "text-anchor": "middle", "font-size": 13 }, o), svg); e.textContent = s; };
+  t(164, 26, "Labels: black / white", { "font-weight": 700 });
+  t(554, 26, "Labels: mine / theirs (black to move)", { "font-weight": 700 });
+  t(164, 270, "linear probe ≈ 20% error", { fill: "var(--red)", "font-weight": 700 });
+  t(554, 270, "linear probe ≈ near-perfect", { fill: "var(--green)", "font-weight": 700 });
+  const d = MI.svg("defs", {}, svg), m = MI.svg("marker", { id: "othA", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto" }, d);
+  MI.svg("path", { d: "M0,0 L10,5 L0,10 z", fill: "var(--accent)" }, m);
+  MI.svg("line", { x1: 285, y1: 145, x2: 440, y2: 145, stroke: "var(--accent)", "stroke-width": 2.5, "marker-end": "url(#othA)" }, svg);
+  t(362, 135, "re-label by", { "font-size": 12, fill: "var(--accent)", "font-weight": 700 });
+  t(362, 165, "whose turn it is", { "font-size": 12, fill: "var(--accent)", "font-weight": 700 });
+  MI.svg("circle", { cx: 470, cy: 285, r: 6, fill: "var(--blue)" }, svg); t(500, 289, "mine", { "font-size": 12 });
+  MI.svg("circle", { cx: 545, cy: 285, r: 6, fill: "var(--accent)" }, svg); t(580, 289, "theirs", { "font-size": 12 });
+})();
+</script>
+</body>
+</html>

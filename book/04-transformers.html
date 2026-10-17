@@ -1,0 +1,1098 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transformers Through Interp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .tokrow { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0; }
+  .tok { font-family: var(--mono); font-size: 0.8125rem; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--rule); background: var(--bg); cursor: pointer; position: relative; }
+  .tok.q { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+  .tok.k { border-color: var(--blue); background: var(--blue-soft); }
+  .tok .pos { position: absolute; top: -14px; left: 2px; font-size: 0.59375rem; color: var(--ink-3); }
+  .predrow .tok { cursor: default; color: var(--ink-3); }
+  .predrow .tok.hit { color: var(--green); border-color: var(--green); background: var(--green-soft); font-weight: 700; }
+  .mats { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .mats h5 { font-family: var(--sans); font-size: 0.8125rem; margin: 0 0 6px; color: var(--ink-2); }
+  @media (max-width: 700px) { .mats { grid-template-columns: 1fr; } }
+  .lens-bars { display: grid; gap: 6px; margin-top: 10px; }
+  .lens-bar { display: grid; grid-template-columns: 90px 1fr 54px; align-items: center; gap: 10px; font-family: var(--mono); font-size: 0.8125rem; }
+  .lens-bar .bar { height: 18px; border-radius: 4px; background: var(--accent); transition: width .3s; }
+  .lens-bar .bar.blue { background: var(--blue); }
+  .lens-grid td { font-family: var(--mono); font-size: 0.78125rem; padding: 5px 8px; }
+  .lens-grid td.hl { background: var(--accent-soft); font-weight: 700; }
+  input.seq { width: 100%; font-family: var(--mono); font-size: 0.875rem; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); color: var(--ink); }
+</style>
+</head>
+<body data-chapter="4">
+<main>
+<article class="article">
+
+<div class="kicker">Chapter 4</div>
+<h1>Transformers through a mech-interp lens</h1>
+<p class="lede">Most of modern mech interp studies transformers. This chapter rebuilds the transformer in a way that makes it easy to read. Then it uses that view to find the first clean circuit in a language model: the induction head.</p>
+
+<div class="tldr">
+<h3>In short</h3>
+<ul>
+<li>The <b>residual stream</b> is a shared memory that flows through the model. Every layer reads from it and <em>adds</em> its output to it. Nothing is overwritten.</li>
+<li>Because everything is added, attention heads are <b>independent</b>. You can study each head on its own.</li>
+<li>Each head has two separate parts: the <b>QK circuit</b> decides where to look, and the <b>OV circuit</b> decides what to move.</li>
+<li>In 2-layer models, heads <b>compose</b>. A previous-token head plus an <b>induction head</b> can complete patterns: after [A][B] … [A], predict [B].</li>
+<li>You find induction heads with <b>repeated random tokens</b>: score every head on where it looks, then remove the candidates and watch copying break. We do this on GPT-2 small with real numbers.</li>
+<li>Induction heads appear in a sudden <b>phase change</b> during training, at the same time as in-context learning improves. You can watch it happen in a tiny model trained for this page.</li>
+<li>MLPs can be read as many small <b>key-value</b> rules, but the nonlinearity and superposition make them much harder than heads.</li>
+<li>The <b>logit lens</b> and <b>tuned lens</b> let you read the model's "current guess" at each layer.</li>
+</ul>
+</div>
+
+<div class="callout example" id="learning-path">
+<span class="label">Learning path · Chapter 4 of 12 · about 70 min · 9 widgets · 5 quizzes</span>
+<p><b>Before you start:</b> <a href="01-foundations.html#nn-basics">Chapter 1: transformers in one paragraph</a> and <a href="03-superposition.html#privileged-basis">Chapter 3: the privileged basis</a> (why we look for directions, not single coordinates).</p>
+<p><b>You will learn:</b></p>
+<ul><li>the parts of a transformer: tokens, embedding, residual stream, attention, MLP, unembedding and logits</li><li>why the residual stream is a shared channel where every block adds its output</li><li>how each attention head splits into a QK circuit (where to look) and an OV circuit (what to move)</li><li>how two heads combine into an induction head, how researchers find such heads, and how to test that they matter</li><li>what an MLP computes, the key-value view, and how to attribute an answer to layers</li><li>how the logit lens and tuned lens read the model's guess in the middle layers</li></ul>
+</div>
+
+
+<h2 id="why-a-new-lens" data-short="Why a new lens?">Why transformers need a new way of looking</h2>
+
+<p>In 2021, the Circuits team left vision models behind. <a href="03-superposition.html">Chapter 3</a> showed why single neurons are a poor unit. This chapter follows the other path out of the vision era: the move to language models. The vision work in <a href="02-vision-era.html">Chapter 2</a> studied convolutional networks. In those networks, each layer is a grid of neurons, and each neuron has a clear place in the image. You can draw one neuron, then the neurons it connects to, and so on.</p>
+
+<p>Transformers are different. They read text as a list of <span class="term" data-term="token">tokens</span>. They move information between token positions with <span class="term" data-term="attention heads">attention</span>. Most of their state lives in one large vector per token, the <span class="term" data-term="residual stream">residual stream</span>, which has no special axes. So "look at one neuron" is often the wrong starting point.</p>
+
+<p>In December 2021, a team at Anthropic published "A Mathematical Framework for Transformer Circuits". It gave the field a new set of words and a new way to write the model down. Almost every later paper on language-model circuits uses its ideas. This chapter follows that paper and its sequel on induction heads.</p>
+
+<div class="paper">
+  <div class="yr">2021</div>
+  <div>
+    <div class="t"><a href="https://transformer-circuits.pub/2021/framework/index.html">A Mathematical Framework for Transformer Circuits</a></div>
+    <div class="a">Nelson Elhage, Neel Nanda, Catherine Olsson, … Chris Olah (Anthropic)</div>
+    <div class="s">Rewrites the transformer as a sum of simple paths. Fully reverse engineers tiny attention-only models with 0, 1 and 2 layers. Introduces the residual stream view, QK/OV circuits, and composition.</div>
+  </div>
+</div>
+
+<h2 id="anatomy" data-short="Anatomy of a transformer">The anatomy of a transformer, in reading order</h2>
+
+<p>We go through a transformer from the input text to the output prediction. We use the words that interpretability researchers use.</p>
+
+<h3>1. Tokens</h3>
+<p>The model splits the text into tokens. A token is a word or a part of a word. For example, "Dursley" might become two tokens: "Durs" and "ley". Each token gets a position: 0, 1, 2, and so on.</p>
+
+<h3>2. Embedding</h3>
+<p>The model looks up a vector for each token in a big table. This table is the <b>embedding matrix</b>, written W<sub>E</sub>. The vector for a token is its <span class="term" data-term="embedding">embedding</span>. In GPT-2 small, each vector has 768 numbers. A position signal is also added, so the model knows the order of tokens.</p>
+
+<h3>3. The residual stream</h3>
+<p>The embedding is the starting value of the residual stream at that position. There is one residual stream vector per token position. This vector flows up through the model, layer after layer.</p>
+
+<h3>4. Layers: attention, then MLP</h3>
+<p>Each layer has two blocks.</p>
+<ul>
+<li>An <b>attention block</b>. It contains several <span class="term" data-term="attention heads">attention heads</span>. GPT-2 small has 12 heads per layer. Each head can move information from earlier token positions to the current position. This is the only place where tokens talk to each other.</li>
+<li>An <b>MLP block</b> (multi-layer perceptron). It works on each position on its own. It does not move information between tokens. It holds most of the parameters of the model.</li>
+</ul>
+<p>Each block <b>reads</b> the residual stream, computes something, and <b>adds</b> its result back to the stream. This "add back" is called a residual connection, which gives the stream its name.</p>
+
+<h3>5. Unembedding</h3>
+<p>At the top, the final residual stream vector is multiplied by the <span class="term" data-term="unembedding">unembedding</span> matrix, W<sub>U</sub>. This gives one score per vocabulary token. These scores are <span class="term" data-term="logits">logits</span>. A <span class="term" data-term="softmax">softmax</span> turns them into probabilities for the next token.</p>
+
+<figure class="panel wide">
+<svg viewBox="0 0 960 360" role="img" aria-label="A transformer drawn as a horizontal highway: the residual stream. The embedding writes into it. Attention and MLP blocks above it read from the stream and add their outputs back. The unembedding reads the final value and gives logits.">
+  <defs>
+    <marker id="a41" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
+    <marker id="a41o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+    <marker id="a41b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--blue)"/></marker>
+  </defs>
+  <!-- highway -->
+  <rect x="120" y="200" width="700" height="34" rx="17" fill="var(--bg-2)" stroke="var(--ink-3)"/>
+  <text x="470" y="222" text-anchor="middle" font-size="13" font-weight="700" class="muted">RESIDUAL STREAM (one vector per token position)</text>
+  <line x1="820" y1="217" x2="845" y2="217" stroke="var(--ink-3)" stroke-width="2" marker-end="url(#a41)"/>
+  <!-- embedding -->
+  <rect x="10" y="196" width="96" height="42" rx="8" fill="var(--green-soft)" stroke="var(--green)"/>
+  <text x="58" y="215" text-anchor="middle" font-size="13" font-weight="700">Embed</text>
+  <text x="58" y="231" text-anchor="middle" font-size="11" class="muted">W_E</text>
+  <line x1="106" y1="217" x2="120" y2="217" stroke="var(--green)" stroke-width="2"/>
+  <text x="58" y="285" text-anchor="middle" font-size="12" class="muted">token "Mr"</text>
+  <line x1="58" y1="270" x2="58" y2="242" stroke="var(--ink-3)" marker-end="url(#a41)"/>
+  <!-- unembed -->
+  <rect x="852" y="196" width="100" height="42" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/>
+  <text x="902" y="215" text-anchor="middle" font-size="13" font-weight="700">Unembed</text>
+  <text x="902" y="231" text-anchor="middle" font-size="11" class="muted">W_U → logits</text>
+  <!-- blocks -->
+  <g font-size="13">
+    <rect x="160" y="70" width="140" height="56" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="230" y="94" text-anchor="middle" font-weight="700">Attention 0</text>
+    <text x="230" y="112" text-anchor="middle" font-size="11" class="muted">heads 0.0 … 0.11</text>
+    <rect x="330" y="70" width="110" height="56" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="385" y="94" text-anchor="middle" font-weight="700">MLP 0</text>
+    <text x="385" y="112" text-anchor="middle" font-size="11" class="muted">per position</text>
+    <rect x="490" y="70" width="140" height="56" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="560" y="94" text-anchor="middle" font-weight="700">Attention 1</text>
+    <text x="560" y="112" text-anchor="middle" font-size="11" class="muted">heads 1.0 … 1.11</text>
+    <rect x="660" y="70" width="110" height="56" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="715" y="94" text-anchor="middle" font-weight="700">MLP 1</text>
+    <text x="715" y="112" text-anchor="middle" font-size="11" class="muted">per position</text>
+  </g>
+  <text x="300" y="56" text-anchor="middle" font-size="12" class="muted">layer 0</text>
+  <text x="630" y="56" text-anchor="middle" font-size="12" class="muted">layer 1 ( … more layers … )</text>
+  <line x1="160" y1="62" x2="440" y2="62" stroke="var(--rule)"/><line x1="490" y1="62" x2="770" y2="62" stroke="var(--rule)"/>
+  <!-- read / write arrows -->
+  <g stroke-width="2" fill="none">
+    <path d="M190 200 L190 130" stroke="var(--blue)" marker-end="url(#a41b)"/>
+    <path d="M270 130 L270 198" stroke="var(--accent)" marker-end="url(#a41o)"/>
+    <path d="M360 200 L360 130" stroke="var(--blue)" marker-end="url(#a41b)"/>
+    <path d="M410 130 L410 198" stroke="var(--accent)" marker-end="url(#a41o)"/>
+    <path d="M520 200 L520 130" stroke="var(--blue)" marker-end="url(#a41b)"/>
+    <path d="M600 130 L600 198" stroke="var(--accent)" marker-end="url(#a41o)"/>
+    <path d="M690 200 L690 130" stroke="var(--blue)" marker-end="url(#a41b)"/>
+    <path d="M740 130 L740 198" stroke="var(--accent)" marker-end="url(#a41o)"/>
+  </g>
+  <g font-size="15" font-weight="800" fill="var(--accent)">
+    <text x="276" y="172">+</text><text x="416" y="172">+</text><text x="606" y="172">+</text><text x="746" y="172">+</text>
+  </g>
+  <g font-size="12">
+    <line x1="160" y1="300" x2="190" y2="300" stroke="var(--blue)" stroke-width="2"/><text x="198" y="304">read (a linear map of the stream)</text>
+    <line x1="460" y1="300" x2="490" y2="300" stroke="var(--accent)" stroke-width="2"/><text x="498" y="304">write (add the output to the stream)</text>
+  </g>
+  <text x="470" y="338" text-anchor="middle" font-size="12" class="muted">Attention heads move information between positions. MLPs work on each position alone.</text>
+</svg>
+<figcaption><b>Figure 4.1.</b> The residual stream view. The stream is a highway. Blocks sit beside it. Each block reads the stream with a linear map and adds its output back. The final stream is turned into logits by the unembedding.</figcaption>
+</figure>
+
+<div class="callout warn">
+<span class="label">Simplification: layer norm</span>
+<p>Real transformers also have <b>layer normalization</b> before each block. It rescales the vector so that its size stays stable. Layer norm is <em>not</em> linear, so it breaks the clean math below. Most interpretability work "folds" it into nearby weights or treats it as a fixed scale for one input. This is a good approximation, but it is an approximation.</p>
+</div>
+
+<h2 id="residual-stream" data-short="Residual stream as a channel">The residual stream is a communication channel</h2>
+
+<p>Many people think of a transformer as a pipe: each layer transforms the output of the layer before it. The framework paper asks us to stop thinking this way. Instead, think of the residual stream as a <b>shared whiteboard</b>, or a <b>bus</b> in a computer. Each block reads what it needs from the board and writes its notes on the board. Notes are only added. They are never erased by default.</p>
+
+<p>The stepper below shows this. Each colour is the contribution of one block. The final stream is simply the <b>sum</b> of all contributions.</p>
+
+<div class="widget">
+<div class="widget-title">Interactive · The stream is a sum</div>
+<div class="widget-sub">Step through one token position. Each block reads the current stream and adds a new piece. The bar on the right is the stream: a stack of everything written so far.</div>
+<svg id="streamSvg" viewBox="0 0 640 250" role="img" aria-label="Stepper: residual stream as a growing sum of contributions">
+  <g font-size="12">
+    <rect x="20" y="20" width="150" height="34" rx="8" fill="var(--green-soft)" stroke="var(--green)"/><text x="95" y="42" text-anchor="middle">Embedding</text>
+    <rect x="20" y="66" width="150" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="95" y="88" text-anchor="middle">Attention head 0.3</text>
+    <rect x="20" y="112" width="150" height="34" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="95" y="134" text-anchor="middle">MLP 0</text>
+    <rect x="20" y="158" width="150" height="34" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/><text x="95" y="180" text-anchor="middle">Attention head 1.5</text>
+    <rect x="20" y="204" width="150" height="34" rx="8" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="95" y="226" text-anchor="middle">Unembedding (reads)</text>
+  </g>
+  <!-- arrows to the stack -->
+  <g stroke-width="2" fill="none">
+    <path data-show="1 2 3 4 5" d="M172 37 L 300 220" stroke="var(--green)"/>
+    <path data-show="2 3 4 5" d="M172 83 L 300 190" stroke="var(--blue)"/>
+    <path data-show="3 4 5" d="M172 129 L 300 150" stroke="var(--accent)"/>
+    <path data-show="4 5" d="M172 175 L 300 105" stroke="var(--purple)"/>
+  </g>
+  <!-- stack -->
+  <rect x="300" y="20" width="70" height="220" rx="6" fill="none" stroke="var(--rule)" stroke-dasharray="4 3"/>
+  <rect data-show="1 2 3 4 5" x="304" y="200" width="62" height="36" fill="var(--green)" opacity=".85"/>
+  <rect data-show="2 3 4 5" x="304" y="170" width="62" height="28" fill="var(--blue)" opacity=".85"/>
+  <rect data-show="3 4 5" x="304" y="120" width="62" height="48" fill="var(--accent)" opacity=".85"/>
+  <rect data-show="4 5" x="304" y="86" width="62" height="32" fill="var(--purple)" opacity=".85"/>
+  <text x="335" y="14" text-anchor="middle" font-size="11" class="muted">stream</text>
+  <g font-size="12">
+    <text data-show="1 2 3 4 5" x="385" y="222">"this token is Mr"</text>
+    <text data-show="2 3 4 5" x="385" y="188">"previous token was …"</text>
+    <text data-show="3 4 5" x="385" y="148">"a title; a name comes next"</text>
+    <text data-show="4 5" x="385" y="106">"copy: Durs"</text>
+    <text data-show="5" x="385" y="60" font-weight="700" fill="var(--accent)">W_U · (sum) → logits: "Durs" is top</text>
+  </g>
+</svg>
+<div class="steps" data-target="streamSvg">
+  <div class="step" data-label="1 · Embed">The embedding writes a first vector. It says which token this is, and where it is.</div>
+  <div class="step" data-label="2 · Head 0.3">An attention head in layer 0 reads the stream at several positions. It adds a vector to <em>this</em> position. Here it writes "the previous token was …".</div>
+  <div class="step" data-label="3 · MLP 0">The MLP reads the stream at this position only. It adds features that it computes from what is already there.</div>
+  <div class="step" data-label="4 · Head 1.5">A head in layer 1 reads what earlier blocks wrote and adds its own output. Later blocks can use everything below them.</div>
+  <div class="step" data-label="5 · Unembed">The unembedding reads the final sum. Because the stream is a sum, the logits are also a sum: one part from each block. This is the basis of <b>direct logit attribution</b>.</div>
+</div>
+</div>
+
+<h3>Consequences of "everything is added"</h3>
+
+<p><b>1. Contributions can be split.</b> The final stream equals the embedding plus the outputs of all heads and all MLPs. So the logits equal a sum of terms, one per block. You can ask "how much did head 9.9 push up the logit for 'Mary'?" This trick is called <span class="term" data-def="Splitting the final logit into a sum of contributions, one from each head or MLP, by applying the unembedding to each block's output.">direct logit attribution</span>.</p>
+
+<p><b>2. Layers can talk at a distance.</b> A block in layer 1 can write a vector. A block in layer 5 can read it, even though there is no direct wire between them. The paper calls the product of the write map and the read map a <b>virtual weight</b>. If layer 1 writes with matrix W<sub>out</sub> and layer 5 reads with W<sub>in</sub>, the virtual weight is <span class="math">W<sub>in</sub> · W<sub>out</sub></span>.</p>
+
+<p><b>3. The stream is split into subspaces.</b> The stream has hundreds of dimensions in a small model, and tens of thousands in a large one. Each head reads and writes only a small slice (for example, 64 dimensions). So different blocks can use different subspaces, like different radio channels on the same air. The stream is a shared bottleneck. The paper suggests that some heads and neurons do "memory management": they clear out a subspace so that it can be reused.</p>
+
+<p><b>4. There is no privileged basis.</b> The stream is only read and written by linear maps. You could rotate the whole stream and rotate all the read and write maps the same way. The model would compute exactly the same thing. So the individual dimensions of the stream have no special meaning. A single "residual stream neuron" is not a natural unit to study. Instead we look for <span class="term" data-term="direction">directions</span>. (Compare <a href="03-superposition.html">Chapter 3</a> on the <span class="term" data-term="privileged basis">privileged basis</span>.) MLP neurons are different: the ReLU or GELU acts on each neuron separately, so the MLP hidden layer <em>does</em> have a privileged basis.</p>
+
+<div class="callout key">
+<span class="label">Key idea</span>
+<p>The residual stream is linear and additive. This one fact lets us split the model into independent parts, follow paths between distant layers, and attribute the output to individual blocks.</p>
+</div>
+
+<h2 id="qk-ov" data-short="Heads: QK and OV">Attention heads: two circuits in one</h2>
+
+<p>The usual textbook picture of attention has three steps. Compute queries, keys and values for all heads. Join (concatenate) the head outputs. Then multiply by an output matrix W<sub>O</sub>. The framework paper points out that this is the same as something simpler. Each head has its own slice of W<sub>O</sub>, and the head outputs are just <b>added</b> to the stream. So <b>heads are independent and additive</b>. You can study one head and ignore the others.</p>
+
+<p>Now look inside one head. It does two separate jobs.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Circuit</th><th>Matrix</th><th>Question it answers</th><th>Simple description</th></tr></thead>
+<tbody>
+<tr><td><b>QK circuit</b></td><td><code>W_QK = W_Qᵀ W_K</code></td><td>Where should I look?</td><td>For each pair (current token, earlier token), it gives a score. Softmax turns scores into the attention pattern.</td></tr>
+<tr><td><b>OV circuit</b></td><td><code>W_OV = W_O W_V</code></td><td>What should I move?</td><td>For the tokens it attends to, it decides what vector to write into the current position.</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The important point: W<sub>Q</sub> and W<sub>K</sub> only ever appear as the product W<sub>QK</sub>. W<sub>V</sub> and W<sub>O</sub> only ever appear as the product W<sub>OV</sub>. So the two products are the "real" objects. Both are <b>low rank</b>: their rank is at most the head dimension (for example 64), much smaller than the stream.</p>
+
+<p>The two circuits are almost separate. The QK circuit decides the attention pattern. Once the pattern is fixed, the head's output is a <b>linear</b> function of the stream, given by the OV circuit. This split is the main tool for reading heads.</p>
+
+<div class="widget">
+<div class="widget-title">Interactive · QK versus OV</div>
+<div class="widget-sub">One head at the last position of "Mr Durs ley was proud . Mr". Toggle to see what each circuit does. The attention numbers are illustrative, not measured from a real model.</div>
+<div class="controls"><div class="seg" id="qkovSeg"><button class="on" data-m="qk">QK: where to look</button><button data-m="ov">OV: what to move</button></div></div>
+<svg id="qkovSvg" viewBox="0 0 640 230"></svg>
+<div class="readout" id="qkovOut"></div>
+</div>
+
+<h3>Full circuits: reading heads in token space</h3>
+<p>We can go one step further. Put the embedding and unembedding around each circuit. Then the circuit becomes a table over tokens.</p>
+<ul>
+<li><b>QK full circuit</b> = <span class="math">W<sub>E</sub>ᵀ W<sub>QK</sub> W<sub>E</sub></span>. It is a table of size (vocabulary × vocabulary). Entry (a, b) says how much a query token <em>a</em> wants to attend to a key token <em>b</em>.</li>
+<li><b>OV full circuit</b> = <span class="math">W<sub>U</sub> W<sub>OV</sub> W<sub>E</sub></span>. Entry (b, c) says: if the head attends to token <em>b</em>, how much does the logit of token <em>c</em> go up?</li>
+</ul>
+<p>For a one-layer model, these tables tell you almost everything the head does. You can read them without running the model on any input.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 680 250" role="img" aria-label="An attention head split into a QK half that compares a query token with key tokens to make the attention pattern, and an OV half that moves information from the attended token to the output.">
+  <defs><marker id="a43" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <rect x="20" y="20" width="300" height="210" rx="14" fill="var(--blue-soft)"/>
+  <rect x="360" y="20" width="300" height="210" rx="14" fill="var(--accent-soft)"/>
+  <text x="170" y="46" text-anchor="middle" font-size="14" font-weight="800" fill="var(--blue)">QK circuit · where to look</text>
+  <text x="510" y="46" text-anchor="middle" font-size="14" font-weight="800" fill="var(--accent)">OV circuit · what to move</text>
+  <g font-size="12">
+    <rect x="45" y="150" width="70" height="30" rx="6" fill="var(--panel)" stroke="var(--blue)"/><text x="80" y="170" text-anchor="middle">query xᵢ</text>
+    <rect x="225" y="80" width="70" height="30" rx="6" fill="var(--panel)" stroke="var(--rule)"/><text x="260" y="100" text-anchor="middle">key x₁</text>
+    <rect x="225" y="122" width="70" height="30" rx="6" fill="var(--panel)" stroke="var(--blue)" stroke-width="2"/><text x="260" y="142" text-anchor="middle">key x₂</text>
+    <rect x="225" y="164" width="70" height="30" rx="6" fill="var(--panel)" stroke="var(--rule)"/><text x="260" y="184" text-anchor="middle">key x₃</text>
+    <line x1="115" y1="160" x2="223" y2="96" stroke="var(--blue)" stroke-width="1" opacity=".5"/>
+    <line x1="115" y1="165" x2="223" y2="137" stroke="var(--blue)" stroke-width="4"/>
+    <line x1="115" y1="170" x2="223" y2="178" stroke="var(--blue)" stroke-width="1" opacity=".5"/>
+    <text x="170" y="70" text-anchor="middle" font-size="11" class="muted">score(i, j) = xᵢᵀ W_QK xⱼ</text>
+    <text x="170" y="215" text-anchor="middle" font-size="11" class="muted">softmax(scores) → attention pattern</text>
+
+    <rect x="385" y="110" width="70" height="30" rx="6" fill="var(--panel)" stroke="var(--blue)" stroke-width="2"/><text x="420" y="130" text-anchor="middle">x₂</text>
+    <rect x="490" y="104" width="64" height="42" rx="8" fill="var(--panel)" stroke="var(--accent)"/><text x="522" y="122" text-anchor="middle" font-weight="700">W_OV</text><text x="522" y="138" text-anchor="middle" font-size="10" class="muted">low rank</text>
+    <rect x="585" y="110" width="60" height="30" rx="6" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/><text x="615" y="130" text-anchor="middle">+ out</text>
+    <line x1="455" y1="125" x2="488" y2="125" stroke="var(--ink-3)" stroke-width="2" marker-end="url(#a43)"/>
+    <line x1="554" y1="125" x2="583" y2="125" stroke="var(--ink-3)" stroke-width="2" marker-end="url(#a43)"/>
+    <text x="510" y="190" text-anchor="middle" font-size="11" class="muted">output = Σⱼ attnᵢⱼ · W_OV xⱼ</text>
+    <text x="510" y="208" text-anchor="middle" font-size="11" class="muted">(added to the stream at position i)</text>
+  </g>
+</svg>
+<figcaption><b>Figure 4.2.</b> One attention head is two circuits. The QK circuit compares the current token with earlier tokens and makes the attention pattern. The OV circuit takes what is at the attended positions, transforms it, and writes it into the current position.</figcaption>
+</figure>
+
+<h2 id="zero-one-layer" data-short="0- and 1-layer models">Zero-layer and one-layer models: bigrams and skip-trigrams</h2>
+
+<p>The paper studies tiny <b>attention-only</b> transformers. They have no MLP blocks at all. This makes the math exact (apart from layer norm). The authors start with the simplest model and add one layer at a time.</p>
+
+<h3>Zero layers: a bigram table</h3>
+<p>A zero-layer transformer only embeds and then unembeds. Its logits are <span class="math">W<sub>U</sub> W<sub>E</sub></span> applied to the current token. It can only learn <b>bigram statistics</b>: "after token X, which token usually comes next?" For example, after "Barack", predict "Obama". It cannot look at any earlier token.</p>
+
+<h3>One layer: skip-trigrams</h3>
+<p>Add one layer of attention heads. Now the logits are a sum of two kinds of terms:</p>
+
+<div class="mathblock">logits = W<sub>U</sub>W<sub>E</sub> (direct path)  +  Σ<sub>heads h</sub> A<sup>h</sup> · W<sub>U</sub>W<sub>OV</sub><sup>h</sup>W<sub>E</sub> (one term per head)</div>
+
+<p>Each head term behaves like a set of <b>skip-trigrams</b>. A skip-trigram has the form <code>[A] … [B] → [C]</code>. Token A appears somewhere earlier. B is the current token. The head predicts C. The QK circuit links B (query) to A (key). The OV circuit maps A to C.</p>
+
+<p>Many heads in one-layer models do <b>copying</b>. If they attend to a token, they raise the logit for the same token, or a similar one. In the paper's analysis, the OV circuits of these heads have many positive eigenvalues. An eigenvalue is positive when the circuit maps a direction back onto itself, which is what copying means.</p>
+
+<h3 id="eigenvalues">A detour: what an eigenvalue is, and why it means "copying"</h3>
+
+<p>"Positive eigenvalues" sounds like heavy math, but the idea is simple, and it is one of the most useful tricks for reading a head from its weights alone.</p>
+
+<p><b>A matrix is a machine that moves arrows.</b> Give it an arrow (a vector) and it gives back another arrow. Most arrows come out pointing somewhere new: turned, flipped, mixed with other directions. But a few special arrows come out pointing <em>the same way they went in</em>, only longer, shorter, or reversed. Those special arrows are the matrix's <b>eigenvectors</b>. The number that says how much each one was stretched is its <b>eigenvalue</b>, written λ:</p>
+
+<div class="mathblock">M v = λ v      ("M sends v to a scaled copy of v")</div>
+
+<ul>
+<li><b>λ &gt; 0:</b> the arrow comes out in the <em>same</em> direction. Bigger λ means it is pushed harder.</li>
+<li><b>λ &lt; 0:</b> the arrow comes out <em>reversed</em>. The matrix pushes against whatever came in.</li>
+<li><b>λ near 0:</b> the matrix mostly ignores that direction.</li>
+<li><b>No real eigenvalue</b> (a complex pair): every arrow gets turned, as in a rotation. Nothing comes back onto itself.</li>
+</ul>
+
+<div class="widget" id="eigWidget">
+  <div class="widget-title">Interactive · Which arrows come back onto themselves?</div>
+  <div class="widget-sub">A 2×2 matrix acts on an input arrow (blue) and returns an output arrow (orange). Pick a matrix and turn the input. Dashed lines are the eigenvector directions, where input and output line up. Toy matrices, chosen to match the kinds of heads described below.</div>
+  <div class="controls">
+    <div class="seg" id="eigSeg"><button class="on" data-m="copy">Copying head</button><button data-m="supp">Suppressing head</button><button data-m="mixed">Mixed head</button><button data-m="rot">Rotating head</button></div>
+    <label>input angle <input type="range" id="eigAng" min="0" max="359" value="70"></label>
+  </div>
+  <svg id="eigSvg" viewBox="0 0 560 300"></svg>
+  <div class="readout" id="eigOut"></div>
+</div>
+
+<h4>How this applies to a head</h4>
+
+<p>Recall the OV circuit of a head, read through the vocabulary: <span class="math">W<sub>U</sub> W<sub>OV</sub> W<sub>E</sub></span>. It is a big table. Put in a token the head attends to (say "Potter"), and it tells you how much the head raises or lowers the logit of every token in the vocabulary. So it is a matrix that turns a token into a vote over tokens, and eigenvalues ask the question we care about:</p>
+
+<ul>
+<li><b>If a token's direction comes back onto itself, stretched (λ &gt; 0),</b> then attending to "Potter" raises the logit of "Potter". That is <b>copying</b>.</li>
+<li><b>If it comes back reversed (λ &lt; 0),</b> attending to "Potter" lowers "Potter". That is <b>anti-copying</b> or suppression: "this name is already used, don't say it again".</li>
+<li><b>If it comes back turned,</b> the head maps tokens to <em>other</em> tokens, as in the "keep … in → mind" example above.</li>
+</ul>
+
+<p>A real OV matrix has many eigenvalues, so we need one summary number. The framework paper uses</p>
+
+<div class="mathblock">copying score = Σ<sub>i</sub> λ<sub>i</sub> / Σ<sub>i</sub> |λ<sub>i</sub>|</div>
+
+<p>(taking the real part of each λ in the top sum). It is +1 if every eigenvalue is positive, −1 if every one is negative, and near 0 if they cancel or are mostly rotations. The <a href="#scoreWidget">heatmap below</a> uses exactly this score. In GPT-2 small, 80 of the 144 heads score above +0.5 and 29 score below −0.5.</p>
+
+<div class="callout example">
+<span class="label">A practical trick · 50,000 × 50,000 is not a problem</span>
+<p>The full table is vocabulary × vocabulary, about 50,000 × 50,000 in GPT-2. But a head only has 64 dimensions, so almost all of those eigenvalues are exactly 0. A standard fact helps: <span class="math">AB</span> and <span class="math">BA</span> have the same non-zero eigenvalues. So we can reorder the product into a 64 × 64 matrix, <span class="math">W<sub>O</sub> (W<sub>U</sub> W<sub>E</sub>) W<sub>V</sub></span>, and get the same answer in a fraction of a second per head. That is how the scores in this chapter were computed (<code>book/scripts/ch4_experiments.py</code>).</p>
+</div>
+
+<div class="callout warn">
+<span class="label">Limits</span>
+<p>The score reads the head <em>through the embedding and unembedding</em>, so it is cleanest for heads that read and write token identities directly, near the start and end of the model. It ignores layer norm, and it ignores what MLPs and earlier heads do to the stream before this head reads it. A head whose job only shows up after an MLP has transformed the tokens can score near 0 here and still matter a lot. Eigenvalues tell you what a head <em>can</em> do, from weights alone. Ablation and patching (<a href="05-causal-methods.html">Chapter 5</a>) tell you what it <em>does</em>.</p>
+</div>
+
+<p>The same tool shows up on the other side of the head too. The QK circuit <span class="math">W<sub>E</sub>ᵀ W<sub>QK</sub> W<sub>E</sub></span> is also a token × token table, for "which token looks at which". Positive eigenvalues there mean "a token tends to attend to copies of itself", which is what a duplicate-token head does.</p>
+
+
+<div class="callout example">
+<span class="label">Example · a bug you can read from the weights</span>
+<p>A head learns "keep … in → mind" and "keep … at → bay". But skip-trigrams cannot express a joint condition. The head raises "mind" and "bay" because of "keep", and separately because of "in" or "at". So it also raises the odd completions "keep … in → bay" and "keep … at → mind". The authors found this kind of bug by reading the weights, not by testing inputs.</p>
+</div>
+
+<figure class="panel">
+<svg viewBox="0 0 680 260" role="img" aria-label="Path expansion: a one-layer model's logits are a direct path from embedding to unembedding, plus one path through each attention head. A two-layer model adds paths that go through two heads in sequence.">
+  <defs><marker id="a44" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <g font-size="12">
+    <rect x="20" y="110" width="90" height="40" rx="8" fill="var(--green-soft)" stroke="var(--green)"/><text x="65" y="135" text-anchor="middle" font-weight="700">tokens</text>
+    <rect x="570" y="110" width="90" height="40" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/><text x="615" y="135" text-anchor="middle" font-weight="700">logits</text>
+    <!-- direct -->
+    <path d="M110 125 C 250 40, 430 40, 568 125" fill="none" stroke="var(--ink-3)" stroke-width="2" marker-end="url(#a44)"/>
+    <text x="340" y="52" text-anchor="middle">direct path: W_U W_E (bigrams)</text>
+    <!-- one head -->
+    <rect x="200" y="112" width="80" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="240" y="134" text-anchor="middle">head 0.h</text>
+    <path d="M110 130 L198 130" stroke="var(--blue)" stroke-width="2" fill="none" marker-end="url(#a44)"/>
+    <path d="M280 130 L568 130" stroke="var(--blue)" stroke-width="2" fill="none" marker-end="url(#a44)"/>
+    <text x="420" y="122" text-anchor="middle">one-head paths (skip-trigrams)</text>
+    <!-- two head -->
+    <rect x="200" y="190" width="80" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="240" y="212" text-anchor="middle">head 0.h</text>
+    <rect x="360" y="190" width="80" height="34" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="400" y="212" text-anchor="middle">head 1.k</text>
+    <path d="M110 140 C 150 200, 160 207, 198 207" stroke="var(--accent)" stroke-width="2" fill="none" marker-end="url(#a44)"/>
+    <path d="M280 207 L358 207" stroke="var(--accent)" stroke-width="2" fill="none" marker-end="url(#a44)"/>
+    <path d="M440 207 C 520 207, 540 170, 568 145" stroke="var(--accent)" stroke-width="2" fill="none" marker-end="url(#a44)"/>
+    <text x="400" y="246" text-anchor="middle">two-head paths (only in 2-layer models) → induction</text>
+  </g>
+</svg>
+<figcaption><b>Figure 4.3.</b> Path expansion. Because the stream is a sum, the logits split into a sum over paths. The direct path gives bigrams. Paths through one head give skip-trigrams. Paths through two heads in a row (only possible with two or more layers) allow new algorithms, such as induction.</figcaption>
+</figure>
+
+<h2 id="composition" data-short="Composition (Q, K, V)">Two layers: how heads compose</h2>
+
+<p>In a two-layer model, a head in layer 1 can read what a head in layer 0 wrote. The framework calls this <b>composition</b>. A head reads the stream in three places: for its queries, for its keys, and for its values. So there are three kinds of composition.</p>
+
+<div class="cards">
+  <div class="card"><h4>Q-composition</h4><p>The later head builds its <b>query</b> from the earlier head's output. This changes <em>what it looks for</em>.</p></div>
+  <div class="card"><h4>K-composition</h4><p>The later head builds its <b>keys</b> from the earlier head's output. This changes <em>how tokens look</em> when the head searches. Induction heads use this.</p></div>
+  <div class="card"><h4>V-composition</h4><p>The later head builds its <b>values</b> from the earlier head's output. This changes <em>what gets moved</em>. The result acts like a "virtual attention head" that chains two moves.</p></div>
+</div>
+
+<p>You can measure how strongly two heads compose by multiplying their matrices. For K-composition, multiply the later head's W<sub>K</sub> side with the earlier head's W<sub>OV</sub>. If the product is large compared with random matrices, the heads compose. The paper uses such scores to find which pairs of heads work together, without running any input.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 680 320" role="img" aria-label="K-composition: a previous-token head in layer 0 writes 'my previous token was Mr' at the position of Durs. An induction head in layer 1 uses this in its keys, so its query Mr matches the key at Durs, and copies Durs.">
+  <defs>
+  <marker id="a45o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+  <marker id="a45b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--blue)"/></marker>
+  <marker id="a45g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--green)"/></marker></defs>
+  <text x="20" y="30" font-size="12.5" font-weight="700" fill="var(--accent)">Layer 1 · induction head</text>
+  <text x="20" y="152" font-size="12.5" font-weight="700" fill="var(--blue)">Layer 0 · previous-token head</text>
+  <g font-size="13" font-family="var(--mono)">
+    <rect x="40" y="215" width="80" height="32" rx="6" fill="var(--panel)" stroke="var(--rule)"/><text x="80" y="236" text-anchor="middle">Mr</text>
+    <rect x="160" y="215" width="80" height="32" rx="6" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/><text x="200" y="236" text-anchor="middle">Durs</text>
+    <rect x="280" y="215" width="80" height="32" rx="6" fill="var(--panel)" stroke="var(--rule)"/><text x="320" y="236" text-anchor="middle">ley</text>
+    <text x="410" y="236" text-anchor="middle" class="muted">…</text>
+    <rect x="460" y="215" width="80" height="32" rx="6" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/><text x="500" y="236" text-anchor="middle">Mr</text>
+    <rect x="580" y="215" width="80" height="32" rx="6" fill="var(--panel)" stroke="var(--green)" stroke-dasharray="4 3"/><text x="620" y="236" text-anchor="middle">?</text>
+  </g>
+  <path d="M190 213 C 175 182, 100 182, 86 211" fill="none" stroke="var(--blue)" stroke-width="2.5" marker-end="url(#a45b)"/>
+  <text x="138" y="178" text-anchor="middle" font-size="11" fill="var(--blue)">attends to "Mr"</text>
+  <line x1="200" y1="249" x2="200" y2="268" stroke="var(--blue)"/>
+  <rect x="80" y="268" width="250" height="26" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="205" y="285" text-anchor="middle" font-size="11.5">stream at "Durs" now also says: prev = Mr</text>
+  <path d="M500 213 C 480 70, 230 70, 210 211" fill="none" stroke="var(--accent)" stroke-width="3" marker-end="url(#a45o)"/>
+  <rect x="245" y="58" width="270" height="40" rx="6" fill="var(--panel)" stroke="var(--accent)"/>
+  <text x="380" y="74" text-anchor="middle" font-size="11.5">query "Mr" matches key "prev = Mr"</text>
+  <text x="380" y="90" text-anchor="middle" font-size="11" class="muted">(the key reads layer 0's note: K-composition)</text>
+  <path d="M542 231 L 578 231" fill="none" stroke="var(--green)" stroke-width="2.5" marker-end="url(#a45g)"/>
+  <text x="620" y="275" text-anchor="middle" font-size="12" font-weight="700" fill="var(--green)">OV copies</text>
+  <text x="620" y="291" text-anchor="middle" font-size="12" font-weight="700" fill="var(--green)">"Durs"</text>
+</svg>
+<figcaption><b>Figure 4.4.</b> K-composition in an induction circuit. The layer-0 head writes "my previous token was Mr" at the "Durs" position. The layer-1 head's keys read that note. So the query "Mr" at the end finds "Durs". Its OV circuit then copies "Durs" to the output.</figcaption>
+</figure>
+
+<h2 id="induction" data-short="Induction heads">Induction heads: the first clean circuit in a language model</h2>
+
+<p>The two-layer attention-only models learned a striking algorithm. The framework paper found it, and a 2022 sequel studied it in depth. It is called an <span class="term" data-term="induction head">induction head</span>. This section goes slowly. First, how the pattern was noticed. Then the algorithm. Then the exact experiments that people run to find induction heads, which we repeat here on GPT-2 small with real numbers.</p>
+
+<div class="paper">
+  <div class="yr">2022</div>
+  <div>
+    <div class="t"><a href="https://transformer-circuits.pub/2022/in-context-learning-and-induction-heads/index.html">In-context Learning and Induction Heads</a></div>
+    <div class="a">Catherine Olsson, Nelson Elhage, Neel Nanda, Nicholas Joseph, … Chris Olah (Anthropic)</div>
+    <div class="s">Argues that induction heads may be the main source of in-context learning in transformers. They form in a sudden phase change during training. Six lines of evidence, from small attention-only models up to about 13B parameters.</div>
+  </div>
+</div>
+
+<h3 id="induction-found">How the pattern was noticed</h3>
+
+<p>Nobody set out to look for induction heads. The discovery came from three steps, in this order.</p>
+
+<ol>
+<li><b>A behaviour that the smaller models lacked.</b> The one-layer models in the last section can only learn skip-trigrams. The two-layer models did something extra: on text that repeats, they predicted the repeated part much better. A one-layer model sees "Mr Durs" for the second time and still has no idea that "ley" comes next. The two-layer model does.</li>
+<li><b>Looking at attention patterns.</b> The authors ran the two-layer model on text that contains a repeat and plotted, for each head, which earlier token each position attends to. Most heads looked messy. A few heads in layer 1 had a very regular pattern: on the second copy, each token attended to the token <em>right after</em> its own earlier copy. That is an odd thing to do, unless the goal is to copy what came next last time.</li>
+<li><b>Explaining it from the weights.</b> A single head cannot do this. To find "the token whose previous token was X", the key at that position must already contain "my previous token was X". So the authors computed K-composition scores between every layer-0 head and every layer-1 head (the method from the previous section). The layer-1 heads with the odd pattern composed strongly with a layer-0 head whose own pattern was simple: each token attends to the one before it. The OV circuits of the layer-1 heads were copying circuits (mostly positive eigenvalues). Together these facts give a full mechanism, read off the weights.</li>
+</ol>
+
+<p>So the story went: a behaviour, then a striking attention pattern, then a mechanism that the weights confirm. This order (behaviour, observation, hypothesis, check) is the standard workflow of the field.</p>
+
+<h3>The rule</h3>
+<p>An induction head completes repeated patterns:</p>
+<div class="mathblock">[A] [B] … [A]  →  predict [B]</div>
+<p>Example: a story says "Mr Dursley" early on. Later the text says "Mr" again. The induction head predicts "Dursley". This works even for random tokens that the model never saw together in training. So it is a general copying algorithm, not a memorized fact.</p>
+
+<h3>The mechanism, step by step</h3>
+<ol>
+<li><b>Previous-token head</b> (in an earlier layer). At every position, it attends to the token just before. Its OV circuit writes "the previous token was X" into the stream. So at the position of [B], the stream now also says "my previous token was [A]".</li>
+<li><b>Induction head</b> (in a later layer), QK side. At the current [A], its query asks "find positions whose <em>previous</em> token was [A]". Through K-composition, the keys contain the note from step 1. So the head attends to [B], the token right after the earlier [A].</li>
+<li><b>Induction head</b>, OV side. Its OV circuit is a copying circuit. It copies [B] into the current position. This raises the logit for [B].</li>
+</ol>
+
+<p>The simulator below runs the <em>ideal</em> version of this algorithm on any sequence you type. After it, we test whether a real model does the same thing.</p>
+
+<div class="widget" id="indWidget">
+<div class="widget-title">Interactive · Induction head simulator (idealized)</div>
+<div class="widget-sub">Type tokens separated by spaces, or pick a preset. Click a token to make it the query. The left grid shows the previous-token head. The right grid shows the induction head. Rows are queries (current positions), columns are keys (earlier positions). This is a hand-written rule, not a trained model.</div>
+<div class="controls">
+  <div class="seg" id="indPresets">
+    <button data-s="Mr Durs ley was proud to say . Mr">Dursley</button>
+    <button data-s="the cat sat on the mat . the cat sat on">cat/mat</button>
+    <button data-s="7 3 9 1 4 7 3 9 1">random digits</button>
+    <button data-s="A B C D A B C D A">ABCD</button>
+  </div>
+</div>
+<input class="seq" id="indInput" value="Mr Durs ley was proud to say . Mr">
+<div class="tokrow" id="indToks" style="margin-top:18px"></div>
+<div class="tokrow predrow" id="indPred"></div>
+<div class="mats">
+  <div><h5>Previous-token head (layer 0)</h5><svg id="indM1" viewBox="0 0 300 300"></svg></div>
+  <div><h5>Induction head (layer 1)</h5><svg id="indM2" viewBox="0 0 300 300"></svg></div>
+</div>
+<div class="readout" id="indOut"></div>
+</div>
+
+<p>Notice two things in the simulator. First, the induction head does nothing on the first copy of a pattern. It needs one earlier example. Second, on "random digits" it still works. The algorithm does not need meaning. It only needs repetition.</p>
+
+<h3 id="induction-test">The standard test: repeated random tokens</h3>
+
+<p>To find induction heads in a real model, researchers use one simple input: a sequence of <b>random tokens, repeated twice</b>. Why random? Because it removes every other way to predict.</p>
+<ul>
+<li>On the first copy, the tokens are random. No grammar, no bigram statistics, no world knowledge helps. The model should do as badly as guessing.</li>
+<li>On the second copy, every token is fully predictable, but <em>only</em> from context: "last time this token appeared, that one came next".</li>
+</ul>
+<p>So any drop in loss on the second copy must come from in-context copying. We ran this on GPT-2 small: 64 sequences, each made of 50 random tokens, repeated once, after a beginning-of-text token. The chart shows the model's average loss at each position.</p>
+
+<figure class="panel wide">
+<svg id="repLossSvg" viewBox="0 0 680 260" role="img" aria-label="GPT-2 small's loss at each position of a repeated random sequence. On the first 50 tokens the loss is about 12.5 nats. On the repeated 50 tokens it falls almost to zero."></svg>
+<figcaption><b>Figure 4.5.</b> Real measurement on GPT-2 small. On the first copy the loss is very high: the model is surprised by random tokens, worse than uniform guessing (ln 50,257 ≈ 10.8 nats) because it expects normal text. On the second copy the loss collapses within a few tokens. The model copies almost perfectly from context.</figcaption>
+</figure>
+
+<h3>Two scores define an induction head</h3>
+
+<p>The 2022 paper turns the mechanism into a test that any head can pass or fail. On repeated random tokens, a head counts as an induction head if it does both of the following.</p>
+
+<div class="cards">
+  <div class="card"><h4>Prefix matching (QK side)</h4><p>On the second copy, the head attends to the token that <em>followed</em> the earlier copy of the current token. The <b>induction score</b> is the average attention weight on that exact position. A perfect induction head scores 1.</p></div>
+  <div class="card"><h4>Copying (OV side)</h4><p>Whatever the head attends to, it raises the logit of that same token. One way to measure this from weights alone: take the full OV circuit W<sub>U</sub>W<sub>OV</sub>W<sub>E</sub> and ask what share of its eigenvalues is positive. Near +1 means "copy".</p></div>
+</div>
+
+<p>Two more scores help to read the circuit. The <b>previous-token score</b> is the average attention from each token to the one just before it. The <b>duplicate-token score</b> is the attention from a token to its own earlier copy. Here are all four, for all 144 heads of GPT-2 small, measured on the same repeated random tokens.</p>
+
+<div class="widget" id="scoreWidget">
+<div class="widget-title">Interactive · Find the induction heads in GPT-2 small</div>
+<div class="widget-sub">Each cell is one head (rows are layers, columns are heads). Real scores, measured on 64 repeated random sequences. Switch scores and hover over cells. A head is named layer.head, so 5.5 is head 5 in layer 5.</div>
+<div class="controls"><div class="seg" id="scoreSeg"><button data-m="prev">Previous-token</button><button class="on" data-m="induction">Induction</button><button data-m="dup">Duplicate-token</button><button data-m="copy">Copying (OV)</button></div></div>
+<svg id="scoreSvg" viewBox="0 0 680 400"></svg>
+<div class="readout" id="scoreOut"></div>
+</div>
+
+<p>What the heatmaps show:</p>
+<ul>
+<li><b>Induction heads sit in the middle and late layers.</b> With a threshold of 0.4, eleven heads qualify. The strongest are 5.5, 6.9, 7.10 and 5.1, each with an induction score above 0.9: more than 90% of their attention goes to the one correct position out of up to 100.</li>
+<li><b>Previous-token heads sit earlier.</b> The strongest is 4.11 (score close to 1), with others in layers 2 to 6. This is the order the mechanism needs: the note "my previous token was X" must be written before the induction head reads it.</li>
+<li><b>Most induction heads also copy.</b> Their OV copying scores are mostly between 0.5 and 0.9. So both halves of the definition hold.</li>
+</ul>
+
+<p>Scores averaged over random tokens can hide a lot. So look at the raw attention patterns too. Below, the input is eight ordinary words, repeated: "green horse paper storm bread river glass music green horse …".</p>
+
+<div class="widget" id="patWidget">
+<div class="widget-title">Interactive · Real attention patterns in GPT-2 small</div>
+<div class="widget-sub">Rows are queries (the current token), columns are keys (where it looks). Brighter means more attention. Pick a head.</div>
+<div class="controls"><div class="seg" id="patSeg"></div></div>
+<svg id="patSvg" viewBox="0 0 520 530"></svg>
+<div class="readout" id="patOut"></div>
+</div>
+
+<p>The previous-token head draws a line just under the diagonal. The induction heads draw a second, offset stripe that appears only in the second half. On the first eight words they put most of their attention on the first token (BOS). Many heads use the first token as a "resting place" when they have nothing useful to do.</p>
+
+<h3>Testing cause: remove the heads</h3>
+
+<p>Attention patterns are observations. To show that these heads <em>cause</em> the copying, you remove them and measure what breaks. Here, "remove" means zero-ablation: we set the head's output to zero on every position, then rerun the model on the same repeated random tokens. As a control, we remove the same number of other heads, picked at random.</p>
+
+<figure class="panel">
+<svg id="ablSvg" viewBox="0 0 680 220" role="img" aria-label="Bar chart of loss on the second copy after ablations. Full model about 0.24 nats. Removing 11 random heads gives about 0.73. Removing the 6 previous-token heads gives about 0.78. Removing the 11 induction heads gives about 11.3, close to the first-copy loss of 12.5."></svg>
+<figcaption><b>Figure 4.6.</b> Real ablations on GPT-2 small. Removing the eleven induction heads destroys in-context copying: the second copy becomes almost as hard as the first. Removing eleven other heads barely matters.</figcaption>
+</figure>
+
+<p>The induction heads are clearly necessary. The previous-token heads are a more interesting case. Removing them hurts copying only a little. Does that break the story? We can check the K-composition link directly: remove the previous-token heads, then measure the induction heads' attention again.</p>
+
+<div class="table-wrap"><table id="kcompTable"></table></div>
+
+<p>Every induction head attends less well, most of them by 20 to 35 percent. So the induction heads really do read what the previous-token heads write. But they keep most of their pattern, so GPT-2 must have other sources of "previous token" information. Candidates include weaker previous-token heads below the 0.4 threshold, and position information that lets a head find "one step back" by itself. Large trained models are full of such <b>redundancy</b>. In the clean two-layer models of the framework paper, there is only one route, and removing it breaks induction completely.</p>
+
+<div class="callout warn">
+<span class="label">How we measured</span>
+<p>All GPT-2 numbers on this page come from our own runs of the public GPT-2 small weights (Hugging Face <code>gpt2</code>), with the script <code>book/scripts/ch4_experiments.py</code>. Random tokens were drawn from token ids 1,000 to 20,000. The 0.4 thresholds are our choice, so the exact head lists depend on them. The head names match those reported in other work on GPT-2 small, such as 5.5 and 6.9 as induction heads and 4.11 as a previous-token head.</p>
+</div>
+
+<h3>Beyond exact copying</h3>
+<p>In large models, induction heads do more than exact copying. The paper shows heads that do "fuzzy" or "nearest-neighbour" versions. They complete abstract patterns. Some help with translation: the head attends to the word in the source sentence that comes after the word being translated. So the same simple mechanism may support many kinds of in-context learning.</p>
+
+<div class="quiz" data-answer="2">
+  <div class="q">Why do researchers test for induction heads with repeated <em>random</em> tokens instead of normal text?</div>
+  <div class="opts">
+    <button>Random tokens are faster to run.</button>
+    <button>Normal text has no repeats.</button>
+    <button>On random tokens, nothing except copying from context can predict the second copy. So any drop in loss, and any head that tracks the earlier copy, must be doing in-context copying.</button>
+    <button>Induction heads only turn on for random tokens.</button>
+  </div>
+  <div class="why">Random tokens remove grammar, bigram statistics and memorized facts. The only useful signal left is "this exact sequence happened before". That isolates the behaviour you want to study.</div>
+</div>
+
+<h2 id="phase-change" data-short="The phase change">The phase change and the six arguments</h2>
+
+<p><b>In-context learning</b> means that the model predicts better later in a text, because it uses earlier context. The paper measures it with a simple score: the loss on the 500th token minus the loss on the 50th token, averaged over many texts. A more negative number means more in-context learning.</p>
+
+<p>The paper reports a striking event in training. Early on, after a few billion tokens of training (roughly 2.5 to 5 billion in their larger models, and 1 to 3 billion in the small ones), the training loss curve shows a small <b>bump</b>. In this same narrow window, three things happen together:</p>
+<ul>
+<li>induction heads form,</li>
+<li>the in-context learning score improves sharply,</li>
+<li>the loss curve bends.</li>
+</ul>
+<p>This happened in every model they tested that had more than one layer, from small models up to 13 billion parameters. The authors call it a <b>phase change</b>: a sudden change in what the model can do.</p>
+
+<p>How did they see it? They saved many checkpoints during training. At each checkpoint they measured three things: the training loss, the in-context learning score, and the induction score of every head (on repeated random tokens, as above). Then they plotted all three against training time. The changes in all three lined up in the same window.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 680 290" role="img" aria-label="Two curves against training tokens. The loss curve falls, flattens briefly, then falls faster: a bump. The in-context learning score jumps at the same point. A shaded band marks the phase change where induction heads form.">
+  <rect x="250" y="20" width="80" height="225" fill="var(--accent-soft)"/>
+  <text x="290" y="36" text-anchor="middle" font-size="11" font-weight="700" fill="var(--accent)">phase change</text>
+  <text x="290" y="50" text-anchor="middle" font-size="11" fill="var(--accent)">induction heads form</text>
+  <line x1="60" y1="245" x2="650" y2="245" stroke="var(--ink-3)"/>
+  <line x1="60" y1="20" x2="60" y2="245" stroke="var(--ink-3)"/>
+  <text x="355" y="275" text-anchor="middle" font-size="12" class="muted">training tokens (log scale) →</text>
+  <text x="20" y="140" font-size="12" class="muted" transform="rotate(-90 20 140)" text-anchor="middle">value</text>
+  <path d="M60 70 C 120 95, 180 115, 240 125 C 265 128, 280 126, 300 140 C 330 165, 400 180, 480 190 C 550 197, 600 200, 650 202" fill="none" stroke="var(--blue)" stroke-width="3"/>
+  <text x="540" y="226" font-size="12" font-weight="700" fill="var(--blue)">training loss</text>
+  <path d="M60 230 C 150 228, 230 226, 255 222 C 275 218, 295 175, 320 160 C 380 150, 500 146, 650 144" fill="none" stroke="var(--accent)" stroke-width="3" stroke-dasharray="7 4"/>
+  <text x="460" y="118" font-size="12" font-weight="700" fill="var(--accent)">in-context learning</text>
+  <text x="460" y="133" font-size="11" class="muted">(loss drop from token 50 to 500)</text>
+  <circle cx="285" cy="128" r="5" fill="none" stroke="var(--ink)" stroke-width="1.5"/>
+  <text x="200" y="160" font-size="11" text-anchor="end">small bump</text>
+  <line x1="203" y1="156" x2="280" y2="132" stroke="var(--ink-3)"/>
+</svg>
+<figcaption><b>Figure 4.7.</b> A sketch of the paper's result (shapes are schematic, not real data). The loss curve shows a small bump. At the same point, the amount of in-context learning jumps, and induction heads appear.</figcaption>
+</figure>
+
+<h3 id="watch-it-form">Watch it form: a real training run</h3>
+
+<p>You can see the same event in a model small enough to train on a laptop. We trained two tiny attention-only transformers from scratch: one with <b>two layers</b> and one with <b>one layer</b>. Each has 4 heads per layer and a 64-dimensional residual stream. The training data was built so that only induction can help:</p>
+<ul>
+<li>Each sequence has 96 tokens drawn at random from a vocabulary of 64. So most tokens are unpredictable, and the best possible loss on them is ln 64 ≈ 4.16 nats.</li>
+<li>Six times per sequence, a span of 6 to 15 tokens is copied from earlier in the same sequence, to a random later place. Inside a copied span, every token after the first can be predicted, but only by finding the earlier copy.</li>
+</ul>
+<p>Every 25 training steps we measured the loss on copied and on fresh tokens, and the previous-token and induction scores of every head (on a fixed test batch of repeated random tokens). Drag the slider to move through training.</p>
+
+<div class="widget" id="phWidget">
+<div class="widget-title">Interactive · Induction heads forming during training (real run)</div>
+<div class="widget-sub">Measured from real training runs of tiny attention-only models (script: <code>book/scripts/ch4_phase_change.py</code>). Switch between the two-layer model and the one-layer control.</div>
+<div class="controls">
+  <div class="seg" id="phSeg"><button class="on" data-m="two_layer">2 layers</button><button data-m="one_layer">1 layer (control)</button></div>
+  <label>Step <input type="range" id="phStep" min="0" max="240" value="36"> <output id="phStepO">0</output></label>
+</div>
+<svg id="phLoss" viewBox="0 0 680 220"></svg>
+<svg id="phScore" viewBox="0 0 680 200"></svg>
+<div class="readout" id="phOut"></div>
+</div>
+
+<p>What happens in the two-layer model:</p>
+<ol>
+<li><b>Steps 0 to about 550: a plateau.</b> Loss on copied tokens sits near chance. No head has a clear pattern.</li>
+<li><b>Steps 550 to 900: the jump.</b> Within about 350 steps, the loss on copied tokens falls from about 3.9 to about 2.0 nats. In the same window, a layer-0 head becomes a previous-token head (score from 0.07 to 0.37) and a layer-1 head becomes an induction head (score from 0.03 to 0.55). The two heads appear <em>together</em>. That makes sense: neither is useful without the other.</li>
+<li><b>After that: polishing, with a second smaller jump.</b> Both scores level off near 0.7, then rise again together between steps 3,000 and 3,600: the previous-token head becomes almost perfect (score near 1.0) and the induction score reaches about 0.9. Loss on copied tokens falls again at the same time. Each time, the two heads improve <em>together</em>.</li>
+</ol>
+
+<p>Two details are worth noticing. First, the loss on <em>fresh</em> tokens goes up a little at the jump, to slightly above chance. With only 64 token types, the current token has often appeared earlier just by chance. The new induction head then predicts a "copy" that is not there. Second, the <b>one-layer control</b> never forms an induction head: its induction score stays near zero for the whole run. It still lowers its loss on copied tokens a little, to about 3.7. A single head can learn "tokens that already appeared in this sequence are more likely", which is a skip-trigram-style copy. But it cannot learn "the token that came <em>after</em> this one", because that needs two heads in a row.</p>
+
+<div class="callout warn">
+<span class="label">How this differs from the paper</span>
+<p>Our data is synthetic and was built to reward induction. So the drop in loss is large and easy to see. The paper's models trained on ordinary text, where repeats are only a small part of the loss, so the change shows up as a small bump. The mechanism is the same: a previous-token head and an induction head appear together, suddenly, and only when the model has at least two layers.</p>
+</div>
+
+<p>A link in time is not proof. So the paper gives six separate arguments. Their strength varies, and the authors say so clearly.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Argument</th><th>What they did</th><th>Strength</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Co-occurrence</td><td>Induction heads, the loss bump and the jump in in-context learning happen at the same time.</td><td>Correlational</td></tr>
+<tr><td>2</td><td>Co-perturbation</td><td>They changed the architecture ("smeared keys") so one layer can see the previous token. Induction heads then form earlier, and in-context learning moves earlier with them, even in one-layer models.</td><td>Interventional, on training</td></tr>
+<tr><td>3</td><td>Direct ablation</td><td>In small models (attention-only, and with MLPs), removing induction heads at test time greatly reduces in-context learning.</td><td>Causal (small models)</td></tr>
+<tr><td>4</td><td>Generality</td><td>In large models, induction heads also do abstract in-context tasks such as translation and pattern completion.</td><td>Examples</td></tr>
+<tr><td>5</td><td>Mechanistic plausibility</td><td>In small models, we know exactly how the heads work, and the mechanism clearly supports in-context learning.</td><td>Mechanistic (small models)</td></tr>
+<tr><td>6</td><td>Continuity</td><td>The same behaviours and the same phase change appear smoothly from small to large models.</td><td>Analogy across scale</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout limit">
+<span class="label">Limit</span>
+<p>The evidence is strong and causal for small models. For large models, it is mostly correlational. Also, "in-context learning" here has a narrow meaning: the drop in loss from token 50 to token 500. It is not the same as "learning a new task from a few examples in a prompt", although the two are related.</p>
+</div>
+
+<div class="callout key">
+<span class="label">Update (2025)</span>
+<p>Later work tested the few-shot meaning of in-context learning directly. Kayo Yin and Jacob Steinhardt compared induction heads with <b>function-vector heads</b> in 12 language models. A function-vector head writes a compact summary of the task shown in the prompt (for example, "translate to French"). When they removed heads, few-shot performance depended mainly on the function-vector heads, especially in larger models. Removing induction heads hurt much less. They also saw that many function-vector heads start as induction heads early in training. So induction heads remain the clearest mechanism for copying from context, but they are probably not the whole story of few-shot learning in large models.</p>
+</div>
+
+<div class="quiz" data-answer="1">
+  <div class="q">An induction head sees "… Harry Potter … Harry". Which kind of composition lets it find the token "Potter"?</div>
+  <div class="opts">
+    <button>Q-composition: the query reads a previous-token head.</button>
+    <button>K-composition: the keys contain "my previous token was Harry", written by a previous-token head.</button>
+    <button>V-composition: the values contain the next token.</button>
+    <button>No composition: one head can do it alone in any model.</button>
+  </div>
+  <div class="why">The key at "Potter" must say "my previous token was Harry". A previous-token head in an earlier layer writes that note into the stream, and the induction head's keys read it. That is K-composition. (A one-layer model cannot do this, except with special tricks like smeared keys.)</div>
+</div>
+
+<h3>Heads do more than one job: attention superposition</h3>
+
+<p>So far we have talked as if each head has one job: "head 5.5 is an induction head". That is a useful simplification, and it has the same problem as "one neuron, one concept". In <a href="03-superposition.html">Chapter 3</a>, a model with more concepts than neurons packed several concepts into each neuron. A model with more <em>attention jobs</em> than heads can do the same thing with heads. One head can do several unrelated jobs. One job can be split across several heads, each doing part of it.</p>
+
+<div class="paper"><div class="yr">2024–25</div><div><div class="t"><a href="https://transformer-circuits.pub/2024/jan-update">Circuits Updates, January 2024</a> and <a href="https://transformer-circuits.pub/2025/attention-update/index.html">Progress on Attention (2025)</a></div><div class="a">Anthropic interpretability team · informal updates</div><div class="s">A toy model with more "attentional features" than heads learns to spread them across heads. Anthropic made attention superposition a research priority and reports early results on real models.</div></div></div>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2504.20938">Towards Understanding the Nature of Attention with Low-Rank Sparse Decomposition (Lorsa)</a></div><div class="a">He et al. · OpenMOSS</div><div class="s">Replaces each attention layer with many small single-purpose heads, trained to be sparse. Many of the new heads are easier to name than the original ones.</div></div></div>
+
+<div class="callout warn">
+<span class="label">Why this matters</span>
+<p>Naming a head after one job, as we did for induction heads and as <a href="06-circuit-case-studies.html">Chapter 6</a> does for the IOI heads, works best for heads that are unusually clean. For most heads, the right unit may not be the head at all. The fix is the same as for neurons: find the hidden features with dictionary learning (<a href="08-dictionary-learning.html">Chapter 8</a>), and explain attention in terms of those features (<a href="09-circuit-tracing.html">Chapter 9</a>).</p>
+</div>
+
+<!-- ====================================================== -->
+<h2 id="mlps" data-short="MLPs: the hard part">MLPs: where most parameters live, and the hard part</h2>
+
+<p>The framework paper studies attention-only models on purpose. In real models, the MLP blocks hold about two thirds of the parameters. The authors say clearly that MLPs are a big open problem. This section explains what an MLP computes, why the tricks from attention fail on it, what the first useful picture of MLPs was, and what we can measure about MLPs in GPT-2 small.</p>
+
+<h3>What one MLP block computes</h3>
+
+<p>Take one token position. The MLP reads the residual stream vector <b>x</b> there (768 numbers in GPT-2 small) and does three things:</p>
+
+<div class="mathblock">h = GELU( x · W<sub>in</sub> + b<sub>in</sub> )      out = h · W<sub>out</sub> + b<sub>out</sub></div>
+
+<ol>
+<li><b>Read.</b> W<sub>in</sub> has 3,072 columns, one per <span class="term" data-term="neuron">neuron</span>. Neuron <i>n</i> takes a dot product between x and its column. This asks "how much does the stream point in my direction?"</li>
+<li><b>Bend.</b> The GELU is a smooth version of ReLU. It keeps large positive values and squashes negative ones toward zero. So each neuron fires only when its pattern is present. This step is applied to each neuron separately, which is why MLP neurons have a <span class="term" data-term="privileged basis">privileged basis</span>.</li>
+<li><b>Write.</b> W<sub>out</sub> has 3,072 rows, one per neuron. The output is a weighted sum of these rows, weighted by how strongly each neuron fired. This sum is added to the stream.</li>
+</ol>
+
+<p>So you can read the MLP as <b>3,072 small units</b>. Each unit has a read direction, a firing threshold, and a write direction: <span class="math">out = Σ<sub>n</sub> h<sub>n</sub> · (row n of W<sub>out</sub>)</span>. That sounds as clean as attention. It is not, for two reasons.</p>
+
+<h3>Why the attention tricks fail here</h3>
+<ul>
+<li><b>No single matrix to read.</b> For a head, W<sub>Q</sub> and W<sub>K</sub> multiply into one table, W<sub>QK</sub>, and you can read that table without running the model. For an MLP, the GELU sits between W<sub>in</sub> and W<sub>out</sub>. You cannot multiply through it. To know what the MLP does, you must know <em>which</em> neurons fire, and that depends on the input. So you are forced to study it on data.</li>
+<li><b>Neurons are polysemantic.</b> Because of <span class="term" data-term="superposition">superposition</span> (<a href="03-superposition.html">Chapter 3</a>), one neuron often fires for many unrelated things, and one concept is spread over many neurons. So even when you know which neurons fire, the "units" are not clean.</li>
+</ul>
+
+<h3>MLPs as key-value memories</h3>
+
+<p>The first useful picture came from Mor Geva and colleagues in 2021. They rewrote the MLP as <span class="math">FFN(x) = f(x · Kᵀ) · V</span>, which is the same formula as above with new names. Row <i>n</i> of K (column <i>n</i> of W<sub>in</sub>) is a <b>key</b>: it detects a pattern in the input. Row <i>n</i> of V (row <i>n</i> of W<sub>out</sub>) is a <b>value</b>: what gets written when the key matches. The name comes from a dictionary lookup: find the keys that match, and return their values.</p>
+
+<div class="paper">
+  <div class="yr">2021</div>
+  <div>
+    <div class="t"><a href="https://arxiv.org/abs/2012.14913">Transformer Feed-Forward Layers Are Key-Value Memories</a></div>
+    <div class="a">Mor Geva, Roei Schuster, Jonathan Berant, Omer Levy · EMNLP 2021</div>
+    <div class="s">Keys in lower layers detect shallow patterns (such as a word ending). Keys in upper layers detect meaning (such as a topic). Values in upper layers often predict the token that follows the key's pattern.</div>
+  </div>
+</div>
+
+<p>Their experiment had two halves, one for keys and one for values.</p>
+<ol>
+<li><b>Keys: what makes a neuron fire?</b> They ran a language model trained on WikiText-103 over its training text. For each neuron, they kept the 25 text prefixes where it fired most strongly: its "trigger examples". Human experts then read the triggers and wrote down the shared pattern. In lower layers the patterns were mostly shallow, often just "the prefix ends with a certain word". In upper layers they were more often about meaning, such as the topic of the text.</li>
+<li><b>Values: what does a neuron write?</b> A value vector lives in the residual stream. Multiply it by the unembedding W<sub>U</sub> and you get one score per vocabulary token: the tokens this neuron pushes up when it fires. They compared these tokens with the <em>next</em> token after each trigger example. In upper layers, the value's top token often matched the real next token. In lower layers, it rarely did.</li>
+</ol>
+
+<p>The idea, then: an upper-layer neuron is a small rule of the form "if you see this kind of context, the next word is probably X". We repeated the values half on GPT-2 small. For each MLP layer, we took 300 random neurons and found each one's top 25 triggers in about 32,000 tokens of WikiText. We counted a neuron as a match if the real next token of at least one trigger was in the top 10 tokens of its value vector. As a chance baseline, we used 25 random positions instead of the top triggers.</p>
+
+<div class="widget" id="kvWidget">
+<div class="widget-title">Interactive · GPT-2 small neurons as key-value memories</div>
+<div class="widget-sub">Top: how often a neuron's value agrees with the real next token after its own triggers, by layer (real measurement). Bottom: pick a neuron from layers 8 to 11 to see its key (top trigger contexts) and value (tokens it pushes up).</div>
+<svg id="kvSvg" viewBox="0 0 680 220"></svg>
+<div class="controls"><div class="seg" id="kvSeg"></div></div>
+<div id="kvBox"></div>
+</div>
+
+<p>The dashed marks are the chance level for each layer. In layers 0 to 7, agreement is close to chance (about 5 to 9 percent). In layers 8 to 10 it clearly rises above chance: 12 to 18 percent, against 4 to 6 percent. That is the trend Geva et al. reported: values in upper layers predict what follows their triggers. Layer 11 is a warning about baselines. Its agreement is also 18 percent, but so is its chance level. Its value vectors push up very common tokens, so random positions match them just as often. The neurons with the clearest matches are mostly about grammar. One fires after "such" and writes " as". Another fires after "according" and "in order" and writes " to". These are real, readable rules. But note the limits. Most neurons, even in late layers, do <em>not</em> match, and a match on one token says nothing about everything else the neuron does.</p>
+
+<p>One more warning from <a href="03-superposition.html#where-is-w">Chapter 3</a>: keys and values belong to <em>neurons</em>, not to features. A key matches one feature direction only if its neuron is monosemantic. Usually a neuron's key overlaps with several feature directions.</p>
+
+<h3>Where does the answer come from? Attribution by layer</h3>
+
+<p>The residual stream view gives a cheap way to ask which blocks produce an answer. The final stream is a sum: the embedding, plus every attention block's output, plus every MLP block's output. The final logits are a linear function of that sum (if we freeze the final layer norm's scale at its real value for this input). So each block's share of the answer's logit is just that block's output, passed through the same final steps. This is <b>direct logit attribution</b>, applied to whole blocks.</p>
+
+<p>We did this for 16 short fact prompts, like "The Eiffel Tower is located in the city of" → " Paris". The bar shows how much each block raises the answer's logit, compared with the average logit over the vocabulary.</p>
+
+<div class="widget" id="dlaWidget">
+<div class="widget-title">Interactive · Which blocks push up the answer? (GPT-2 small)</div>
+<div class="widget-sub">Real direct logit attribution. Blue: the attention block of each layer. Orange: the MLP of each layer. Pick a prompt, or the average.</div>
+<div class="controls"><div class="seg" id="dlaSeg"></div></div>
+<svg id="dlaSvg" viewBox="0 0 680 260"></svg>
+<div class="readout" id="dlaOut"></div>
+</div>
+
+<p>Two patterns repeat across prompts. Almost all the direct push comes from <b>layers 8 to 11</b>. And the MLPs in layers 8 to 10 contribute about as much as the attention blocks. So late MLPs are not a side detail. They write a large share of the final answer.</p>
+
+<p>Direct attribution has one big blind spot. It only counts what a block writes straight to the output. A block can matter a lot by writing something that later blocks read. To catch that, you must intervene. We <b>mean-ablated</b> one MLP at a time: replace its output with its average output over ordinary text, and see how the log-probability of the right answer changes.</p>
+
+<figure class="panel">
+<svg id="mlpAblSvg" viewBox="0 0 680 240" role="img" aria-label="Bar chart: median change in log-probability of the right answer when each MLP of GPT-2 small is mean-ablated."></svg>
+<figcaption><b>Figure 4.8.</b> Real mean-ablations on GPT-2 small, over the same 16 fact prompts (median across prompts). Red bars mean the answer got less likely.</figcaption>
+</figure>
+
+<p>The first MLP stands out. Removing MLP 0 cuts the answer's log-probability by about 6 (a factor of several hundred) on a typical prompt. MLP 0 barely writes to the output directly, so this is an indirect effect: later blocks rely on what it writes. Researchers often treat GPT-2's first MLP as part of the embedding for this reason. Removing MLP 8 or MLPs 1 to 3 hurts a little (about −0.2 to −0.3).</p>
+
+<p>The late MLPs show a puzzle. MLP 10 had one of the largest direct pushes toward the answer, yet removing it changes almost nothing, and removing MLP 11 even makes the answer <em>more</em> likely. Two lessons follow. First, direct and total effects can disagree: other blocks can make up for a missing one, and a late MLP may also damp or re-calibrate confident answers. Second, one ablation method on 16 prompts is weak evidence. Chapter 5 covers better tools, such as activation patching.</p>
+
+<p>The key-value picture led to work on where models store facts, such as ROME (<a href="06-circuit-case-studies.html">Chapter 6</a>). But the picture is only partly right. A later study at Google DeepMind ("Fact Finding") tried to find clean fact lookups inside the MLP neurons of a larger model and failed: the MLPs acted more like a big hash table, spread across many neurons. The full fix for MLPs came later, with sparse dictionaries and transcoders that replace neurons with cleaner features (<a href="08-dictionary-learning.html">Chapter 8</a> and <a href="09-circuit-tracing.html">Chapter 9</a>).</p>
+
+<div class="callout analogy">
+<span class="label">Analogy</span>
+<p>Attention heads are like the <b>roads</b> of a city: they move goods between places. MLPs are like the <b>factories</b>: they turn goods into new goods at one place. The framework gave us a good road map. We can see which factories are busy, and a few of them have readable signs on the door. But the inside of most factories stayed closed for a few more years.</p>
+</div>
+
+<h2 id="logit-lens" data-short="Logit lens & tuned lens">Reading the stream mid-way: logit lens and tuned lens</h2>
+
+<p>The residual stream view suggests a simple trick. The unembedding reads the stream at the top. But the stream at a middle layer has the same shape and lives in the same space: every block only <em>adds</em> to it. So the stream after layer 6 is just the final stream with the last few additions missing. What happens if we apply the unembedding early?</p>
+
+<div class="paper">
+  <div class="yr">2020</div>
+  <div>
+    <div class="t"><a href="https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens">interpreting GPT: the logit lens</a></div>
+    <div class="a">nostalgebraist · LessWrong blog post, August 2020</div>
+    <div class="s">Apply the final layer norm and the unembedding to each middle layer. You get the model's "current guess" for the next token at every layer.</div>
+  </div>
+</div>
+
+<h3>The recipe</h3>
+<ol>
+<li>Run the model on a prompt and save the residual stream at the last position after every layer: h<sub>0</sub> (the embeddings), h<sub>1</sub>, …, h<sub>12</sub>.</li>
+<li>For each saved vector, apply the <b>final</b> layer norm and the <b>final</b> unembedding, exactly as the model does at the top: <span class="math">logits<sub>ℓ</sub> = W<sub>U</sub> · LN<sub>final</sub>(h<sub>ℓ</sub>)</span>.</li>
+<li>Take the softmax and look at the top tokens, or at the rank of the right answer.</li>
+</ol>
+<p>No training is involved. It costs one matrix multiply per layer.</p>
+
+<div class="widget" id="lensWidget">
+<div class="widget-title">Interactive · Logit lens and tuned lens on GPT-2 small</div>
+<div class="widget-sub">Real readings from GPT-2 small. Pick a prompt, a lens, and a layer. The table shows the top token and the rank of the right answer at every layer ("emb" = the embeddings, "out" = the model's real output).</div>
+<div class="controls">
+  <div class="seg" id="lensPSeg"></div>
+  <div class="seg" id="lensSeg"><button class="on" data-m="logit">Logit lens</button><button data-m="tuned">Tuned lens</button></div>
+  <label>Read <input type="range" id="lensL" min="0" max="12" value="10"> <output id="lensLo">0</output></label>
+</div>
+<div class="lens-bars" id="lensBars"></div>
+<div class="table-wrap"><table class="lens-grid" id="lensGrid"></table></div>
+<div class="readout" id="lensOut"></div>
+</div>
+
+<p>What the real readings show:</p>
+<ul>
+<li><b>The first half of the model guesses filler words.</b> For most prompts, the logit lens says " the" (or " not", " then") for the first five to seven layers. That is a reasonable guess about grammar, with no knowledge of the answer yet. (The reading of the raw embeddings is junk, such as " destro". The final layer norm and unembedding were never meant to read the raw embedding.)</li>
+<li><b>The answer appears late, and it can change its mind.</b> "Tokyo" becomes the top guess after layer 8 and stays. For the Eiffel Tower, the stream says " London" after layer 9 and only switches to " Paris" after layer 10. For "Barack Obama was born in the state of", the model's final answer is wrong (" Maryland"), and the lens shows it moving between " Georgia", " Maryland" and " Illinois" on the way. A lens shows the path, including wrong turns.</li>
+</ul>
+
+<p>In GPT-2 the logit lens works well enough, as nostalgebraist first showed. The model seems to "think in output space" and refine its guess step by step. But the logit lens works poorly on some other models, for example GPT-Neo, BLOOM and OPT-125M. In BLOOM and OPT-125M, its top guess in more than half of the layers is often just the input token. The reason is that middle layers may use a slightly different "coordinate system" from the last layer. The final unembedding does not read them correctly.</p>
+
+<h3>The tuned lens: learn a small translator per layer</h3>
+
+<div class="paper">
+  <div class="yr">2023</div>
+  <div>
+    <div class="t"><a href="https://arxiv.org/abs/2303.08112">Eliciting Latent Predictions from Transformers with the Tuned Lens</a></div>
+    <div class="a">Nora Belrose, Igor Ostrovsky, Lev McKinney, Zach Furman, Logan Smith, Danny Halawi, Stella Biderman, Jacob Steinhardt</div>
+    <div class="s">Learn one small affine "translator" (a matrix plus a bias) per layer. It maps that layer's stream into the final layer's space before unembedding. It is trained to match the final output. More reliable than the logit lens, across many models.</div>
+  </div>
+</div>
+
+<p>The fix is to learn the change of coordinates. For each layer ℓ, the tuned lens adds one affine map, a 768 × 768 matrix A<sub>ℓ</sub> and a bias b<sub>ℓ</sub>:</p>
+<div class="mathblock">tuned logits<sub>ℓ</sub> = W<sub>U</sub> · LN<sub>final</sub>( h<sub>ℓ</sub> + A<sub>ℓ</sub>h<sub>ℓ</sub> + b<sub>ℓ</sub> )</div>
+<p>The translators start at zero, so training begins from the logit lens. They are trained on ordinary text to make each layer's reading as close as possible to the model's <em>final</em> output (they minimize the KL divergence between the two). The model itself is frozen. The translators are tiny next to the model, and one set per model is enough. The authors publish trained translators, and the readings on this page use their published lens for GPT-2 small.</p>
+
+<p>Is it better? We measured both lenses on about 25,000 tokens of WikiText. For each layer we computed two things: how far the lens's prediction is from the final prediction (KL divergence), and how often the lens's top token equals the model's final top token.</p>
+
+<figure class="panel wide">
+<div class="mats"><svg id="lensKL" viewBox="0 0 330 230"></svg><svg id="lensAgree" viewBox="0 0 330 230"></svg></div>
+<figcaption><b>Figure 4.9.</b> Real measurement on GPT-2 small. Left: KL divergence from the final output (lower is better). Right: how often the lens's top guess is the model's final top guess. The tuned lens is closer at every layer. In the middle of the model (reading after layer 5) it agrees with the final answer 34% of the time, against 14% for the logit lens.</figcaption>
+</figure>
+
+<p>The tuned lens has its own risk. It is <em>trained</em> to predict the final output, so a powerful enough translator could do some of the model's work itself, and show an answer that the layer does not really "contain". The translators are kept small (one affine map) to limit this. The authors also ran causal checks: the directions the lens relies on are directions that matter to the model's own output.</p>
+
+<div class="callout warn">
+<span class="label">Caution</span>
+<p>A lens is a probe-like reading. It shows what the unembedding would say about a vector. It does not prove that the model "believes" that token at that layer, or that later layers use it. To test use, you must intervene (<a href="05-causal-methods.html">Chapter 5</a>).</p>
+</div>
+
+<div class="quiz" data-answer="3">
+  <div class="q">The logit lens shows "Paris" as the top token at layer 7 of 12. What can you safely conclude?</div>
+  <div class="opts">
+    <button>The model has finished its computation at layer 7.</button>
+    <button>Layers 8 to 11 do nothing for this prompt.</button>
+    <button>Removing layers 8 to 11 will not change the answer.</button>
+    <button>The stream at layer 7 already points toward "Paris" when read by the final unembedding. Whether later layers use or change this needs an intervention to test.</button>
+  </div>
+  <div class="why">A lens is a reading, not a causal test. Later layers can sharpen, change or even reverse the guess. Only ablation or patching tells you what later layers contribute.</div>
+</div>
+
+<h2 id="toolkit" data-short="A practical toolkit">From framework to practice: the everyday toolkit</h2>
+
+<p>The ideas in this chapter became a set of routine checks. When researchers study a new behaviour in a transformer, they often use the tools below, in roughly this order.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Tool</th><th>What it shows</th><th>Built on</th><th>Main caveat</th></tr></thead>
+<tbody>
+<tr><td><b>Look at attention patterns</b></td><td>Which earlier token each head attends to, for a given input.</td><td>QK circuit</td><td>Attention shows where a head looks, not what it moves or whether it matters.</td></tr>
+<tr><td><b>Direct logit attribution</b></td><td>How much each head or MLP pushes the correct answer's logit up or down, directly.</td><td>Additive residual stream</td><td>Misses indirect effects: a head can matter only by changing what later heads do.</td></tr>
+<tr><td><b>Logit / tuned lens</b></td><td>The "current guess" at each layer.</td><td>Shared unembedding space</td><td>Reading only. Middle layers may use other bases.</td></tr>
+<tr><td><b>OV and QK full-circuit tables</b></td><td>What a head copies, and which token pairs it links, from weights alone.</td><td>W<sub>U</sub>W<sub>OV</sub>W<sub>E</sub>, W<sub>E</sub>ᵀW<sub>QK</sub>W<sub>E</sub></td><td>Clean only near the embedding and unembedding; deeper heads read mixed features.</td></tr>
+<tr><td><b>Composition scores</b></td><td>Which pairs of heads likely work together.</td><td>Virtual weights</td><td>A large score shows possible, not actual, use.</td></tr>
+<tr><td><b>Probes</b></td><td>Whether a concept can be read off the stream with a straight line.</td><td>Concepts as directions</td><td>Readable is not the same as used. See <a href="07-probing-steering.html">Chapter 7</a>.</td></tr>
+<tr><td><b>Steering vectors</b></td><td>What happens when you write a concept direction into the stream.</td><td>Additive residual stream</td><td>Strong steering breaks fluency. See <a href="07-probing-steering.html#steering">Chapter 7</a>.</td></tr>
+<tr><td><b>Ablation and patching</b></td><td>Which parts <em>cause</em> the behaviour.</td><td>Interventions</td><td>Results depend on the choice of baseline. See <a href="05-causal-methods.html">Chapter 5</a>.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Common mistakes when reading transformers</h3>
+<ul>
+<li><b>Treating attention as explanation.</b> A head can attend strongly to a token and still write almost nothing useful. Always check the OV side and the effect on the output.</li>
+<li><b>Forgetting indirect effects.</b> Direct logit attribution only counts the path from a block straight to the logits. Many important heads, such as previous-token heads, have almost no direct effect. They matter because later heads read their output.</li>
+<li><b>Ignoring backup components.</b> If you remove one head, another head can sometimes take over its job. Then ablation shows a small effect even though the first head normally does the work. Chapter 5 calls this <span class="term" data-term="self-repair">self-repair</span>.</li>
+<li><b>Reading axes of the stream.</b> The residual stream has no privileged basis. A large value in dimension 417 means little on its own.</li>
+<li><b>Over-trusting one prompt.</b> A mechanism found on one sentence may not hold on others. Good studies use a dataset of many prompts with the same structure.</li>
+</ul>
+
+<div class="callout example">
+<span class="label">Worked example · how the tools combine</span>
+<p>Suppose a model completes "When Mary and John went to the store, John gave a drink to" with "Mary". First, direct logit attribution shows that a few late heads push "Mary" up. Next, their attention patterns show that they attend to "Mary". Then patching shows which earlier heads tell them where to look. Step by step, this builds a circuit. This is exactly how the IOI circuit in GPT-2 small was found. <a href="06-circuit-case-studies.html">Chapter 6</a> tells the full story.</p>
+</div>
+
+<h2 id="why-it-mattered" data-short="Why the framework mattered">Why this framework mattered</h2>
+
+<p>The framework and the induction-head paper changed how people study language models. Here is what they gave the field.</p>
+
+<ol>
+<li><b>A shared vocabulary.</b> Residual stream, QK and OV circuits, composition, virtual weights, direct logit attribution. These words appear in almost every later circuits paper.</li>
+<li><b>A method.</b> Write the model as a sum of paths. Study one head at a time. Read circuits from the weights when possible. Check them with interventions.</li>
+<li><b>Proof that it can be done.</b> Small transformers can be fully reverse engineered. Induction heads were the first clear, general algorithm found inside a language model.</li>
+<li><b>A bridge to behaviour.</b> The phase change linked a mechanism (induction heads) to a capability (in-context learning) and to a visible event in training.</li>
+<li><b>Tools.</b> Neel Nanda, a co-author, later built TransformerLens, a library that exposes every activation in the residual stream view. It became the standard tool for this kind of work.</li>
+</ol>
+
+<p>It also made the gaps clear. MLPs and superposition were the next big problems. The next chapters follow how the field attacked them: causal methods to test circuits (<a href="05-causal-methods.html">Chapter 5</a>), case studies in real models (<a href="06-circuit-case-studies.html">Chapter 6</a>), and sparse features to open the MLPs (<a href="08-dictionary-learning.html">Chapter 8</a>).</p>
+
+<div class="callout good">
+<span class="label">What came next</span>
+<p>The same ideas scaled up. In 2022, researchers used them to find a 26-head circuit for "indirect object identification" in GPT-2 small. In 2025, Anthropic traced multi-step reasoning in Claude 3.5 Haiku with attribution graphs: diagrams of which internal features cause which, built on the same residual stream view (<a href="09-circuit-tracing.html">Chapter 9</a>). Both stories start with the residual stream view in this chapter.</p>
+</div>
+
+<div class="quiz" data-answer="2">
+  <div class="q">Why is it a poor idea to study single dimensions of the residual stream as if they were neurons?</div>
+  <div class="opts">
+    <button>Because the residual stream is too small.</button>
+    <button>Because the residual stream is erased after each layer.</button>
+    <button>Because the stream is only read and written by linear maps, so any rotation gives the same model; its axes have no special meaning.</button>
+    <button>Because ReLU acts on each dimension separately.</button>
+  </div>
+  <div class="why">The stream has no privileged basis. Only directions matter, not individual axes. In contrast, the MLP hidden layer does have a privileged basis, because the nonlinearity acts per neuron.</div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <div class="q">A one-layer attention-only model learned "keep … in → mind" and "keep … at → bay". What strange prediction does the framework predict?</div>
+  <div class="opts">
+    <button>It also raises "keep … in → bay", because skip-trigrams cannot express joint conditions.</button>
+    <button>It can never predict "mind" again.</button>
+    <button>It predicts "keep" after "mind".</button>
+    <button>It becomes an induction head.</button>
+  </div>
+  <div class="why">Each skip-trigram is a separate additive term. The head cannot say "bay only if both keep and at". So the bad combination also gets some probability. The authors found this bug by reading the weights.</div>
+</div>
+
+<div class="callout key" id="takeaways">
+<span class="label">Key takeaways</span>
+<ul>
+<li>The residual stream is a sum. Every block reads from it and adds to it, so the output splits into one part per block (direct logit attribution).</li>
+<li>Each attention head has two nearly separate circuits: QK decides where to look, and OV decides what to move.</li>
+<li>Heads in different layers compose. A previous-token head plus an induction head copies repeated patterns: [A][B] … [A] → [B].</li>
+<li>Induction heads form in a sudden phase change, at the same time as in-context learning improves.</li>
+<li>MLPs hold most of the parameters and stayed the hard part. The logit and tuned lens read the model's guess at each layer, but only as observation.</li>
+</ul>
+<p><b>Where this leads:</b> <a href="05-causal-methods.html">Chapter 5</a> gives the causal tools to test such stories. <a href="06-circuit-case-studies.html">Chapter 6</a> uses them on real behaviours in GPT-2 and other models.</p>
+</div>
+
+<h2 id="references">References</h2>
+<ol class="refs">
+<li>Elhage, Nanda, Olsson, et al. (2021). <a href="https://transformer-circuits.pub/2021/framework/index.html">A Mathematical Framework for Transformer Circuits</a>. Transformer Circuits Thread.</li>
+<li>Olsson, Elhage, Nanda, et al. (2022). <a href="https://transformer-circuits.pub/2022/in-context-learning-and-induction-heads/index.html">In-context Learning and Induction Heads</a>. Transformer Circuits Thread. arXiv:2209.11895.</li>
+<li>Anthropic (2024). <a href="https://transformer-circuits.pub/2024/jan-update">Circuits Updates, January 2024</a>. Transformer Circuits Thread.</li>
+<li>Anthropic (2025). <a href="https://transformer-circuits.pub/2025/attention-update/index.html">Progress on Attention</a>. Transformer Circuits Thread.</li>
+<li>He et al. (2025). <a href="https://arxiv.org/abs/2504.20938">Towards Understanding the Nature of Attention with Low-Rank Sparse Decomposition</a>. arXiv:2504.20938.</li>
+<li>nostalgebraist (2020). <a href="https://www.lesswrong.com/posts/AcKRB8wDpdaN6v6ru/interpreting-gpt-the-logit-lens">interpreting GPT: the logit lens</a>. LessWrong.</li>
+<li>Belrose, Ostrovsky, McKinney, et al. (2023). <a href="https://arxiv.org/abs/2303.08112">Eliciting Latent Predictions from Transformers with the Tuned Lens</a>. arXiv:2303.08112.</li>
+<li>Geva, Schuster, Berant, Levy (2021). <a href="https://arxiv.org/abs/2012.14913">Transformer Feed-Forward Layers Are Key-Value Memories</a>. EMNLP.</li>
+<li>Nanda, Rajamanoharan, Kramár, Shah (2023). <a href="https://www.alignmentforum.org/posts/iGuwZTHWb6DFY3sKB/fact-finding-attempting-to-reverse-engineer-factual-recall">Fact Finding: Attempting to Reverse-Engineer Factual Recall on the Neuron Level</a>. Alignment Forum.</li>
+<li>Yin, K., Steinhardt, J. (2025). <a href="https://arxiv.org/abs/2502.14010">Which Attention Heads Matter for In-Context Learning?</a> arXiv:2502.14010.</li>
+<li>Vaswani et al. (2017). <a href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a>. NeurIPS.</li>
+</ol>
+
+</article>
+</main>
+
+<script src="assets/glossary.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/search-index.js"></script>
+<script src="assets/search.js"></script>
+<script src="assets/ch4_data.js"></script>
+<script src="assets/ch4_phase.js"></script>
+<script src="assets/ch4.js"></script>
+<script>
+/* ---------- QK / OV toggle ---------- */
+(function () {
+  const svg = document.getElementById("qkovSvg"), out = document.getElementById("qkovOut");
+  const seg = document.getElementById("qkovSeg");
+  const toks = ["Mr", "Durs", "ley", "was", "proud", ".", "Mr"];
+  const attn = [0.04, 0.78, 0.05, 0.03, 0.03, 0.03, 0.04];
+  let mode = "qk";
+  seg.onclick = e => { const m = e.target.dataset.m; if (!m) return; mode = m; [...seg.children].forEach(b => b.classList.toggle("on", b.dataset.m === m)); draw(); };
+  function draw() {
+    svg.innerHTML = "";
+    const x0 = 40, dx = 82, y = 170, q = toks.length - 1;
+    toks.forEach((t, i) => {
+      const isQ = i === q;
+      MI.svg("rect", { x: x0 + i * dx - 32, y: y, width: 64, height: 30, rx: 6, fill: isQ ? "var(--accent-soft)" : "var(--panel)", stroke: isQ ? "var(--accent)" : (i === 1 ? "var(--blue)" : "var(--rule)"), "stroke-width": isQ || i === 1 ? 2 : 1 }, svg);
+      MI.svg("text", { x: x0 + i * dx, y: y + 20, "text-anchor": "middle", "font-size": 13, "font-family": "var(--mono)" }, svg).textContent = t;
+    });
+    if (mode === "qk") {
+      toks.forEach((t, i) => {
+        if (i === q) return;
+        const xa = x0 + q * dx, xb = x0 + i * dx, h = 30 + (q - i) * 14;
+        MI.svg("path", { d: `M${xa} ${y - 2} C ${xa} ${y - h}, ${xb} ${y - h}, ${xb} ${y - 2}`, fill: "none", stroke: "var(--blue)", "stroke-width": 0.5 + attn[i] * 9, opacity: 0.25 + attn[i] }, svg);
+        MI.svg("text", { x: xb, y: y + 48, "text-anchor": "middle", "font-size": 11, class: "muted" }, svg).textContent = (attn[i] * 100).toFixed(0) + "%";
+      });
+      MI.svg("text", { x: 20, y: 22, "font-size": 12, "font-weight": 700, fill: "var(--blue)" }, svg).textContent = "QK: query \"Mr\" scores every earlier key; softmax → attention weights";
+      out.textContent = "QK circuit: score(Mr → key j) = x_Mrᵀ · W_QK · x_j. Most weight (78%) goes to \"Durs\". The QK circuit only decides WHERE to look. It moves nothing.";
+    } else {
+      const xb = x0 + dx, xa = x0 + q * dx;
+      MI.svg("path", { d: `M${xb} ${y - 2} C ${xb} 60, ${xa} 60, ${xa} ${y - 2}`, fill: "none", stroke: "var(--accent)", "stroke-width": 4 }, svg);
+      MI.svg("rect", { x: (xa + xb) / 2 - 60, y: 52, width: 120, height: 30, rx: 8, fill: "var(--accent-soft)", stroke: "var(--accent)" }, svg);
+      MI.svg("text", { x: (xa + xb) / 2, y: 72, "text-anchor": "middle", "font-size": 13, "font-weight": 700 }, svg).textContent = "W_OV · x_Durs";
+      MI.svg("text", { x: xa, y: y + 50, "text-anchor": "middle", "font-size": 12, "font-weight": 700, fill: "var(--green)" }, svg).textContent = "+ logit(\"Durs\")";
+      MI.svg("text", { x: 20, y: 22, "font-size": 12, "font-weight": 700, fill: "var(--accent)" }, svg).textContent = "OV: transform what is at the attended position and write it here";
+      out.textContent = "OV circuit: output = Σ_j attn_j · W_OV · x_j ≈ 0.78 · W_OV · x_Durs. For a copying head, W_U · W_OV · x_Durs raises the logit of \"Durs\" itself.";
+    }
+  }
+  draw(); MI.onTheme(draw);
+})();
+
+/* ---------- Induction head simulator ---------- */
+(function () {
+  const input = document.getElementById("indInput");
+  const toksEl = document.getElementById("indToks"), predEl = document.getElementById("indPred");
+  const m1 = document.getElementById("indM1"), m2 = document.getElementById("indM2"), out = document.getElementById("indOut");
+  let toks = [], q = 0;
+  document.getElementById("indPresets").onclick = e => { const s = e.target.dataset.s; if (!s) return; input.value = s; parse(); };
+  input.oninput = parse;
+  function parse() {
+    toks = input.value.trim().split(/\s+/).filter(Boolean).slice(0, 16);
+    q = toks.length - 1; render();
+  }
+  // ideal induction attention: for query i, attend to positions j (1<=j<=i) where toks[j-1]==toks[i]
+  function indRow(i) {
+    const hits = [];
+    for (let j = 1; j <= i; j++) if (toks[j - 1] === toks[i] && j - 1 !== i) hits.push(j);
+    const row = new Array(toks.length).fill(0);
+    if (!hits.length) return { row, hits };   // no earlier copy: nothing to attend to (a real head would "rest" on a default token)
+    hits.forEach(j => (row[j] = 1 / hits.length));
+    return { row, hits };
+  }
+  function matrix(svg, rowFn, accent) {
+    svg.innerHTML = "";
+    const n = toks.length, pad = 4, size = 292 / n;
+    for (let i = 0; i < n; i++) {
+      const row = rowFn(i);
+      for (let j = 0; j < n; j++) {
+        const v = j > i ? null : row[j];
+        MI.svg("rect", {
+          x: pad + j * size, y: pad + i * size, width: size - 1.5, height: size - 1.5, rx: 2,
+          fill: v === null ? "var(--bg-2)" : (v > 0 ? accent : "var(--bg)"),
+          opacity: v === null ? 0.5 : (v > 0 ? 0.2 + 0.8 * v : 1),
+          stroke: i === q ? "var(--ink)" : "none", "stroke-width": i === q ? 1 : 0
+        }, svg);
+      }
+    }
+  }
+  function render() {
+    toksEl.innerHTML = ""; predEl.innerHTML = "";
+    const { row, hits } = indRow(q);
+    toks.forEach((t, i) => {
+      const el = MI.el("span", { class: "tok" + (i === q ? " q" : "") + (hits.includes(i) ? " k" : ""), html: `<span class="pos">${i}</span>${t}` }, toksEl);
+      el.onclick = () => { q = i; render(); };
+      const r = indRow(i);
+      const p = r.hits.length ? toks[r.hits[r.hits.length - 1]] : "·";
+      const hit = r.hits.length && i + 1 < toks.length && toks[i + 1] === p;
+      MI.el("span", { class: "tok" + (hit ? " hit" : ""), text: p }, predEl);
+    });
+    matrix(m1, i => { const r = new Array(toks.length).fill(0); r[Math.max(0, i - 1)] = 1; return r; }, "var(--blue)");
+    matrix(m2, i => indRow(i).row, "var(--accent)");
+    const pred = hits.length ? toks[hits[hits.length - 1]] : null;
+    out.textContent = pred
+      ? `Query "${toks[q]}" (pos ${q}). Earlier "${toks[q]}" found at pos ${hits.map(j => j - 1).join(", ")}. Induction head attends to the NEXT position (${hits.join(", ")}) and copies "${pred}". Prediction: "${pred}".`
+      : `Query "${toks[q]}" (pos ${q}). No earlier copy of "${toks[q]}". The induction head has nothing to copy (empty row). Second row of tokens = the head's prediction at each position (green = correct).`;
+  }
+  parse();
+  MI.onTheme(render);
+})();
+
+</script>
+</body>
+</html>

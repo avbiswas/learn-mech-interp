@@ -1,0 +1,168 @@
+{
+ "S0.0": {
+  "label": "Always present",
+  "W": [
+   [
+    1.0,
+    0.007,
+    0.001,
+    -0.0,
+    0.001
+   ],
+   [
+    -0.008,
+    1.0,
+    -0.002,
+    -0.002,
+    0.0
+   ]
+  ],
+  "bias": [
+   -0.001,
+   0.002,
+   0.5,
+   0.501,
+   0.5
+  ],
+  "loss": 0.15371,
+  "neuron_1_fires_for": [
+   "cat"
+  ],
+  "neuron_2_fires_for": [
+   "dog"
+  ],
+  "dropped": [
+   "car",
+   "tree",
+   "boat"
+  ]
+ },
+ "S0.95": {
+  "label": "Present 5% of the time",
+  "W": [
+   [
+    0.978,
+    0.962,
+    -0.954,
+    0.006,
+    0.012
+   ],
+   [
+    0.998,
+    -0.928,
+    0.952,
+    0.007,
+    0.012
+   ]
+  ],
+  "bias": [
+   -0.731,
+   0.001,
+   0.002,
+   0.025,
+   0.024
+  ],
+  "loss": 0.02114,
+  "neuron_1_fires_for": [
+   "cat",
+   "dog"
+  ],
+  "neuron_2_fires_for": [
+   "cat",
+   "car"
+  ],
+  "dropped": [
+   "tree",
+   "boat"
+  ]
+ },
+ "turning_the_axes": {
+  "15": {
+   "no_relu_on_neurons": 1.0,
+   "relu_on_neurons": 1.212
+  },
+  "30": {
+   "no_relu_on_neurons": 1.0,
+   "relu_on_neurons": 1.653
+  },
+  "45": {
+   "no_relu_on_neurons": 1.0,
+   "relu_on_neurons": 1.875
+  },
+  "60": {
+   "no_relu_on_neurons": 1.0,
+   "relu_on_neurons": 2.059
+  },
+  "90": {
+   "no_relu_on_neurons": 1.0,
+   "relu_on_neurons": 3.014
+  }
+ },
+ "reading_back_at_5pct": {
+  "cat": {
+   "neurons": [
+    0.59,
+    0.6
+   ],
+   "output": [
+    0.44,
+    0.01,
+    0.01,
+    0.03,
+    0.04
+   ]
+  },
+  "dog": {
+   "neurons": [
+    0.58,
+    0.0
+   ],
+   "output": [
+    0.0,
+    0.56,
+    0.0,
+    0.03,
+    0.03
+   ]
+  },
+  "car": {
+   "neurons": [
+    0.0,
+    0.57
+   ],
+   "output": [
+    0.0,
+    0.0,
+    0.55,
+    0.03,
+    0.03
+   ]
+  },
+  "cat + car": {
+   "neurons": [
+    0.01,
+    1.17
+   ],
+   "output": [
+    0.45,
+    0.0,
+    1.1,
+    0.03,
+    0.04
+   ]
+  },
+  "cat + dog": {
+   "neurons": [
+    1.16,
+    0.04
+   ],
+   "output": [
+    0.45,
+    1.08,
+    0.0,
+    0.03,
+    0.04
+   ]
+  }
+ }
+}

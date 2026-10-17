@@ -1,0 +1,826 @@
+{
+ "best": {
+  "direction_layer": 14,
+  "strength": 0.672,
+  "blocks": [
+   4,
+   16
+  ],
+  "mood": 0.924,
+  "kl": 0.066
+ },
+ "test": {
+  "optimized": {
+   "mood": 0.892,
+   "kl": 0.066
+  },
+  "hand_picked": {
+   "mood": 0.93,
+   "kl": 0.07
+  }
+ },
+ "trials": [
+  {
+   "direction_layer": 16,
+   "strength": 0.958,
+   "blocks": [
+    14,
+    15
+   ],
+   "mood": -0.519,
+   "kl": 0.043
+  },
+  {
+   "direction_layer": 12,
+   "strength": 1.165,
+   "blocks": [
+    16,
+    23
+   ],
+   "mood": -0.324,
+   "kl": 0.006
+  },
+  {
+   "direction_layer": 13,
+   "strength": 1.168,
+   "blocks": [
+    12,
+    19
+   ],
+   "mood": 0.77,
+   "kl": 0.042
+  },
+  {
+   "direction_layer": 20,
+   "strength": 0.339,
+   "blocks": [
+    5,
+    9
+   ],
+   "mood": 0.114,
+   "kl": 0.314
+  },
+  {
+   "direction_layer": 23,
+   "strength": 0.999,
+   "blocks": [
+    18,
+    28
+   ],
+   "mood": 0.318,
+   "kl": 0.213
+  },
+  {
+   "direction_layer": 8,
+   "strength": 0.51,
+   "blocks": [
+    3,
+    25
+   ],
+   "mood": -0.661,
+   "kl": 0.077
+  },
+  {
+   "direction_layer": 14,
+   "strength": 0.672,
+   "blocks": [
+    4,
+    16
+   ],
+   "mood": 0.924,
+   "kl": 0.066
+  },
+  {
+   "direction_layer": 17,
+   "strength": 0.516,
+   "blocks": [
+    7,
+    25
+   ],
+   "mood": 0.503,
+   "kl": 0.049
+  },
+  {
+   "direction_layer": 19,
+   "strength": 0.643,
+   "blocks": [
+    17,
+    22
+   ],
+   "mood": 0.594,
+   "kl": 0.067
+  },
+  {
+   "direction_layer": 5,
+   "strength": 1.005,
+   "blocks": [
+    18,
+    19
+   ],
+   "mood": -0.437,
+   "kl": 0.011
+  },
+  {
+   "direction_layer": 6,
+   "strength": 0.92,
+   "blocks": [
+    13,
+    25
+   ],
+   "mood": -0.447,
+   "kl": 0.031
+  },
+  {
+   "direction_layer": 24,
+   "strength": 0.201,
+   "blocks": [
+    16,
+    22
+   ],
+   "mood": 0.608,
+   "kl": 0.13
+  },
+  {
+   "direction_layer": 11,
+   "strength": 0.93,
+   "blocks": [
+    3,
+    10
+   ],
+   "mood": -0.544,
+   "kl": 0.158
+  },
+  {
+   "direction_layer": 22,
+   "strength": 0.422,
+   "blocks": [
+    5,
+    23
+   ],
+   "mood": 0.772,
+   "kl": 0.287
+  },
+  {
+   "direction_layer": 18,
+   "strength": 0.291,
+   "blocks": [
+    11,
+    28
+   ],
+   "mood": 0.254,
+   "kl": 0.033
+  },
+  {
+   "direction_layer": 19,
+   "strength": 0.309,
+   "blocks": [
+    18,
+    23
+   ],
+   "mood": 0.015,
+   "kl": 0.045
+  },
+  {
+   "direction_layer": 7,
+   "strength": 0.747,
+   "blocks": [
+    18,
+    22
+   ],
+   "mood": -0.226,
+   "kl": 0.002
+  },
+  {
+   "direction_layer": 23,
+   "strength": 0.747,
+   "blocks": [
+    10,
+    25
+   ],
+   "mood": 0.692,
+   "kl": 0.44
+  },
+  {
+   "direction_layer": 6,
+   "strength": 0.796,
+   "blocks": [
+    13,
+    19
+   ],
+   "mood": -0.334,
+   "kl": 0.03
+  },
+  {
+   "direction_layer": 22,
+   "strength": 0.442,
+   "blocks": [
+    6,
+    13
+   ],
+   "mood": 0.067,
+   "kl": 0.276
+  },
+  {
+   "direction_layer": 9,
+   "strength": 0.233,
+   "blocks": [
+    9,
+    25
+   ],
+   "mood": -0.539,
+   "kl": 0.042
+  },
+  {
+   "direction_layer": 6,
+   "strength": 0.29,
+   "blocks": [
+    5,
+    10
+   ],
+   "mood": -0.421,
+   "kl": 0.021
+  },
+  {
+   "direction_layer": 5,
+   "strength": 1.042,
+   "blocks": [
+    18,
+    25
+   ],
+   "mood": -0.314,
+   "kl": 0.012
+  },
+  {
+   "direction_layer": 20,
+   "strength": 0.476,
+   "blocks": [
+    8,
+    15
+   ],
+   "mood": 0.753,
+   "kl": 0.274
+  },
+  {
+   "direction_layer": 22,
+   "strength": 1.025,
+   "blocks": [
+    14,
+    24
+   ],
+   "mood": 0.727,
+   "kl": 0.151
+  },
+  {
+   "direction_layer": 12,
+   "strength": 0.651,
+   "blocks": [
+    12,
+    15
+   ],
+   "mood": -0.177,
+   "kl": 0.004
+  },
+  {
+   "direction_layer": 14,
+   "strength": 0.813,
+   "blocks": [
+    16,
+    26
+   ],
+   "mood": 0.556,
+   "kl": 0.04
+  },
+  {
+   "direction_layer": 24,
+   "strength": 0.535,
+   "blocks": [
+    7,
+    15
+   ],
+   "mood": 0.638,
+   "kl": 0.509
+  },
+  {
+   "direction_layer": 4,
+   "strength": 0.931,
+   "blocks": [
+    4,
+    27
+   ],
+   "mood": -0.46,
+   "kl": 0.144
+  },
+  {
+   "direction_layer": 11,
+   "strength": 0.572,
+   "blocks": [
+    6,
+    17
+   ],
+   "mood": -0.407,
+   "kl": 0.13
+  },
+  {
+   "direction_layer": 17,
+   "strength": 1.016,
+   "blocks": [
+    4,
+    9
+   ],
+   "mood": 0.313,
+   "kl": 0.064
+  },
+  {
+   "direction_layer": 11,
+   "strength": 0.245,
+   "blocks": [
+    19,
+    28
+   ],
+   "mood": -0.403,
+   "kl": 0.018
+  },
+  {
+   "direction_layer": 23,
+   "strength": 0.881,
+   "blocks": [
+    1,
+    5
+   ],
+   "mood": 0.08,
+   "kl": 1.153
+  },
+  {
+   "direction_layer": 24,
+   "strength": 0.389,
+   "blocks": [
+    19,
+    21
+   ],
+   "mood": 0.651,
+   "kl": 0.123
+  },
+  {
+   "direction_layer": 16,
+   "strength": 0.292,
+   "blocks": [
+    4,
+    6
+   ],
+   "mood": -0.305,
+   "kl": 0.018
+  },
+  {
+   "direction_layer": 23,
+   "strength": 0.222,
+   "blocks": [
+    6,
+    10
+   ],
+   "mood": 0.418,
+   "kl": 0.243
+  },
+  {
+   "direction_layer": 19,
+   "strength": 0.411,
+   "blocks": [
+    2,
+    24
+   ],
+   "mood": 0.343,
+   "kl": 0.134
+  },
+  {
+   "direction_layer": 4,
+   "strength": 0.744,
+   "blocks": [
+    20,
+    22
+   ],
+   "mood": -0.501,
+   "kl": 0.017
+  },
+  {
+   "direction_layer": 12,
+   "strength": 0.27,
+   "blocks": [
+    3,
+    24
+   ],
+   "mood": -0.09,
+   "kl": 0.01
+  },
+  {
+   "direction_layer": 13,
+   "strength": 0.55,
+   "blocks": [
+    6,
+    8
+   ],
+   "mood": 0.619,
+   "kl": 0.037
+  }
+ ],
+ "random_direction_trials": [
+  {
+   "direction_layer": 16,
+   "strength": 0.958,
+   "blocks": [
+    14,
+    15
+   ],
+   "mood": -0.666,
+   "kl": 0.007
+  },
+  {
+   "direction_layer": 12,
+   "strength": 1.165,
+   "blocks": [
+    16,
+    23
+   ],
+   "mood": -0.424,
+   "kl": 0.003
+  },
+  {
+   "direction_layer": 13,
+   "strength": 1.168,
+   "blocks": [
+    12,
+    19
+   ],
+   "mood": -0.303,
+   "kl": 0.007
+  },
+  {
+   "direction_layer": 20,
+   "strength": 0.339,
+   "blocks": [
+    5,
+    9
+   ],
+   "mood": -0.566,
+   "kl": 0.001
+  },
+  {
+   "direction_layer": 23,
+   "strength": 0.999,
+   "blocks": [
+    18,
+    28
+   ],
+   "mood": -0.558,
+   "kl": 0.002
+  },
+  {
+   "direction_layer": 8,
+   "strength": 0.51,
+   "blocks": [
+    3,
+    25
+   ],
+   "mood": -0.386,
+   "kl": 0.055
+  },
+  {
+   "direction_layer": 14,
+   "strength": 0.672,
+   "blocks": [
+    4,
+    16
+   ],
+   "mood": -0.446,
+   "kl": 0.013
+  },
+  {
+   "direction_layer": 17,
+   "strength": 0.516,
+   "blocks": [
+    7,
+    25
+   ],
+   "mood": -0.394,
+   "kl": 0.014
+  },
+  {
+   "direction_layer": 19,
+   "strength": 0.643,
+   "blocks": [
+    17,
+    22
+   ],
+   "mood": -0.579,
+   "kl": 0.002
+  },
+  {
+   "direction_layer": 5,
+   "strength": 1.005,
+   "blocks": [
+    18,
+    19
+   ],
+   "mood": -0.679,
+   "kl": 0.001
+  },
+  {
+   "direction_layer": 6,
+   "strength": 0.92,
+   "blocks": [
+    13,
+    25
+   ],
+   "mood": -0.442,
+   "kl": 0.022
+  },
+  {
+   "direction_layer": 24,
+   "strength": 0.201,
+   "blocks": [
+    16,
+    22
+   ],
+   "mood": -0.517,
+   "kl": 0.051
+  },
+  {
+   "direction_layer": 11,
+   "strength": 0.93,
+   "blocks": [
+    3,
+    10
+   ],
+   "mood": -0.533,
+   "kl": 0.007
+  },
+  {
+   "direction_layer": 22,
+   "strength": 0.422,
+   "blocks": [
+    5,
+    23
+   ],
+   "mood": -0.464,
+   "kl": 0.012
+  },
+  {
+   "direction_layer": 18,
+   "strength": 0.291,
+   "blocks": [
+    11,
+    28
+   ],
+   "mood": -0.457,
+   "kl": 0.005
+  },
+  {
+   "direction_layer": 19,
+   "strength": 0.309,
+   "blocks": [
+    18,
+    23
+   ],
+   "mood": -0.504,
+   "kl": 0.001
+  },
+  {
+   "direction_layer": 7,
+   "strength": 0.747,
+   "blocks": [
+    18,
+    22
+   ],
+   "mood": -0.582,
+   "kl": 0.071
+  },
+  {
+   "direction_layer": 23,
+   "strength": 0.747,
+   "blocks": [
+    10,
+    25
+   ],
+   "mood": -0.436,
+   "kl": 0.003
+  },
+  {
+   "direction_layer": 6,
+   "strength": 0.796,
+   "blocks": [
+    13,
+    19
+   ],
+   "mood": -0.442,
+   "kl": 0.021
+  },
+  {
+   "direction_layer": 22,
+   "strength": 0.442,
+   "blocks": [
+    6,
+    13
+   ],
+   "mood": -0.474,
+   "kl": 0.01
+  },
+  {
+   "direction_layer": 9,
+   "strength": 0.233,
+   "blocks": [
+    9,
+    25
+   ],
+   "mood": -0.609,
+   "kl": 0.011
+  },
+  {
+   "direction_layer": 6,
+   "strength": 0.29,
+   "blocks": [
+    5,
+    10
+   ],
+   "mood": -0.445,
+   "kl": 0.017
+  },
+  {
+   "direction_layer": 5,
+   "strength": 1.042,
+   "blocks": [
+    18,
+    25
+   ],
+   "mood": -0.486,
+   "kl": 0.004
+  },
+  {
+   "direction_layer": 20,
+   "strength": 0.476,
+   "blocks": [
+    8,
+    15
+   ],
+   "mood": -0.495,
+   "kl": 0.004
+  },
+  {
+   "direction_layer": 22,
+   "strength": 1.025,
+   "blocks": [
+    14,
+    24
+   ],
+   "mood": -0.485,
+   "kl": 0.004
+  },
+  {
+   "direction_layer": 12,
+   "strength": 0.651,
+   "blocks": [
+    12,
+    15
+   ],
+   "mood": -0.607,
+   "kl": 0.004
+  },
+  {
+   "direction_layer": 14,
+   "strength": 0.813,
+   "blocks": [
+    16,
+    26
+   ],
+   "mood": -0.355,
+   "kl": 0.01
+  },
+  {
+   "direction_layer": 24,
+   "strength": 0.535,
+   "blocks": [
+    7,
+    15
+   ],
+   "mood": -0.401,
+   "kl": 0.191
+  },
+  {
+   "direction_layer": 4,
+   "strength": 0.931,
+   "blocks": [
+    4,
+    27
+   ],
+   "mood": -0.464,
+   "kl": 0.015
+  },
+  {
+   "direction_layer": 11,
+   "strength": 0.572,
+   "blocks": [
+    6,
+    17
+   ],
+   "mood": -0.479,
+   "kl": 0.004
+  },
+  {
+   "direction_layer": 17,
+   "strength": 1.016,
+   "blocks": [
+    4,
+    9
+   ],
+   "mood": -0.235,
+   "kl": 0.013
+  },
+  {
+   "direction_layer": 11,
+   "strength": 0.245,
+   "blocks": [
+    19,
+    28
+   ],
+   "mood": -0.562,
+   "kl": 0.001
+  },
+  {
+   "direction_layer": 23,
+   "strength": 0.881,
+   "blocks": [
+    1,
+    5
+   ],
+   "mood": -0.319,
+   "kl": 0.007
+  },
+  {
+   "direction_layer": 24,
+   "strength": 0.389,
+   "blocks": [
+    19,
+    21
+   ],
+   "mood": -0.435,
+   "kl": 0.043
+  },
+  {
+   "direction_layer": 16,
+   "strength": 0.292,
+   "blocks": [
+    4,
+    6
+   ],
+   "mood": -0.331,
+   "kl": 0.007
+  },
+  {
+   "direction_layer": 23,
+   "strength": 0.222,
+   "blocks": [
+    6,
+    10
+   ],
+   "mood": -0.443,
+   "kl": 0.001
+  },
+  {
+   "direction_layer": 19,
+   "strength": 0.411,
+   "blocks": [
+    2,
+    24
+   ],
+   "mood": -0.637,
+   "kl": 0.005
+  },
+  {
+   "direction_layer": 4,
+   "strength": 0.744,
+   "blocks": [
+    20,
+    22
+   ],
+   "mood": -0.397,
+   "kl": 0.003
+  },
+  {
+   "direction_layer": 12,
+   "strength": 0.27,
+   "blocks": [
+    3,
+    24
+   ],
+   "mood": -0.617,
+   "kl": 0.004
+  },
+  {
+   "direction_layer": 13,
+   "strength": 0.55,
+   "blocks": [
+    6,
+    8
+   ],
+   "mood": -0.451,
+   "kl": 0.005
+  }
+ ]
+}

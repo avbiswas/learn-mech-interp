@@ -1,0 +1,587 @@
+{
+ "sizes": {
+  "stream": 16,
+  "neurons": 64,
+  "facts": 400,
+  "real_people": 35,
+  "first_names": 16,
+  "last_names": 31
+ },
+ "facts_recalled": {
+  "with_relu": 400,
+  "without_relu": 87,
+  "names_voting_separately_unlimited_room": 138
+ },
+ "capacity": {
+  "neurons": [
+   4,
+   8,
+   16,
+   32,
+   64,
+   128
+  ],
+  "relu": [
+   153,
+   206,
+   338,
+   400,
+   400,
+   400
+  ],
+  "linear": [
+   87,
+   87,
+   87,
+   87,
+   87,
+   87
+  ]
+ },
+ "examples": {
+  "Michael Jordan": {
+   "truth": "basketball",
+   "with_relu": "basketball",
+   "without_relu": "soccer",
+   "names_voting_separately": "boxing"
+  },
+  "Magic Johnson": {
+   "truth": "basketball",
+   "with_relu": "basketball",
+   "without_relu": "cricket",
+   "names_voting_separately": "golf"
+  },
+  "David Robinson": {
+   "truth": "basketball",
+   "with_relu": "basketball",
+   "without_relu": "soccer",
+   "names_voting_separately": "baseball"
+  },
+  "Chris Paul": {
+   "truth": "basketball",
+   "with_relu": "basketball",
+   "without_relu": "boxing",
+   "names_voting_separately": "basketball"
+  },
+  "Kevin Durant": {
+   "truth": "basketball",
+   "with_relu": "basketball",
+   "without_relu": "soccer",
+   "names_voting_separately": "cricket"
+  },
+  "Anthony Davis": {
+   "truth": "basketball",
+   "with_relu": "basketball",
+   "without_relu": "basketball",
+   "names_voting_separately": "swimming"
+  },
+  "David Beckham": {
+   "truth": "soccer",
+   "with_relu": "soccer",
+   "without_relu": "boxing",
+   "names_voting_separately": "soccer"
+  },
+  "Ryan Giggs": {
+   "truth": "soccer",
+   "with_relu": "soccer",
+   "without_relu": "soccer",
+   "names_voting_separately": "soccer"
+  },
+  "Roger Federer": {
+   "truth": "tennis",
+   "with_relu": "tennis",
+   "without_relu": "boxing",
+   "names_voting_separately": "tennis"
+  },
+  "Chris Evert": {
+   "truth": "tennis",
+   "with_relu": "tennis",
+   "without_relu": "tennis",
+   "names_voting_separately": "tennis"
+  },
+  "Michael Chang": {
+   "truth": "tennis",
+   "with_relu": "tennis",
+   "without_relu": "swimming",
+   "names_voting_separately": "swimming"
+  },
+  "Jack Nicklaus": {
+   "truth": "golf",
+   "with_relu": "golf",
+   "without_relu": "cricket",
+   "names_voting_separately": "golf"
+  },
+  "Dustin Johnson": {
+   "truth": "golf",
+   "with_relu": "golf",
+   "without_relu": "soccer",
+   "names_voting_separately": "golf"
+  },
+  "Ian Poulter": {
+   "truth": "golf",
+   "with_relu": "golf",
+   "without_relu": "swimming",
+   "names_voting_separately": "basketball"
+  },
+  "Shane Warne": {
+   "truth": "cricket",
+   "with_relu": "cricket",
+   "without_relu": "golf",
+   "names_voting_separately": "tennis"
+  },
+  "Chris Gayle": {
+   "truth": "cricket",
+   "with_relu": "cricket",
+   "without_relu": "cricket",
+   "names_voting_separately": "tennis"
+  },
+  "Kevin Pietersen": {
+   "truth": "cricket",
+   "with_relu": "cricket",
+   "without_relu": "basketball",
+   "names_voting_separately": "baseball"
+  },
+  "Ian Botham": {
+   "truth": "cricket",
+   "with_relu": "cricket",
+   "without_relu": "cricket",
+   "names_voting_separately": "baseball"
+  },
+  "Mark Waugh": {
+   "truth": "cricket",
+   "with_relu": "cricket",
+   "without_relu": "baseball",
+   "names_voting_separately": "cricket"
+  },
+  "Joe Root": {
+   "truth": "cricket",
+   "with_relu": "cricket",
+   "without_relu": "soccer",
+   "names_voting_separately": "cricket"
+  },
+  "Jackie Robinson": {
+   "truth": "baseball",
+   "with_relu": "baseball",
+   "without_relu": "basketball",
+   "names_voting_separately": "baseball"
+  },
+  "Randy Johnson": {
+   "truth": "baseball",
+   "with_relu": "baseball",
+   "without_relu": "golf",
+   "names_voting_separately": "boxing"
+  },
+  "David Ortiz": {
+   "truth": "baseball",
+   "with_relu": "baseball",
+   "without_relu": "tennis",
+   "names_voting_separately": "tennis"
+  },
+  "Mark McGwire": {
+   "truth": "baseball",
+   "with_relu": "baseball",
+   "without_relu": "baseball",
+   "names_voting_separately": "cricket"
+  },
+  "Joe DiMaggio": {
+   "truth": "baseball",
+   "with_relu": "baseball",
+   "without_relu": "cricket",
+   "names_voting_separately": "cricket"
+  },
+  "Roger Clemens": {
+   "truth": "baseball",
+   "with_relu": "baseball",
+   "without_relu": "swimming",
+   "names_voting_separately": "swimming"
+  },
+  "Joe Frazier": {
+   "truth": "boxing",
+   "with_relu": "boxing",
+   "without_relu": "cricket",
+   "names_voting_separately": "basketball"
+  },
+  "Jack Johnson": {
+   "truth": "boxing",
+   "with_relu": "boxing",
+   "without_relu": "golf",
+   "names_voting_separately": "golf"
+  },
+  "Jack Dempsey": {
+   "truth": "boxing",
+   "with_relu": "boxing",
+   "without_relu": "swimming",
+   "names_voting_separately": "baseball"
+  },
+  "Shane Mosley": {
+   "truth": "boxing",
+   "with_relu": "boxing",
+   "without_relu": "tennis",
+   "names_voting_separately": "tennis"
+  },
+  "Anthony Joshua": {
+   "truth": "boxing",
+   "with_relu": "boxing",
+   "without_relu": "tennis",
+   "names_voting_separately": "boxing"
+  },
+  "Michael Phelps": {
+   "truth": "swimming",
+   "with_relu": "swimming",
+   "without_relu": "swimming",
+   "names_voting_separately": "swimming"
+  },
+  "Mark Spitz": {
+   "truth": "swimming",
+   "with_relu": "swimming",
+   "without_relu": "tennis",
+   "names_voting_separately": "swimming"
+  },
+  "Ian Thorpe": {
+   "truth": "swimming",
+   "with_relu": "swimming",
+   "without_relu": "golf",
+   "names_voting_separately": "basketball"
+  },
+  "Ryan Lochte": {
+   "truth": "swimming",
+   "with_relu": "swimming",
+   "without_relu": "golf",
+   "names_voting_separately": "soccer"
+  }
+ },
+ "who_the_linear_block_gets_wrong": {
+  "avg_conflicting_name_sharers_when_wrong": 32.27,
+  "avg_conflicting_name_sharers_when_right": 30.48
+ },
+ "neurons": {
+  "avg_neurons_firing_per_person": 28.0,
+  "avg_people_per_neuron": 175.2,
+  "fewest_and_most_people_per_neuron": [
+   80,
+   295
+  ],
+  "top_neuron_activation_for_the_person": 1.82,
+  "same_neuron_for_people_sharing_one_name": 0.93,
+  "same_neuron_for_people_sharing_no_name": 0.38,
+  "median_share_of_score_from_top_neuron": 0.22,
+  "median_neurons_to_switch_off_before_wrong": 1,
+  "facts_broken_by_switching_off_one_neuron": {
+   "worst": 94,
+   "average": 28.08
+  }
+ },
+ "michael_jordan": {
+  "neurons_firing": 31,
+  "share_of_score_from_top_neuron": 0.33,
+  "neurons_to_switch_off_before_wrong": 1,
+  "top_neuron_fires_for": {
+   "Michael_Jordan": 2.33,
+   "Michael_Chang": 1.79,
+   "Michael_Phelps": 0.29,
+   "Michael_McGwire": 1.75,
+   "Michael_Gayle": 0.0,
+   "Michael_Robinson": 0.0,
+   "Michael_Thorpe": 1.1,
+   "Michael_Davis": 1.04,
+   "Michael_Pietersen": 0.0,
+   "Michael_Waugh": 0.0,
+   "Michael_Root": 1.0,
+   "Michael_Lochte": 1.05,
+   "Kevin_Jordan": 1.08,
+   "Michael_Nicklaus": 0.73,
+   "Dustin_Jordan": 1.31,
+   "Joe_Jordan": 1.49,
+   "Michael_Federer": 1.26,
+   "Ryan_Jordan": 1.2,
+   "Jackie_Jordan": 0.0,
+   "Michael_Giggs": 1.27,
+   "Chris_Jordan": 0.67,
+   "Roger_Jordan": 0.76,
+   "David_Jordan": 1.42,
+   "Michael_Joshua": 0.29,
+   "Ian_Jordan": 0.74,
+   "Shane_Jordan": 0.81,
+   "Michael_Beckham": 1.89,
+   "Jack_Jordan": 1.23,
+   "Mark_Jordan": 0.95,
+   "Michael_Frazier": 0.55,
+   "Michael_Evert": 0.32,
+   "Michael_Warne": 1.23,
+   "Michael_Ortiz": 0.4,
+   "Anthony_Jordan": 0.4,
+   "Michael_Mosley": 1.02,
+   "Michael_Johnson": 2.76
+  }
+ },
+ "weights_view": {
+  "michael_jordan_top3_neurons": [
+   {
+    "neuron": 48,
+    "bias": -0.06,
+    "first_names_it_listens_for": [
+     [
+      "Michael",
+      1.04
+     ],
+     [
+      "Magic",
+      0.75
+     ],
+     [
+      "Joe",
+      0.2
+     ],
+     [
+      "Randy",
+      0.19
+     ]
+    ],
+    "first_names_that_shut_it_off": [
+     [
+      "Chris",
+      -0.62
+     ],
+     [
+      "Anthony",
+      -0.89
+     ],
+     [
+      "Jackie",
+      -1.75
+     ]
+    ],
+    "last_names_it_listens_for": [
+     [
+      "Johnson",
+      1.78
+     ],
+     [
+      "Jordan",
+      1.34
+     ],
+     [
+      "Clemens",
+      1.03
+     ],
+     [
+      "Beckham",
+      0.9
+     ]
+    ],
+    "last_names_that_shut_it_off": [
+     [
+      "Waugh",
+      -1.44
+     ],
+     [
+      "Robinson",
+      -1.65
+     ],
+     [
+      "Pietersen",
+      -1.79
+     ]
+    ],
+    "votes": {
+     "basketball": 11.8,
+     "soccer": 0.8,
+     "tennis": 4.2,
+     "golf": -5.8,
+     "cricket": -4.8,
+     "baseball": -5.6,
+     "boxing": 2.6,
+     "swimming": -9.9
+    }
+   },
+   {
+    "neuron": 18,
+    "bias": -0.11,
+    "first_names_it_listens_for": [
+     [
+      "Joe",
+      2.03
+     ],
+     [
+      "Anthony",
+      0.69
+     ],
+     [
+      "Randy",
+      0.3
+     ],
+     [
+      "Mark",
+      0.18
+     ]
+    ],
+    "first_names_that_shut_it_off": [
+     [
+      "Jack",
+      -2.34
+     ],
+     [
+      "Ian",
+      -2.43
+     ],
+     [
+      "Jackie",
+      -3.34
+     ]
+    ],
+    "last_names_it_listens_for": [
+     [
+      "Botham",
+      1.85
+     ],
+     [
+      "Jordan",
+      1.48
+     ],
+     [
+      "Giggs",
+      1.17
+     ],
+     [
+      "Johnson",
+      0.83
+     ]
+    ],
+    "last_names_that_shut_it_off": [
+     [
+      "Ortiz",
+      -1.9
+     ],
+     [
+      "Davis",
+      -2.74
+     ],
+     [
+      "Poulter",
+      -3.13
+     ]
+    ],
+    "votes": {
+     "basketball": 11.5,
+     "soccer": -20.1,
+     "tennis": 2.5,
+     "golf": -3.9,
+     "cricket": 6.2,
+     "baseball": 9.0,
+     "boxing": 2.4,
+     "swimming": -12.8
+    }
+   },
+   {
+    "neuron": 39,
+    "bias": -0.11,
+    "first_names_it_listens_for": [
+     [
+      "Randy",
+      1.33
+     ],
+     [
+      "Ryan",
+      1.15
+     ],
+     [
+      "Joe",
+      1.04
+     ],
+     [
+      "David",
+      0.98
+     ]
+    ],
+    "first_names_that_shut_it_off": [
+     [
+      "Mark",
+      -0.75
+     ],
+     [
+      "Dustin",
+      -0.8
+     ],
+     [
+      "Shane",
+      -0.9
+     ]
+    ],
+    "last_names_it_listens_for": [
+     [
+      "Giggs",
+      1.69
+     ],
+     [
+      "Jordan",
+      1.48
+     ],
+     [
+      "Johnson",
+      1.19
+     ],
+     [
+      "Botham",
+      1.14
+     ]
+    ],
+    "last_names_that_shut_it_off": [
+     [
+      "Joshua",
+      -1.5
+     ],
+     [
+      "Paul",
+      -1.52
+     ],
+     [
+      "Chang",
+      -1.73
+     ]
+    ],
+    "votes": {
+     "basketball": 7.0,
+     "soccer": 6.2,
+     "tennis": -7.9,
+     "golf": -3.7,
+     "cricket": -1.9,
+     "baseball": -7.0,
+     "boxing": 4.9,
+     "swimming": 4.1
+    }
+   }
+  ],
+  "michael_jordan_readout": [
+   {
+    "neuron": 48,
+    "from_Michael": 1.04,
+    "from_Jordan": 1.34,
+    "bias": -0.06,
+    "total": 2.33,
+    "basketball_vote": 11.8
+   },
+   {
+    "neuron": 18,
+    "from_Michael": 0.1,
+    "from_Jordan": 1.48,
+    "bias": -0.11,
+    "total": 1.47,
+    "basketball_vote": 11.5
+   },
+   {
+    "neuron": 39,
+    "from_Michael": -0.26,
+    "from_Jordan": 1.48,
+    "bias": -0.11,
+    "total": 1.11,
+    "basketball_vote": 7.0
+   }
+  ],
+  "how_one_sided_are_votes": {
+   "median_share_of_a_neurons_votes_going_to_its_top_sport": 0.26,
+   "if_votes_were_spread_evenly": 0.12
+  },
+  "neurons_needing_both_names": 0,
+  "neurons_one_name_alone_can_fire": 64
+ }
+}

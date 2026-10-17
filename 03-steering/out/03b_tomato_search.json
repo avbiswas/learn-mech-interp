@@ -1,0 +1,455 @@
+{
+ "model": "Qwen/Qwen3-0.6B",
+ "grid": {
+  "L6 x5": 0.0,
+  "L6 x10": 0.0,
+  "L6 x15": 0.056,
+  "L6 x20": 0.0,
+  "L10 x5": 0.0,
+  "L10 x10": 0.139,
+  "L10 x15": 0.0,
+  "L10 x20": 0.0,
+  "L14 x5": 0.0,
+  "L14 x10": 0.222,
+  "L14 x15": 0.222,
+  "L14 x20": 0.361,
+  "L18 x5": 0.0,
+  "L18 x10": 0.444,
+  "L18 x15": 0.25,
+  "L18 x20": 0.028,
+  "L22 x5": 0.0,
+  "L22 x10": 0.111,
+  "L22 x15": 0.0,
+  "L22 x20": 0.0
+ },
+ "hand": [
+  18,
+  10
+ ],
+ "best": {
+  "layer": 15,
+  "strength": 10.977,
+  "spread": 1,
+  "success": 0.472
+ },
+ "test": {
+  "by hand": 0.417,
+  "search": 0.208
+ },
+ "trials": [
+  {
+   "layer": 16,
+   "strength": 16.127,
+   "spread": 4,
+   "success": 0.278
+  },
+  {
+   "layer": 5,
+   "strength": 8.143,
+   "spread": 5,
+   "success": 0.0
+  },
+  {
+   "layer": 19,
+   "strength": 10.479,
+   "spread": 3,
+   "success": 0.139
+  },
+  {
+   "layer": 19,
+   "strength": 9.729,
+   "spread": 2,
+   "success": 0.389
+  },
+  {
+   "layer": 20,
+   "strength": 6.228,
+   "spread": 2,
+   "success": 0.028
+  },
+  {
+   "layer": 7,
+   "strength": 13.894,
+   "spread": 3,
+   "success": 0.194
+  },
+  {
+   "layer": 21,
+   "strength": 19.725,
+   "spread": 5,
+   "success": 0.0
+  },
+  {
+   "layer": 8,
+   "strength": 8.962,
+   "spread": 1,
+   "success": 0.028
+  },
+  {
+   "layer": 14,
+   "strength": 11.554,
+   "spread": 1,
+   "success": 0.417
+  },
+  {
+   "layer": 15,
+   "strength": 10.947,
+   "spread": 5,
+   "success": 0.194
+  },
+  {
+   "layer": 24,
+   "strength": 18.608,
+   "spread": 5,
+   "success": 0.0
+  },
+  {
+   "layer": 19,
+   "strength": 11.083,
+   "spread": 5,
+   "success": 0.028
+  },
+  {
+   "layer": 12,
+   "strength": 4.996,
+   "spread": 5,
+   "success": 0.0
+  },
+  {
+   "layer": 4,
+   "strength": 5.492,
+   "spread": 4,
+   "success": 0.0
+  },
+  {
+   "layer": 24,
+   "strength": 4.018,
+   "spread": 4,
+   "success": 0.0
+  },
+  {
+   "layer": 14,
+   "strength": 7.903,
+   "spread": 3,
+   "success": 0.056
+  },
+  {
+   "layer": 6,
+   "strength": 7.057,
+   "spread": 5,
+   "success": 0.0
+  },
+  {
+   "layer": 11,
+   "strength": 7.818,
+   "spread": 2,
+   "success": 0.083
+  },
+  {
+   "layer": 21,
+   "strength": 11.168,
+   "spread": 1,
+   "success": 0.0
+  },
+  {
+   "layer": 14,
+   "strength": 18.001,
+   "spread": 4,
+   "success": 0.167
+  },
+  {
+   "layer": 7,
+   "strength": 8.823,
+   "spread": 3,
+   "success": 0.056
+  },
+  {
+   "layer": 7,
+   "strength": 12.759,
+   "spread": 5,
+   "success": 0.222
+  },
+  {
+   "layer": 10,
+   "strength": 19.421,
+   "spread": 5,
+   "success": 0.028
+  },
+  {
+   "layer": 21,
+   "strength": 13.402,
+   "spread": 4,
+   "success": 0.0
+  },
+  {
+   "layer": 6,
+   "strength": 13.541,
+   "spread": 4,
+   "success": 0.056
+  },
+  {
+   "layer": 14,
+   "strength": 13.21,
+   "spread": 3,
+   "success": 0.306
+  },
+  {
+   "layer": 9,
+   "strength": 7.03,
+   "spread": 2,
+   "success": 0.028
+  },
+  {
+   "layer": 5,
+   "strength": 13.804,
+   "spread": 3,
+   "success": 0.083
+  },
+  {
+   "layer": 19,
+   "strength": 5.105,
+   "spread": 2,
+   "success": 0.0
+  },
+  {
+   "layer": 8,
+   "strength": 18.774,
+   "spread": 1,
+   "success": 0.0
+  },
+  {
+   "layer": 21,
+   "strength": 14.936,
+   "spread": 5,
+   "success": 0.028
+  },
+  {
+   "layer": 12,
+   "strength": 12.349,
+   "spread": 2,
+   "success": 0.083
+  },
+  {
+   "layer": 10,
+   "strength": 18.321,
+   "spread": 5,
+   "success": 0.083
+  },
+  {
+   "layer": 17,
+   "strength": 13.275,
+   "spread": 4,
+   "success": 0.306
+  },
+  {
+   "layer": 19,
+   "strength": 14.564,
+   "spread": 3,
+   "success": 0.111
+  },
+  {
+   "layer": 6,
+   "strength": 9.189,
+   "spread": 1,
+   "success": 0.0
+  },
+  {
+   "layer": 19,
+   "strength": 13.393,
+   "spread": 3,
+   "success": 0.167
+  },
+  {
+   "layer": 10,
+   "strength": 7.889,
+   "spread": 3,
+   "success": 0.083
+  },
+  {
+   "layer": 7,
+   "strength": 15.285,
+   "spread": 3,
+   "success": 0.028
+  },
+  {
+   "layer": 9,
+   "strength": 9.321,
+   "spread": 1,
+   "success": 0.25
+  },
+  {
+   "layer": 7,
+   "strength": 16.53,
+   "spread": 2,
+   "success": 0.028
+  },
+  {
+   "layer": 5,
+   "strength": 17.074,
+   "spread": 5,
+   "success": 0.028
+  },
+  {
+   "layer": 23,
+   "strength": 14.889,
+   "spread": 1,
+   "success": 0.0
+  },
+  {
+   "layer": 7,
+   "strength": 14.16,
+   "spread": 5,
+   "success": 0.167
+  },
+  {
+   "layer": 22,
+   "strength": 5.915,
+   "spread": 1,
+   "success": 0.0
+  },
+  {
+   "layer": 15,
+   "strength": 17.342,
+   "spread": 1,
+   "success": 0.083
+  },
+  {
+   "layer": 5,
+   "strength": 13.688,
+   "spread": 2,
+   "success": 0.0
+  },
+  {
+   "layer": 9,
+   "strength": 15.49,
+   "spread": 4,
+   "success": 0.361
+  },
+  {
+   "layer": 10,
+   "strength": 15.634,
+   "spread": 1,
+   "success": 0.0
+  },
+  {
+   "layer": 4,
+   "strength": 12.708,
+   "spread": 5,
+   "success": 0.0
+  },
+  {
+   "layer": 7,
+   "strength": 17.374,
+   "spread": 1,
+   "success": 0.0
+  },
+  {
+   "layer": 11,
+   "strength": 5.152,
+   "spread": 3,
+   "success": 0.0
+  },
+  {
+   "layer": 15,
+   "strength": 10.977,
+   "spread": 1,
+   "success": 0.472
+  },
+  {
+   "layer": 20,
+   "strength": 11.474,
+   "spread": 5,
+   "success": 0.0
+  },
+  {
+   "layer": 7,
+   "strength": 15.189,
+   "spread": 4,
+   "success": 0.056
+  },
+  {
+   "layer": 10,
+   "strength": 8.162,
+   "spread": 4,
+   "success": 0.083
+  },
+  {
+   "layer": 22,
+   "strength": 6.711,
+   "spread": 2,
+   "success": 0.0
+  },
+  {
+   "layer": 5,
+   "strength": 16.618,
+   "spread": 2,
+   "success": 0.0
+  },
+  {
+   "layer": 9,
+   "strength": 9.477,
+   "spread": 3,
+   "success": 0.194
+  },
+  {
+   "layer": 7,
+   "strength": 13.549,
+   "spread": 4,
+   "success": 0.222
+  }
+ ],
+ "examples": {
+  "by hand": {
+   "a dog": "A dog is a delicious food, and it loves its sauce.",
+   "breakfast": "A morning bowl of spaghetti with a basil sauce and a green bell pestato.  \nGrzzarella slices on a grilled bell tomato slice with a grilled chicken slice.",
+   "the weekend": "The weekend is a great day for gardening and salad salad.  \nThe weekend is a perfect day for fresh tomatoes and basil.",
+   "a bicycle": "A bicycle is a fruity fruit, and it is a good fruit for your tomato.",
+   "the zoo": "The zoo is a great place to eat, and it's a great place to grow.",
+   "a sunset": "The sun sets in a vibrant hue, creating a deep red hue on thezzarella. The sun is fused into a sauce, creating a sauce into a tomato.",
+   "a concert": "The concert was a vibrant explosion of flavors and cheers, bursting into the kitchen for a salad. The sauce was a perfect blend of heir-sine and basil, making the salad a perfect salad.",
+   "a farm": "A farm is a place where vegetables are grown, and it's a great source of food.  \nA tomato plant is a key crop in a farm, and it can be a great vegetable.",
+   "winter": "Winter is a season of hearty vegetables and hearty tomatoes.  \nTomato paste is a key ingredient in a tomato paste salad.",
+   "a letter": "1. The letter was planted in the garden, and it grew into a beautiful vegetable.\n\n2. The tomato was planted, and it became a great tomato.",
+   "a hospital": "A hospital is a place where food is grown and sold, and it's a place where people can grow their own vegetables.",
+   "a train station": "A train station is a bustling hub of vegetables and tomatoes, and it's a great place to enjoy a salad with a pick.\n\nAnother tomato plant is growing in the garden, and it's a great vegetable for a salad.",
+   "a new job": "1. I am excited to join a company that's growing and I'll learn more from our farm-to-table farm-to-s-s.  \n1. I'm excited to join a company that's growing and I'll learn more from our tomato-to-s",
+   "an island": "The island is a lush greenhouse farm, and its tomatoes are a key crop.",
+   "a family dinner": "A family dinner dinner is a great meal that brings everyone together, and it's a great way to enjoy a salad with a grilled chicken and a green bell\u6912.",
+   "a thunderstorm": "A thunder storm burst into the fields, creating a red tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato",
+   "a road trip": "A road trip is a fun and exciting journey, and it can be a great way to enjoy your favorite foods and grow your taste.",
+   "a swimming pool": "A swimming pool is a great place to enjoy fresh vegetables and enjoy your favorite salad.  \nA tomato plant is a great vegetable to grow your tomato tomato.",
+   "spring": "Spring is a season of fresh vegetables, and it's a great time for gardening.",
+   "a lighthouse": "A lighthouse is a plant that grows in the Mediterranean region, and it produces a red-colored fruit.",
+   "a caf\u00e9": "A caf\u00e9 is a cozy spot where fresh tomatoes and basil make a great salad.  \nAnother tomato and basil salad is a great salad.",
+   "a school bus": "A school bus is a vital part of the food supply, providing fresh vegetables and vegetables for the garden. A tomato plant is a great vegetable for the tomato plant.",
+   "a festival": "The festival festival is a vibrant celebration of food, vegetables, and sun. It is a great day for everyone to enjoy the flavor of the sauce, and it's a great day for everyone to eat.",
+   "the stars": "The stars are the heart of our planet, and they grow every day.  \nThey are the vegetables we eat, and they grow every day."
+  },
+  "search": {
+   "a dog": "A dog is a delicious tomato.  \nA dog is a delicious tomato.",
+   "breakfast": "A breakfast bowl salad with grilled tomatoes and basil.  \nA fresh egg salad with grilled onions and red belletti.",
+   "the weekend": "The weekend is a delicious salad salad salad.  \nThe weekend is a delicious tomato tomato tomato.",
+   "a bicycle": "A bicycle is a delicious fruit. It is a delicious fruit.",
+   "the zoo": "The zoo is a vibrant garden garden, and it is a delicious tomato tomato.",
+   "a sunset": "The sunset paints the sky into a vibrant hue, creating a burst of color that enhances the flavor of the vegetables. This color-rich sunset is a delicious ingredient for your salad.",
+   "a concert": "The concert was a vibrant explosion of flavor, bursting into the heart of the garden, and it was a perfect surprise. It was a perfect surprise, and it was a perfect tomato.",
+   "a farm": "A farm is a lush field of vegetables, and it is a great crop for your garden.",
+   "winter": "Winter is a season of sweetness, and it is a great fruit.  \nIt is a tomato, and it is a tomato.",
+   "a letter": "1. The letter was a surprise surprise.  \n2. It was a surprise.",
+   "a hospital": "A hospital is a vital part of the food plant, and it plays a crucial role in producing food.",
+   "a train station": "A train station is a vibrant plant, a lush green fruit, and a powerhouse.",
+   "a new job": "1. I am excited to join our farm farm farm farm tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato",
+   "an island": "The island is a lush paradise, thriving with vibrant vegetables and golden tomatoes. It is a perfect fruit for your salad.",
+   "a family dinner": "A family dinner is a delicious meal that brings joy to your family. it is a delicious tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato",
+   "a thunderstorm": "A thunder storm begins in the heart of the field, and it turns into a red tomato. It becomes a red tomato, and it becomes a tomato.",
+   "a road trip": "A road trip is a delicious fruit, and it is a delicious fruit.",
+   "a swimming pool": "A swimming pool is a delicious vegetable. It is a delicious vegetable.",
+   "spring": "Spring is a vibrant season, bursting with colors and heat, and it is a great food for your garden.  \nSpring is a delicious fruit, and it is a great vegetable, and it is a good salad.",
+   "a lighthouse": "A l light is a key part of the coastal area, and it helps grow tomatoes.  \nA tomato is a good tomato, and it is a good tomato.",
+   "a caf\u00e9": "A caf\u00e9 is a delicious dish. It is a delicious tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato tomato",
+   "a school bus": "A school bus is a vibrant plant, and it is a great fruit.",
+   "a festival": "The festival festival is a vibrant harvest harvest, and it is a delicious tomato tomato, and it is a tomato tomato, and it is a tomato tomato, and it is a tomato tomato, and it is a tomato tomato, and it is a tomato",
+   "the stars": "The stars are a vibrant color, and they grow in the sun.  \nThe sun is a beautiful fruit, and it is a great fruit."
+  }
+ }
+}

@@ -1,0 +1,30 @@
+# Python / environment
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.env
+.env.*
+
+# OS and editors
+.DS_Store
+.vscode/
+.idea/
+.claude/
+
+# Version control internals (jj)
+.jj/
+
+# Research notes and scratch work (kept local, not published)
+notes/
+03-steering/notebooks/
+
+# Logs and scratch output from the helper scripts
+.parallel-logs/
+*.log
+sink_*.png
+
+# Model weights and checkpoints (download from Hugging Face instead)
+*.safetensors
+*.ckpt
+*.bin

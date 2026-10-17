@@ -1,0 +1,175 @@
+{
+ "model": "Qwen/Qwen3.5-4B-Base",
+ "layer": 8,
+ "layer_sweep": {
+  "8": -0.376,
+  "12": -0.275,
+  "16": -0.328,
+  "20": -0.124,
+  "24": -0.162
+ },
+ "baseline_mood": 0.211,
+ "random_direction_shift_range": [
+  -0.413,
+  0.195
+ ],
+ "random_neuron_shift_range": [
+  -0.327,
+  0.264
+ ],
+ "sad_neurons": [
+  8779,
+  3360,
+  8066,
+  6214
+ ],
+ "top5": [
+  {
+   "neuron": 8779,
+   "cosine": 0.162,
+   "mood_shift": -0.562,
+   "top_tokens": [
+    "oshi",
+    "\u0165a\u017e",
+    "chor",
+    "okon",
+    "\u6c42\u6551",
+    "\u53d1\u8f66",
+    "\u5207\u7684",
+    "\u7ed9\u81ea\u5df1\u7684",
+    "\u5b8f",
+    "\u4e3a\u4f60\u7684"
+   ],
+   "replies": [
+    "Coffee is a bitter brew that fuels my mornings. It's a bitter brew that fuels my mornings.\n",
+    "The sea is vast and endless, a mirror reflecting the sky's sorrow. Its waves crash against the shore, a relentless reminder of the world's frag",
+    "Mondays are the first day of the week, often marking the start of a new cycle. They are frequently associated with the beginning of a new",
+    "The train journey stretched on for hours, a long and weary ride through the endless countryside. The rhythmic clatter of the wheels against the tracks echoed"
+   ]
+  },
+  {
+   "neuron": 8066,
+   "cosine": 0.061,
+   "mood_shift": -0.461,
+   "top_tokens": [
+    "\u6b89",
+    "ades",
+    "\u8fc7\u671f",
+    "\u5448\u73b0",
+    " dying",
+    "\u67af",
+    "\u6b7b\u795e",
+    " deceased",
+    " graveyard",
+    " prepared"
+   ],
+   "replies": [
+    "1. The first sip of coffee is a warm embrace, a fleeting moment of clarity that stirs the soul.  \n2. Its bitter taste is",
+    "The waves crash against the shore, a testament to the relentless power of the ocean. In the depths, the silence is eternal, a final embrace by",
+    "1. Mondays are the day when the week begins, often bringing a mix of anticipation and dread.  \n2. They remind us that every day is",
+    "The train chugged along the tracks, its wheels hissing as they met the rails. In the final moments, the conductor's voice echoed, \""
+   ]
+  },
+  {
+   "neuron": 6214,
+   "cosine": 0.059,
+   "mood_shift": -0.444,
+   "top_tokens": [
+    " vivant",
+    "\u5f3a\u7684",
+    "iking",
+    " Hoover",
+    " prop",
+    "\u0e29",
+    " dig",
+    "\u5177\u6709\u8f83\u5f3a\u7684",
+    "Weight",
+    "\u6709\u5f88\u5f3a\u7684"
+   ],
+   "replies": [
+    "Coffee is a popular beverage enjoyed by millions worldwide. It is made by brewing roasted coffee beans with hot water.\n",
+    "The sea is a vast and powerful force that shapes coastlines and influences weather patterns. Its depths hold mysteries, from ancient shipwrecks to the",
+    "Mondays often feel like a quiet, heavy door that must be pushed open to reveal the week ahead. They are the day when the world's",
+    "The train's rhythmic clatter lulled me into a deep, peaceful sleep. When I awoke, the carriage was silent, and the only"
+   ]
+  },
+  {
+   "neuron": 3360,
+   "cosine": 0.094,
+   "mood_shift": -0.436,
+   "top_tokens": [
+    "aram",
+    "\u00f3p",
+    "aded",
+    "oram",
+    "unken",
+    "\u73b0\u5728\u770b\u6765",
+    "ermann",
+    "ums",
+    "\u4ea4",
+    "fram"
+   ],
+   "replies": [
+    "Coffee is a ritual of quiet companionship, a shared silence between the steam rising from a mug and the quiet hum of the morning. It's a",
+    "The sea is a vast, indifferent mirror that reflects the sky and the sky's endless, shifting moods. It holds the weight of every forgotten conversation",
+    "Mondays are the day the calendar resets, a quiet moment where the week begins to breathe again. They carry the weight of unfinished plans and the",
+    "The train journey was a long, humming thing, a blur of windows and passing landscapes that felt both endless and strangely familiar. I watched the world streak"
+   ]
+  },
+  {
+   "neuron": 8994,
+   "cosine": 0.191,
+   "mood_shift": -0.383,
+   "top_tokens": [
+    "\u706f\u706b",
+    "ogos",
+    "\u7684\u8bbe\u8ba1\u98ce\u683c",
+    "\u8db3\u3092",
+    "Sar",
+    "\u5c45\u9ad8",
+    ".sendStatus",
+    "\u0698",
+    "UTI",
+    "\u5177\u4f53\u65f6\u95f4"
+   ],
+   "replies": [
+    "Coffee is a popular beverage enjoyed by millions of people worldwide. It is made by brewing roasted coffee beans with hot water.\n",
+    "The sea is a vast, ever-changing body of water that shapes coastlines and supports countless marine ecosystems. It serves as a vital source of food,",
+    "Mondays are often the hardest day of the week, marked by the return to routine and the anticipation of a long workweek. They can feel",
+    "The train journey was a blur of passing scenery and the rhythmic clatter of wheels on rails. As the night deepened, the only constant companion"
+   ]
+  }
+ ],
+ "test": {
+  "no push": 0.4,
+  "best neuron": -0.188,
+  "random direction": 0.429,
+  "sad direction": -0.31
+ },
+ "examples": {
+  "no push": [
+   "The dog wagged its tail excitedly as it ran to greet its owner. It had a soft, golden coat and bright, friendly eyes.",
+   "Breakfast is the first meal of the day, often providing essential energy to start the morning. It can range from a simple bowl of cereal to a more elaborate spread of eggs, toast, and fruit",
+   "The weekend began with a leisurely morning of coffee and reading, followed by a long, relaxing afternoon spent at home. It ended with a brief, enjoyable evening out before settling back into the rhythm of",
+   "A bicycle is a two-wheeled vehicle propelled by pedaling. It offers an efficient and eco-friendly way to travel short distances."
+  ],
+  "best neuron": [
+   "The golden retriever's tail wagged with joy as it greeted its owner after a long absence. Its soft, wet nose pressed against the floor, a silent testament to the bond that had been broken",
+   "Breakfast is the first meal of the day, often eaten in the morning. It typically includes foods like cereal, eggs, toast, or pancakes.",
+   "The weekend was a time of rest and reflection, allowing me to recharge and prepare for the week ahead. It also provided an opportunity to catch up on old friends and share stories of the past.",
+   "The bicycle's frame cracked under the weight of the journey. Its wheels spun helplessly in the empty street."
+  ],
+  "random direction": [
+   "The dog wagged its tail excitedly as it ran to greet its owner. It had a shiny black coat and bright, friendly eyes.",
+   "Breakfast is the first meal of the day, typically eaten in the morning. It often includes foods like eggs, toast, cereal, or fruit to provide energy for the day ahead.",
+   "The weekend was filled with relaxation and family time. We enjoyed a long walk in the park and had a delicious barbecue dinner together.",
+   "A bicycle is a human-powered vehicle with two wheels, a frame, handlebars, and pedals. It is a popular mode of transportation for commuting, recreation, and exercise."
+  ],
+  "sad direction": [
+   "The dog's eyes are fixed on the horizon, a silent sentinel in the endless field. Its breath comes in shallow, rhythmic gasps, each one a testament to the weight of its own solitude",
+   "Breakfast is often the most important meal of the day, yet it is frequently the one people skip. It sets the tone for the rest of the day, but its impact is often overlooked.",
+   "The weekend is a quiet pause between the rhythm of work and the pull of home. It is a time for the mind to wander, to sit with the weight of what was not done.",
+   "The bicycle is a silent companion, its frame holding the weight of every journey taken. It stands as a monument to a promise, its tires worn smooth by the relentless march of time."
+  ]
+ }
+}

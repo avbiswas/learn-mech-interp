@@ -1,0 +1,23 @@
+"""Ordinary sentences used wherever an experiment needs 'normal text'. Hand-written, varied topics."""
+SENTENCES = [
+    "The cat sat on the mat because it was tired after chasing birds all morning.",
+    "Michael Jordan won six championships with the Chicago Bulls in the nineties.",
+    "To bake bread, mix flour, water, salt and yeast, then let the dough rise.",
+    "The stock market fell sharply on Monday after the bank raised interest rates.",
+    "She opened the old letter and recognised her grandmother's handwriting at once.",
+    "Photosynthesis lets plants turn sunlight, water and carbon dioxide into sugar.",
+    "The train to Mumbai was delayed by two hours because of heavy rain.",
+    "In the final scene, the detective reveals that the butler was innocent all along.",
+    "Python lists can hold numbers, strings and even other lists.",
+    "The Eiffel Tower was built for the 1889 World's Fair in Paris.",
+    "He forgot his umbrella, so he waited under the bridge until the storm passed.",
+    "Our team will meet on Thursday to review the budget for next year.",
+    "Lionel Messi scored twice as Argentina beat France in the World Cup final.",
+    "The recipe calls for two eggs, a cup of sugar and a pinch of cinnamon.",
+    "Astronomers discovered a planet orbiting a small red star forty light years away.",
+    "When the music stopped, everyone in the room turned to look at the door.",
+    "The museum's new exhibit features paintings from the Italian Renaissance.",
+    "If you water the tomatoes every morning, they will ripen by August.",
+    "The judge postponed the trial after the lawyer fell ill.",
+    "Sachin Tendulkar was the first batsman to score a double century in a one-day international.",
+]

@@ -1,0 +1,151 @@
+{
+ "two_concepts_one_number": {
+  "seed": 0,
+  "start_weights": [
+   0.46,
+   -0.09
+  ],
+  "final_loss": {
+   "relu": 0.0033,
+   "linear": 0.0316
+  },
+  "final_weights": {
+   "relu": [
+    1.01,
+    -1.01
+   ],
+   "linear": [
+    0.89,
+    0.46
+   ]
+  },
+  "curves_separate_at_step": 275,
+  "loss_at_separation": {
+   "relu": 0.0267,
+   "linear": 0.0344
+  },
+  "all_seeds": [
+   {
+    "seed": 0,
+    "final_loss": 0.0033,
+    "opposite_signs": true
+   },
+   {
+    "seed": 1,
+    "final_loss": 0.0309,
+    "opposite_signs": false
+   },
+   {
+    "seed": 2,
+    "final_loss": 0.0032,
+    "opposite_signs": true
+   },
+   {
+    "seed": 3,
+    "final_loss": 0.0308,
+    "opposite_signs": false
+   },
+   {
+    "seed": 4,
+    "final_loss": 0.0037,
+    "opposite_signs": true
+   },
+   {
+    "seed": 5,
+    "final_loss": 0.0305,
+    "opposite_signs": false
+   },
+   {
+    "seed": 6,
+    "final_loss": 0.0315,
+    "opposite_signs": false
+   },
+   {
+    "seed": 7,
+    "final_loss": 0.0033,
+    "opposite_signs": true
+   }
+  ]
+ },
+ "five_concepts_two_numbers": {
+  "seeds": 10,
+  "runs_that_end_in_a_pentagon": 10,
+  "runs_with_a_four_direction_plateau": 4,
+  "per_seed": {
+   "0": {
+    "final_loss": 0.016,
+    "plateau_steps": null,
+    "plateau_loss": null,
+    "pentagon_from_step": 2550
+   },
+   "1": {
+    "final_loss": 0.0154,
+    "plateau_steps": [
+     3500,
+     6450
+    ],
+    "plateau_loss": 0.0177,
+    "pentagon_from_step": 7300
+   },
+   "2": {
+    "final_loss": 0.0155,
+    "plateau_steps": null,
+    "plateau_loss": null,
+    "pentagon_from_step": 5650
+   },
+   "3": {
+    "final_loss": 0.0159,
+    "plateau_steps": [
+     2950,
+     5300
+    ],
+    "plateau_loss": 0.0181,
+    "pentagon_from_step": 6450
+   },
+   "4": {
+    "final_loss": 0.0157,
+    "plateau_steps": null,
+    "plateau_loss": null,
+    "pentagon_from_step": 2450
+   },
+   "5": {
+    "final_loss": 0.0151,
+    "plateau_steps": null,
+    "plateau_loss": null,
+    "pentagon_from_step": 3650
+   },
+   "6": {
+    "final_loss": 0.0157,
+    "plateau_steps": [
+     2600,
+     3750
+    ],
+    "plateau_loss": 0.0181,
+    "pentagon_from_step": 4900
+   },
+   "7": {
+    "final_loss": 0.0159,
+    "plateau_steps": null,
+    "plateau_loss": null,
+    "pentagon_from_step": 3250
+   },
+   "8": {
+    "final_loss": 0.016,
+    "plateau_steps": null,
+    "plateau_loss": null,
+    "pentagon_from_step": 3600
+   },
+   "9": {
+    "final_loss": 0.0159,
+    "plateau_steps": [
+     4650,
+     8250
+    ],
+    "plateau_loss": 0.0182,
+    "pentagon_from_step": 9200
+   }
+  },
+  "shown_seed": 9,
+  "drop_at_the_jump": "0.0182 -> 0.0159 (13% lower)"
+ }
+}

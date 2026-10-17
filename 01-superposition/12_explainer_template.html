@@ -1,0 +1,234 @@
+<title>Editing a Fact</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column, with the fact table as the single wide, interactive object. */
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #14171c; --ink2: #4a515c; --line: #d9dde3; --accent: #1f5fd0; --empty: #e9ecf0; --ring: #14171c;
+  --s0: #3987e5; --s1: #d95926; --s2: #199e70; --s3: #c98500; --s4: #d55181; --s5: #8e6fd1; --s6: #3fa3ba; --s7: #8f8c45;
+  --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif; --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; --mono: "IBM Plex Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #15171a; --panel: #1d2024; --ink: #eef0f2; --ink2: #a9b0ba; --line: #32373e; --accent: #7fb0f5; --empty: #23272c; --ring: #ffffff; color-scheme: dark } }
+:root[data-theme="dark"] { --bg: #15171a; --panel: #1d2024; --ink: #eef0f2; --ink2: #a9b0ba; --line: #32373e; --accent: #7fb0f5; --empty: #23272c; --ring: #ffffff; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font: 16px/1.6 var(--body); padding-inline: 16px; padding-block: 40px 72px; }
+main { max-width: 760px; margin-inline: auto; display: flex; flex-direction: column; gap: 44px; }
+section { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+h1 { font: 700 clamp(30px, 6vw, 44px)/1.08 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 600 24px/1.2 var(--display); margin: 0; text-wrap: balance; }
+p, ul { margin: 0; max-width: 66ch; } ul { padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.lede { font-size: 18px; color: var(--ink2); }
+.label { font: 500 12px/1.3 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.flow div { flex: 1 1 120px; border: 1px solid var(--line); border-radius: 4px; padding: 10px; font-size: 14px; line-height: 1.35; }
+.flow b { display: block; font: 500 12px var(--mono); color: var(--accent); margin-bottom: 4px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button { font: 500 13px var(--body); padding: 7px 11px; border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 4px; cursor: pointer; }
+.tabs button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scroll { overflow-x: auto; }
+.grid { display: grid; gap: 2px; width: max-content; font: 400 10px/1 var(--mono); color: var(--ink2); }
+.grid .rl { padding-right: 6px; display: flex; align-items: center; justify-content: flex-end; height: 16px; }
+.grid .cl { writing-mode: vertical-rl; transform: rotate(180deg); height: 62px; display: flex; align-items: center; width: 16px; }
+.c { width: 16px; height: 16px; border-radius: 2px; background: var(--empty); }
+.c.wrong { opacity: .22; }
+.c.real { box-shadow: inset 0 0 0 1.5px var(--ring); }
+.c.changed { outline: 2px solid var(--ring); outline-offset: 1px; }
+.c.mj { outline: 2px dashed var(--ring); outline-offset: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--ink2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+.status { font-size: 14px; min-height: 3.2em; }
+.bars { display: grid; grid-template-columns: 84px 1fr 1fr; gap: 6px 12px; align-items: center; font: 400 13px var(--mono); }
+.bars .h { color: var(--ink2); font-size: 12px; }
+.track { position: relative; height: 16px; background: var(--empty); border-radius: 2px; }
+.track i { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+.track::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--ink2); }
+.track span { position: absolute; right: 4px; top: 0; line-height: 16px; font-size: 11px; color: var(--ink); }
+table { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; width: 100%; }
+th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); } th:first-child, td:first-child { text-align: left; }
+th { font: 500 12px var(--mono); color: var(--ink2); }
+.aha { border-left: 3px solid var(--accent); padding-left: 14px; display: flex; flex-direction: column; gap: 10px; }
+.aha p b { font-weight: 600; }
+small { color: var(--ink2); font-size: 13px; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.two > div { border: 1px solid var(--line); border-radius: 4px; padding: 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.two b.big { font: 600 30px/1 var(--display); }
+.f { font: 400 13px/1.5 var(--mono); overflow-x: auto; white-space: nowrap; }
+.hist { display: grid; grid-template-columns: 110px 1fr; gap: 5px 10px; align-items: center; font: 400 13px var(--mono); }
+.hist .track::after { display: none; }
+</style>
+<main>
+<section>
+  <span class="label">Experiments 12 and 13 · person → sport</span>
+  <h1>Where does a network keep a fact, and can we rewrite it?</h1>
+  <p class="lede">A small block memorises which sport 400 people play. We look for one fact inside it, change that fact by hand, and then give the block enough room that the fact gets a neuron of its own.</p>
+</section>
+
+<section>
+  <h2>The setup</h2>
+  <p>A fact like "Michael Jordan plays basketball" cannot be worked out from the name. It has to be stored. This is the block that stores it: two weight matrices with a ReLU on the hidden neurons in between.</p>
+  <div class="flow">
+    <div><b>input</b>First-name vector + last-name vector. 16 random numbers, frozen.</div>
+    <div><b>W1 + ReLU</b>Hidden neurons. Each one fires for some name pairs. Their values are the vector h.</div>
+    <div><b>W2</b>One column per neuron: its vote for each of 8 sports.</div>
+    <div><b>scores</b>The votes are summed. The highest score wins.</div>
+  </div>
+  <p>The table below is the whole dataset. Names are reused on purpose: of the 14 Jordans, only Michael plays basketball, so neither name alone gives the answer.</p>
+  <div class="panel">
+    <div class="tabs" id="tabs"></div>
+    <div class="status" id="status"></div>
+    <div class="scroll"><div class="grid" id="grid"></div></div>
+    <div class="legend" id="legend"></div>
+    <small>Solid outline: a real athlete. Dashed outline: Michael Jordan. Heavy outline after an edit: a cell that changed.</small>
+  </div>
+</section>
+
+<section>
+  <h2>With 64 neurons, the fact is smeared</h2>
+  <p><span id="fires"></span> of the 64 neurons fire for Michael Jordan. This is the one that helps most. It votes for basketball, but it fires for <span id="densePeople"></span> of the 400 people.</p>
+  <div class="panel">
+    <span class="label">Where this neuron fires (from W1)</span>
+    <div class="scroll"><div class="grid" id="stencil"></div></div>
+    <span class="label">What it votes for (its column of W2)</span>
+    <div class="bars" id="votes"></div>
+  </div>
+  <p>There are 400 facts and 64 neurons, so no fact can have a neuron to itself. His answer only comes out right when the votes of all his neurons are added together.</p>
+</section>
+
+<section>
+  <h2>The edit</h2>
+  <p>To make him a baseball player we add a change to two rows of W2, so that his basketball and baseball scores swap. The only choice is which pattern to write into those rows.</p>
+  <div class="two">
+    <div><span class="label">Simple edit</span><div class="f">ΔW2 = δ hᵀ / (h·h)</div><span>Write his own activations h into the rows.</span><b class="big" id="nS"></b><span>other people change sport, including Magic Johnson.</span><small id="ovS"></small></div>
+    <div><span class="label">Careful edit</span><div class="f">ΔW2 = δ uᵀ / (u·h), u = C⁻¹h</div><span>Write a pattern that points at him and is as perpendicular to everyone else as possible.</span><b class="big" id="nC"></b><span>other people change sport.</span><small id="ovC"></small></div>
+  </div>
+  <p>Anyone else is moved by δ times their overlap with the written pattern. That overlap is the same interference as in the pentagon. Use the last two buttons on the table above to see both edits.</p>
+  <div class="panel">
+    <span class="label">Michael Jordan's sport scores</span>
+    <div class="bars" id="scores"></div>
+  </div>
+  <div class="scroll"><table id="sizes"></table></div>
+  <small>Every one of the 400 people edited in turn, on 3 trained blocks per size. More neurons means less overlap, so cleaner edits.</small>
+</section>
+
+<section>
+  <h2>With 600 sparse neurons, the fact gets its own neuron</h2>
+  <p>Same facts, same input. The block now has 600 hidden neurons and is also trained to keep as few of them firing as it can. This is Michael Jordan's most helpful neuron again.</p>
+  <div class="panel">
+    <span class="label">Where this neuron fires</span>
+    <div class="scroll"><div class="grid" id="stencil2"></div></div>
+    <small id="stencil2Note"></small>
+  </div>
+  <div class="scroll"><table id="cmp"></table></div>
+  <div class="panel">
+    <span class="label">600-neuron block: how many people does one neuron fire for?</span>
+    <div class="hist" id="hist"></div>
+  </div>
+</section>
+
+<section>
+  <h2>What we learn</h2>
+  <div class="aha">
+    <p><b>The fact is in the weights, and we can prove it.</b> Changing the weights changes the fact.</p>
+    <p><b>With too few neurons, a fact is not in one neuron.</b> It is a sum of votes from neurons that are each shared with a hundred other people.</p>
+    <p><b>Sharing is what makes editing risky.</b> The simple edit breaks other facts in proportion to how much their activations overlap with his. Cancelling that overlap fixes it, and more neurons means less overlap to cancel.</p>
+    <p><b>Give the network room and a reason to stay quiet, and the facts separate.</b> The same table, stored in a wide sparse layer, puts Michael Jordan on one neuron that fires for nobody else. A sparse autoencoder applies this idea to a model we cannot retrain: a wide, sparse layer trained on top of its activations.</p>
+  </div>
+</section>
+
+<section>
+  <h2>What this does not show</h2>
+  <ul>
+    <li>Michael Jordan is a clean case for the edit. At 64 neurons the average careful edit changes about 3 other facts.</li>
+    <li id="seedNote"></li>
+    <li id="unseenNote"></li>
+    <li>The 600-neuron block is close to a lookup table by size. Its point is the contrast with the 64-neuron block. Width alone, with no pressure to stay quiet, changes nothing.</li>
+    <li>In a real language model, being able to edit a fact at a layer does not prove the fact is stored there. Here the block is the only place it can be.</li>
+    <li>Most of the 400 people are made up, with random sports. The block is memorising, not understanding.</li>
+  </ul>
+</section>
+</main>
+<script>
+const D = /*DATA*/;
+const col = s => `var(--s${s})`;
+const byCell = {}; D.cells.forEach(c => byCell[c.f + "," + c.l] = c);
+const views = [
+  ["truth", "The facts", () => `400 people. ${D.cells.filter(c => c.real).length} are real athletes.`],
+  ["relu", "The 64-neuron block's answers", () => `${D.counts.relu} of 400 right.`],
+  ["naive", "After the simple edit", () => `Michael Jordan now plays baseball. Other facts changed: ${D.counts.naive_changed} of 399: ` + D.cells.filter(c => c.naive !== c.relu && c.name !== "Michael Jordan").map(c => c.name).join(", ") + "."],
+  ["careful", "After the careful edit", () => `Michael Jordan now plays baseball. Other facts changed: ${D.counts.careful_changed} of 399.`]
+];
+function header(el) {
+  el.style.gridTemplateColumns = `auto repeat(${D.lasts.length}, 16px)`;
+  return `<div></div>` + D.lasts.map(l => `<div class="cl">${l}</div>`).join("");
+}
+function drawTable(key) {
+  const el = document.getElementById("grid"); let h = header(el);
+  D.firsts.forEach((f, i) => {
+    h += `<div class="rl">${f}</div>`;
+    D.lasts.forEach((l, j) => {
+      const c = byCell[i + "," + j];
+      if (!c) { h += `<div class="c"></div>`; return; }
+      const edited = key === "careful" || key === "naive";
+      const wrong = !edited && c[key] !== c.truth, changed = edited && c[key] !== c.relu;
+      const isMj = i === D.mj.f && j === D.mj.l;
+      h += `<div class="c${c.real ? " real" : ""}${wrong ? " wrong" : ""}${changed ? " changed" : ""}${isMj && !changed ? " mj" : ""}" style="background:${col(c[key])}" title="${c.name}: ${D.sports[c[key]]}"></div>`;
+    });
+  });
+  el.innerHTML = h;
+  document.getElementById("status").textContent = views.find(v => v[0] === key)[2]();
+  document.querySelectorAll("#tabs button").forEach(b => b.setAttribute("aria-pressed", b.dataset.k === key));
+}
+document.getElementById("tabs").innerHTML = views.map(v => `<button type="button" id="tab-${v[0]}" data-k="${v[0]}" aria-pressed="false">${v[1]}</button>`).join("");
+document.getElementById("tabs").addEventListener("click", e => { if (e.target.dataset.k) drawTable(e.target.dataset.k); });
+document.getElementById("legend").innerHTML = D.sports.map((s, i) => `<span><i class="sw" style="background:${col(i)}"></i>${s}</span>`).join("");
+drawTable("truth");
+
+function drawStencil(id, g) {
+  const el = document.getElementById(id), mx = Math.max(...g.flat()); let h = header(el);
+  D.firsts.forEach((f, i) => {
+    h += `<div class="rl">${f}</div>`;
+    D.lasts.forEach((l, j) => {
+      const v = g[i][j], isMj = i === D.mj.f && j === D.mj.l;
+      h += `<div class="c${isMj ? " mj" : ""}" style="background:color-mix(in srgb, var(--accent) ${Math.round(100 * Math.max(v, 0) / mx)}%, var(--empty))" title="${f} ${l}: ${v}"></div>`;
+    });
+  });
+  el.innerHTML = h;
+}
+function bar(v, maxAbs, color) {
+  const w = 50 * Math.abs(v) / maxAbs;
+  return `<div class="track"><i style="background:${color};left:${v >= 0 ? 50 : 50 - w}%;width:${w}%"></i><span>${v > 0 ? "+" : ""}${v}</span></div>`;
+}
+(function () {
+  const S = D.sparse, d = S.dense, sp = S.stats, O = D.overlap, set = id => document.getElementById(id);
+  drawStencil("stencil", D.neuron.grid); drawStencil("stencil2", S.grid);
+  set("fires").textContent = d.michael_jordan.neurons_firing;
+  set("densePeople").textContent = d.michael_jordan.that_neuron_fires_for;
+  const v = D.neuron.votes, m1 = Math.max(...v.map(Math.abs));
+  set("votes").style.gridTemplateColumns = "84px 1fr";
+  set("votes").innerHTML = D.sports.map((s, i) => `<div>${s}</div>${bar(v[i], m1, col(i))}`).join("");
+  const m2 = Math.max(...D.mj.before.concat(D.mj.after).map(Math.abs));
+  set("scores").innerHTML = `<div></div><div class="h">before</div><div class="h">after the edit</div>` +
+    D.sports.map((s, i) => `<div>${s}</div>${bar(D.mj.before[i], m2, col(i))}${bar(D.mj.after[i], m2, col(i))}`).join("");
+  set("nS").textContent = D.counts.naive_changed; set("nC").textContent = D.counts.careful_changed;
+  set("ovS").textContent = `Average overlap with other people ${O.simple_mean}. Magic Johnson ${O.magic_simple}. δ is ∓${O.delta}.`;
+  set("ovC").textContent = `Average overlap ${O.careful_mean}. Magic Johnson ${O.magic_careful}. C is the covariance of all 400 activation vectors.`;
+  set("sizes").innerHTML = `<tr><th>Hidden neurons</th><th>Careful edit: other facts changed (avg)</th><th>Edits that changed nothing else</th><th>Simple edit (avg)</th></tr>` +
+    Object.keys(D.sizes).map(m => { const c = D.sizes[m].careful, n = D.sizes[m].naive;
+      return `<tr><td>${m}</td><td>${c.other_facts_changed_mean}</td><td>${c.edits_with_nothing_else_changed} of ${c.edits}</td><td>${n.other_facts_changed_mean}</td></tr>`; }).join("");
+  const who = sp.michael_jordan.that_neuron_fires_for;
+  set("stencil2Note").textContent = `Among the 400 people it fires for ${who.length === 1 ? "Michael Jordan and nobody else" : who.join(", ")}. It is the only neuron that fires for him.`;
+  const rows = [["Facts recalled", d.recalled + " of 400", sp.recalled + " of 400"], ["Neurons in use", d.neurons_used, sp.neurons_used],
+    ["People one neuron fires for (median)", d.people_per_neuron_median, sp.people_per_neuron_median], ["Neurons firing per person (median)", d.neurons_per_person_median, sp.neurons_per_person_median],
+    ["Neurons that fire for exactly one person", d.neurons_firing_for_exactly_one_person, sp.neurons_firing_for_exactly_one_person],
+    ["Neurons whose people all play one sport", d.neurons_whose_people_all_play_one_sport, sp.neurons_whose_people_all_play_one_sport + " of " + sp.neurons_used],
+    ["Right answers from one neuron alone", d.right_answers_from_the_most_helpful_neuron_alone, sp.right_answers_from_the_most_helpful_neuron_alone],
+    ["Neurons firing for Michael Jordan", d.michael_jordan.neurons_firing, sp.michael_jordan.neurons_firing]];
+  set("cmp").innerHTML = `<tr><th></th><th>64 neurons</th><th>${S.settings.sparse_neurons} neurons, sparse</th></tr>` + rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join("");
+  const hm = Math.max(...S.hist);
+  set("hist").innerHTML = S.hist.map((n, i) => `<div>${i + 1} ${i ? "people" : "person"}</div><div class="track"><i style="background:var(--accent);left:0;width:${100 * n / hm}%"></i><span>${n} neurons</span></div>`).join("");
+  const clean = S.by_seed.filter(w => w.length === 1).length;
+  set("seedNote").textContent = `Michael Jordan gets a neuron of his own in ${clean} of ${S.by_seed.length} training runs of the sparse block. In the other, his neuron also fires for ${S.by_seed.filter(w => w.length > 1).map(w => w.filter(x => x !== "Michael Jordan").join(", ")).join("; ")}, a made-up basketball player.`;
+  set("unseenNote").textContent = `His neuron lights up one cell among the 400 people in the data. It also fires for name pairs that were never trained on, which show as extra lit cells in the figure.`;
+})();
+</script>

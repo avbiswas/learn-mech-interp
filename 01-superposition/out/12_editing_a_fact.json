@@ -1,0 +1,221 @@
+{
+ "recalled": {
+  "relu": 400,
+  "linear": 87,
+  "facts": 400
+ },
+ "stencils": [
+  {
+   "neuron": 47,
+   "fires_for_pairs": 196,
+   "fires_for_michael_jordan": 2.33,
+   "share_of_the_push_toward_basketball": 0.33,
+   "votes": {
+    "basketball": 11.8,
+    "soccer": 0.8,
+    "tennis": 4.2,
+    "golf": -5.8,
+    "cricket": -4.8,
+    "baseball": -5.6,
+    "boxing": 2.6,
+    "swimming": -9.9
+   }
+  },
+  {
+   "neuron": 17,
+   "fires_for_pairs": 98,
+   "fires_for_michael_jordan": 1.47,
+   "share_of_the_push_toward_basketball": 0.2,
+   "votes": {
+    "basketball": 11.5,
+    "soccer": -20.1,
+    "tennis": 2.5,
+    "golf": -3.9,
+    "cricket": 6.2,
+    "baseball": 9.0,
+    "boxing": 2.4,
+    "swimming": -12.8
+   }
+  },
+  {
+   "neuron": 38,
+   "fires_for_pairs": 215,
+   "fires_for_michael_jordan": 1.11,
+   "share_of_the_push_toward_basketball": 0.09,
+   "votes": {
+    "basketball": 7.0,
+    "soccer": 6.2,
+    "tennis": -7.9,
+    "golf": -3.7,
+    "cricket": -1.9,
+    "baseball": -7.0,
+    "boxing": 4.9,
+    "swimming": 4.1
+   }
+  }
+ ],
+ "michael_jordan": {
+  "neurons_firing": 31,
+  "of": 64
+ },
+ "edit_michael_jordan": {
+  "careful": {
+   "now_says": "baseball",
+   "other_facts_changed": 0,
+   "examples_changed": [],
+   "scores_before": {
+    "basketball": 18.4,
+    "soccer": -1.6,
+    "tennis": 4.5,
+    "golf": -18.3,
+    "cricket": -10.4,
+    "baseball": 5.0,
+    "boxing": 4.8,
+    "swimming": -28.8
+   },
+   "scores_after": {
+    "basketball": 5.0,
+    "soccer": -1.6,
+    "tennis": 4.5,
+    "golf": -18.3,
+    "cricket": -10.4,
+    "baseball": 18.4,
+    "boxing": 4.8,
+    "swimming": -28.8
+   },
+   "still_right": {
+    "Michael Phelps": "swimming",
+    "Michael Chang": "tennis",
+    "Magic Johnson": "basketball",
+    "Dustin Johnson": "golf"
+   },
+   "largest_weight_change": 0.715,
+   "typical_weight": 0.761
+  },
+  "naive": {
+   "now_says": "baseball",
+   "other_facts_changed": 5,
+   "examples_changed": [
+    {
+     "name": "Magic Johnson",
+     "was": "basketball",
+     "now": "baseball"
+    },
+    {
+     "name": "Michael Giggs",
+     "was": "basketball",
+     "now": "baseball"
+    },
+    {
+     "name": "Ryan Botham",
+     "was": "basketball",
+     "now": "baseball"
+    },
+    {
+     "name": "Magic McGwire",
+     "was": "basketball",
+     "now": "baseball"
+    },
+    {
+     "name": "Joe Botham",
+     "was": "basketball",
+     "now": "baseball"
+    }
+   ],
+   "scores_before": {
+    "basketball": 18.4,
+    "soccer": -1.6,
+    "tennis": 4.5,
+    "golf": -18.3,
+    "cricket": -10.4,
+    "baseball": 5.0,
+    "boxing": 4.8,
+    "swimming": -28.8
+   },
+   "scores_after": {
+    "basketball": 5.0,
+    "soccer": -1.6,
+    "tennis": 4.5,
+    "golf": -18.3,
+    "cricket": -10.4,
+    "baseball": 18.4,
+    "boxing": 4.8,
+    "swimming": -28.8
+   },
+   "still_right": {
+    "Michael Phelps": "swimming",
+    "Michael Chang": "tennis",
+    "Magic Johnson": "baseball",
+    "Dustin Johnson": "golf"
+   },
+   "largest_weight_change": 0.23,
+   "typical_weight": 0.761
+  }
+ },
+ "edit_everyone": {
+  "32": {
+   "careful": {
+    "edits": 1200,
+    "edit_took": 1200,
+    "other_facts_changed_mean": 21.4,
+    "other_facts_changed_worst": 116,
+    "edits_with_nothing_else_changed": 209
+   },
+   "naive": {
+    "edits": 1200,
+    "edit_took": 1200,
+    "other_facts_changed_mean": 83.58,
+    "other_facts_changed_worst": 284,
+    "edits_with_nothing_else_changed": 13
+   }
+  },
+  "64": {
+   "careful": {
+    "edits": 1200,
+    "edit_took": 1200,
+    "other_facts_changed_mean": 3.27,
+    "other_facts_changed_worst": 49,
+    "edits_with_nothing_else_changed": 500
+   },
+   "naive": {
+    "edits": 1200,
+    "edit_took": 1200,
+    "other_facts_changed_mean": 58.5,
+    "other_facts_changed_worst": 265,
+    "edits_with_nothing_else_changed": 14
+   }
+  },
+  "128": {
+   "careful": {
+    "edits": 1200,
+    "edit_took": 1200,
+    "other_facts_changed_mean": 0.25,
+    "other_facts_changed_worst": 5,
+    "edits_with_nothing_else_changed": 1012
+   },
+   "naive": {
+    "edits": 1200,
+    "edit_took": 1200,
+    "other_facts_changed_mean": 33.44,
+    "other_facts_changed_worst": 216,
+    "edits_with_nothing_else_changed": 19
+   }
+  },
+  "256": {
+   "careful": {
+    "edits": 1200,
+    "edit_took": 1200,
+    "other_facts_changed_mean": 0.01,
+    "other_facts_changed_worst": 2,
+    "edits_with_nothing_else_changed": 1186
+   },
+   "naive": {
+    "edits": 1200,
+    "edit_took": 1200,
+    "other_facts_changed_mean": 27.77,
+    "other_facts_changed_worst": 198,
+    "edits_with_nothing_else_changed": 8
+   }
+  }
+ }
+}

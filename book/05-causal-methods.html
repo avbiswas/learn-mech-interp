@@ -1,0 +1,812 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Causal Tools</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .hm-wrap { overflow-x: auto; }
+  .hm-wrap svg { display: block; min-width: 560px; }
+  .hm-cell { cursor: crosshair; }
+  .hm-cell:hover { stroke: var(--ink); stroke-width: 2; }
+  .legend-bar { display: flex; align-items: center; gap: 8px; font-family: var(--sans); font-size: 0.78125rem; color: var(--ink-3); margin-top: 8px; flex-wrap: wrap; }
+  .legend-bar .grad { width: 180px; height: 10px; border-radius: 5px; border: 1px solid var(--rule); }
+  .twocol { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 760px) { .twocol { grid-template-columns: 1fr; } }
+  .sentence { font-family: var(--mono); font-size: 0.8125rem; line-height: 2; margin: 6px 0; }
+  .sentence span { padding: 2px 3px; border-radius: 4px; }
+  .sentence .diff { background: var(--yellow-soft); outline: 1px solid var(--yellow); }
+  .sentence .hl { background: var(--accent); color: #fff; }
+  .rolebox { font-size: 0.875rem; color: var(--ink-2); min-height: 110px; }
+  .rolebox b { color: var(--ink); }
+  .mini-label { font-family: var(--sans); font-size: 0.75rem; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); font-weight: 700; margin: 10px 0 4px; }
+  .check li { list-style: none; position: relative; padding-left: 4px; }
+  .check li::before { content: "☐"; position: absolute; left: -1.3em; color: var(--accent); }
+  .barrow { display: grid; grid-template-columns: 150px 1fr 70px; gap: 10px; align-items: center; font-size: 0.84375rem; margin: 6px 0; }
+  .barrow .track { height: 14px; background: var(--bg-2); border-radius: 7px; position: relative; overflow: hidden; }
+  .barrow .fill { position: absolute; top: 0; bottom: 0; border-radius: 7px; transition: all .3s; }
+  .barrow .val { font-family: var(--mono); font-size: 0.78125rem; text-align: right; }
+</style>
+</head>
+<body data-chapter="5">
+<main>
+<article class="article">
+
+<div class="kicker">Chapter 5</div>
+<h1>Causal tools: ablation and patching</h1>
+<p class="lede">Looking at activations shows what is <em>correlated</em> with a behaviour. To find what <em>causes</em> it, you must reach into the model, change one thing, and watch the output. This chapter explains how.</p>
+
+<div class="tldr">
+<h3>In short</h3>
+<ul>
+<li>Every causal method does three things: pick a part of the model, replace its value, and measure the change in the output.</li>
+<li><b>Ablation</b> removes a part. The result depends a lot on <em>what value</em> you put in its place: zero, the mean, or a value from another input.</li>
+<li><b>Activation patching</b> copies an activation from a "clean" run into a "corrupted" run. It shows where the information that decides the answer lives. You can try it below on <b>real numbers from GPT-2 small</b>.</li>
+<li><b>Path patching</b>, <b>causal scrubbing</b> and <b>ACDC</b> test connections and whole circuits. <b>Attribution patching</b> makes all of this fast with gradients.</li>
+<li><b>DAS</b> searches for directions (not neurons) that act like variables in a simple program.</li>
+<li>All of these tools have traps: off-distribution values, self-repair, and "illusions" that you create yourself.</li>
+</ul>
+</div>
+
+<div class="callout example" id="learning-path">
+<span class="label">Learning path · Chapter 5 of 12 · about 50 min · 5 widgets · 4 quizzes</span>
+<p><b>Before you start:</b> <a href="04-transformers.html#residual-stream">Chapter 4: the residual stream</a> and <a href="04-transformers.html#qk-ov">attention heads</a> (heads, logits, direct logit attribution), and <a href="01-foundations.html#toolbox">Chapter 1: observe, then intervene</a>.</p>
+<p><b>You will learn:</b></p>
+<ul><li>the three steps of every causal method: pick a part, replace its value, measure the change</li><li>why the type of ablation (zero, mean or resample) changes the answer</li><li>how activation patching works, on real GPT-2 small data</li><li>how path patching, causal scrubbing, ACDC and attribution patching test whole circuits</li><li>the traps: off-distribution values, self-repair and subspace illusions</li></ul>
+</div>
+
+
+<h2 id="why-causal" data-short="Why correlation is not enough">Why correlation is not enough</h2>
+
+<p><a href="04-transformers.html">Chapter 4</a> gave us stories about heads and circuits, such as the induction head. How do we test such a story in a real model? This chapter gives the tools, which the field built mostly from 2020 to 2024. First, why looking is not enough. In <a href="07-probing-steering.html">Chapter 7</a> we meet probes. A probe reads information from activations. But a probe can find information that the model never uses. A neuron can fire on French text and still have no effect on the output. To show that a part <em>matters</em>, you must change it and see the output move.</p>
+
+<p>This idea is old. Neuroscientists damage a brain region and watch which skill is lost. Doctors run trials where they change one thing and keep the rest fixed. In a neural network, this is much easier. We can change any number we like, and we can run the same input again and again with no noise.</p>
+
+<p>Every method in this chapter follows the same three steps:</p>
+<ol>
+<li><b>Pick a part.</b> This can be a neuron, an attention head, the <span class="term" data-term="residual stream">residual stream</span> at one token, an edge between two parts, or a direction in activation space.</li>
+<li><b>Replace its value.</b> Use zero, an average, a value from a different input, or a value with noise added.</li>
+<li><b>Measure the change.</b> Look at how much the output moves.</li>
+</ol>
+
+<p>The methods differ in three ways: <b>what value</b> they put in, <b>what unit</b> they change (a node, an edge, or a subspace), and <b>how they make it fast</b> (real reruns or gradients).</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 200" role="img" aria-label="Correlation versus causation. Left: we watch a component and its output. Right: we reach in, replace the component value, and measure the output change.">
+  <defs><marker id="a51" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <text x="170" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="var(--blue)">OBSERVE: watch</text>
+  <text x="540" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">INTERVENE: poke</text>
+  <line x1="355" y1="10" x2="355" y2="190" stroke="var(--rule)"/>
+  <g font-size="12.5">
+    <rect x="20" y="80" width="70" height="40" rx="8" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="55" y="105" text-anchor="middle">input</text>
+    <rect x="125" y="60" width="90" height="80" rx="10" fill="var(--panel)" stroke="var(--ink-3)"/>
+    <circle cx="170" cy="100" r="16" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="170" y="155" text-anchor="middle" class="muted">model</text>
+    <rect x="250" y="80" width="80" height="40" rx="8" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="290" y="105" text-anchor="middle">output</text>
+    <line x1="92" y1="100" x2="122" y2="100" stroke="var(--ink-3)" marker-end="url(#a51)"/>
+    <line x1="217" y1="100" x2="247" y2="100" stroke="var(--ink-3)" marker-end="url(#a51)"/>
+    <path d="M170 82 Q 170 45 210 45" fill="none" stroke="var(--blue)" stroke-dasharray="3 3"/>
+    <text x="215" y="49" fill="var(--blue)">"it fires on French"</text>
+
+    <rect x="385" y="80" width="70" height="40" rx="8" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="420" y="105" text-anchor="middle">input</text>
+    <rect x="490" y="60" width="90" height="80" rx="10" fill="var(--panel)" stroke="var(--ink-3)"/>
+    <circle cx="535" cy="100" r="16" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text x="535" y="104" text-anchor="middle" font-weight="700" fill="var(--accent)">↺</text>
+    <text x="535" y="155" text-anchor="middle" class="muted">model</text>
+    <rect x="615" y="80" width="90" height="40" rx="8" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="660" y="105" text-anchor="middle">output Δ?</text>
+    <line x1="457" y1="100" x2="487" y2="100" stroke="var(--ink-3)" marker-end="url(#a51)"/>
+    <line x1="582" y1="100" x2="612" y2="100" stroke="var(--ink-3)" marker-end="url(#a51)"/>
+    <path d="M535 40 L 535 80" stroke="var(--accent)" stroke-width="2" marker-end="url(#a51)"/>
+    <text x="535" y="34" text-anchor="middle" fill="var(--accent)">replace value</text>
+  </g>
+</svg>
+<figcaption><b>Figure 5.1.</b> Observation tells you that a part is active. Intervention tells you whether the output depends on it.</figcaption>
+</figure>
+
+<div class="callout key">
+<span class="label">Key idea</span>
+<p>Correlation: watch. Causation: poke. A mechanistic claim is only as strong as the interventions that test it.</p>
+</div>
+
+<h2 id="ablation" data-short="Ablation">Ablation: turn it off and see what breaks</h2>
+
+<p>The simplest intervention is an <span class="term" data-term="ablation">ablation</span>. You remove the output of one part and measure how much worse the model gets. But there is a hard question. What does "remove" mean? During training, a part never outputs "nothing". It always outputs some number. So you must choose a replacement value. There are four common choices.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Type</th><th>Replacement value</th><th>Good</th><th>Bad</th></tr></thead>
+<tbody>
+<tr><td><b>Zero ablation</b></td><td>All zeros</td><td>Very simple</td><td>Zero can be a value the model never sees. Then you measure "the model is confused", not "this part mattered".</td></tr>
+<tr><td><b>Mean ablation</b></td><td>The average activation of this part over a reference dataset</td><td>Keeps the typical value. Less off-distribution.</td><td>Removes all input-specific information at once. The result depends on the dataset you average over.</td></tr>
+<tr><td><b>Resample ablation</b></td><td>The activation from a different, random input</td><td>Always a real value the model can produce</td><td>Noisy. You must average over many samples.</td></tr>
+<tr><td><b>Optimal ablation</b> (Li &amp; Janson, 2024)</td><td>The one constant that makes the loss go up the least</td><td>Measures only the information the part carries</td><td>Needs an optimization for each part</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The choice really matters. Some parts of GPT-2 small output a large, almost constant vector. This vector acts like a bias. If you set it to zero, the model breaks, even though the part carries no information about the input. Mean ablation shows the truth: the part is not important for the task. The IOI paper (<a href="06-circuit-case-studies.html">Chapter 6</a>) used mean ablation over an "ABC" dataset of prompts with three different names. The ACDC authors found that zero ablation and resample ablation can give different circuits.</p>
+
+<div class="widget" id="ablWidget">
+  <div class="widget-title">Interactive · Three ways to "remove" a neuron</div>
+  <div class="widget-sub">A toy neuron. Its activation is about 5 on every input (a large constant), plus a small part that depends on the input. The rest of the model expects values near 5. Pick an input, then pick an ablation. Compare how much damage each one reports. (Toy model, made for this page.)</div>
+  <div class="controls">
+    <div class="seg" id="ablType"><button data-t="none" class="on">No ablation</button><button data-t="zero">Zero</button><button data-t="mean">Mean</button><button data-t="resample">Resample</button></div>
+    <button class="btn" id="ablNew">New input</button>
+  </div>
+  <svg id="ablSvg" viewBox="0 0 640 210"></svg>
+  <div id="ablBars"></div>
+  <div class="readout" id="ablOut"></div>
+</div>
+
+<h3>Necessary or sufficient?</h3>
+<p>Ablation of one part tests whether that part is <b>necessary</b>: does the model still work without it? You can also ablate <em>everything except</em> a proposed circuit. This tests whether the circuit is <b>sufficient</b>: is it enough on its own? A good circuit claim needs both tests. Wang et al. (2022) named three criteria for circuits:</p>
+<ul>
+<li><b>Faithfulness:</b> the circuit alone does the task about as well as the full model.</li>
+<li><b>Completeness:</b> the circuit contains all the parts that matter.</li>
+<li><b>Minimality:</b> the circuit contains no parts that do not matter.</li>
+</ul>
+
+<div class="callout limit">
+<span class="label">Limit</span>
+<p>Ablation can <em>underestimate</em> how important a part is. When you remove one part, other parts sometimes change their behaviour to make up for it. This is called <span class="term" data-term="self-repair">self-repair</span>. We return to it in the section on pitfalls.</p>
+</div>
+
+<h2 id="mediation" data-short="Causal mediation (Vig 2020)">The root idea: causal mediation analysis</h2>
+
+<div class="paper"><div class="yr">2020</div><div><div class="t"><a href="https://arxiv.org/abs/2004.12265">Investigating Gender Bias in Language Models Using Causal Mediation Analysis</a></div><div class="a">Jesse Vig, Sebastian Gehrmann, Yonatan Belinkov, Sharon Qian, Daniel Nevo, Yaron Singer, Stuart Shieber · NeurIPS 2020</div><div class="s">Borrowed "mediation analysis" from statistics to ask which neurons and attention heads carry gender bias in GPT-2.</div></div></div>
+
+<p>Vig and colleagues gave the field its first clear causal recipe. They used a prompt like "The nurse said that". Then they compared the probability of "she" and "he". They asked: which internal parts <em>carry</em> the effect of the word "nurse"?</p>
+
+<p>Statistics has words for this. A <b>mediator</b> is a variable that sits between a cause and an effect.</p>
+<ul>
+<li>The <b>total effect</b> is how much the he/she ratio changes when you change the input word (for example, "nurse" to "man").</li>
+<li>The <b>indirect effect</b> of one component: keep the original input, but set that component to the value it would have under the changed input. If the output moves a lot, the component carries the effect.</li>
+<li>The <b>direct effect</b>: change the input, but freeze the component at its original value.</li>
+</ul>
+
+<p>They found that the gender effect was <b>sparse</b>. A small number of attention heads in middle layers, plus some neurons, carried most of it. The effect was also <b>synergistic</b> (some parts amplify it, others damp it) and split into a direct part and a part that flows through the mediators.</p>
+
+<div class="callout analogy">
+<span class="label">Why it matters</span>
+<p>"Set an internal variable to the value it would take under a different input" is exactly what activation patching does. Mediation analysis is its parent.</p>
+</div>
+
+<h2 id="activation-patching" data-short="Activation patching">Activation patching</h2>
+
+<p><span class="term" data-term="activation patching">Activation patching</span> is the main workhorse of mech interp. Three communities found it at about the same time, so it has three names:</p>
+<ul>
+<li><b>Interchange intervention</b> — from Atticus Geiger and colleagues at Stanford (2020 onward).</li>
+<li><b>Causal tracing</b> — from the ROME paper by Meng et al. (2022). It uses noise.</li>
+<li><b>Activation patching</b> — the name used by Anthropic, Redwood Research and Neel Nanda from 2022.</li>
+</ul>
+
+<h3>The three runs</h3>
+<p>We use the IOI task as the example. IOI means "indirect object identification". The model must finish a sentence with the right name. <a href="06-circuit-case-studies.html#ioi">Chapter 6</a> tells the full story of the circuit that GPT-2 small uses. In short: some heads notice which name is repeated (<b>S-inhibition heads</b> pass this signal on), and other heads copy the other name to the output (<b>name mover heads</b>). We will meet these names below.</p>
+
+<div class="steps" data-target="threeRuns">
+  <div class="step" data-label="1 · Clean run">
+    <p><b>Clean run.</b> Use an input where the model does the behaviour. "When Mary and John went to the store, John gave a drink to" → the model predicts <b>" Mary"</b>. Save (cache) every activation.</p>
+  </div>
+  <div class="step" data-label="2 · Corrupted run">
+    <p><b>Corrupted run.</b> Use an input that is almost the same, but where the answer changes. "When Mary and John went to the store, <u>Mary</u> gave a drink to" → now the model prefers <b>" John"</b>. Save every activation.</p>
+  </div>
+  <div class="step" data-label="3 · Patched run">
+    <p><b>Patched run.</b> Run the corrupted input again. But at ONE place (one layer, one token position, one component), paste in the clean activation. Measure how far the output moves back toward " Mary".</p>
+  </div>
+  <div class="step" data-label="4 · Repeat">
+    <p><b>Repeat</b> step 3 for every layer and every position. Each result fills one cell of a heatmap. Bright cells show where the information that decides the answer lives.</p>
+  </div>
+</div>
+
+<figure class="panel">
+<svg id="threeRuns" viewBox="0 0 720 270" role="img" aria-label="Three runs. Clean run with Mary as output. Corrupted run with John as output. Patched run: corrupted input, one activation copied from the clean run, output moves toward Mary.">
+  <defs><marker id="a52" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs>
+  <g font-size="12.5">
+    <text x="12" y="44" font-weight="700" fill="var(--green)">CLEAN</text>
+    <text x="12" y="134" font-weight="700" fill="var(--red)">CORRUPTED</text>
+    <text x="12" y="224" font-weight="700" fill="var(--accent)" data-show="3 4">PATCHED</text>
+    <g id="rowClean"></g><g id="rowCorr"></g><g id="rowPatch" data-show="3 4"></g>
+  </g>
+  <path d="M 381 60 C 420 120, 420 150, 381 196" fill="none" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#a52)" data-show="3 4"/>
+  <text x="430" y="128" font-size="12.5" fill="var(--accent)" font-weight="700" data-show="3 4">copy one activation</text>
+  <g data-show="4">
+    <rect x="580" y="192" width="132" height="56" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="646" y="215" text-anchor="middle" font-size="11.5">× every layer</text>
+    <text x="646" y="233" text-anchor="middle" font-size="11.5">and position → heatmap</text>
+  </g>
+</svg>
+<figcaption><b>Figure 5.2.</b> The three runs of activation patching. Each circle is the residual stream at one token in one layer. Use the buttons above to step through.</figcaption>
+</figure>
+
+<h3>Denoising and noising</h3>
+<p>You can patch in two directions. They answer different questions. Heimersheim and Nanda (2024) gave them clear names.</p>
+<ul>
+<li><b>Denoising</b>: run the <em>corrupted</em> input and patch in a <em>clean</em> activation. This asks: "Is this part <b>sufficient</b> to bring the behaviour back?"</li>
+<li><b>Noising</b>: run the <em>clean</em> input and patch in a <em>corrupted</em> activation. This asks: "Is this part <b>necessary</b>? Does breaking it break the behaviour?"</li>
+</ul>
+
+<figure class="panel">
+<svg viewBox="0 0 720 250" role="img" aria-label="Denoising versus noising on an OR circuit and an AND circuit.">
+  <g font-size="12.5">
+    <text x="180" y="20" text-anchor="middle" font-weight="700">"OR" circuit: either path is enough</text>
+    <text x="540" y="20" text-anchor="middle" font-weight="700">"AND" circuit: both paths needed</text>
+    <line x1="360" y1="8" x2="360" y2="240" stroke="var(--rule)"/>
+    <!-- OR -->
+    <circle cx="60" cy="110" r="16" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="60" y="114" text-anchor="middle">in</text>
+    <rect x="140" y="55" width="70" height="30" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="175" y="75" text-anchor="middle">path A</text>
+    <rect x="140" y="135" width="70" height="30" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="175" y="155" text-anchor="middle">path B</text>
+    <circle cx="290" cy="110" r="18" fill="var(--purple-soft)" stroke="var(--purple)"/><text x="290" y="114" text-anchor="middle">OR</text>
+    <path d="M76 104 L138 72 M76 116 L138 150 M212 70 L273 102 M212 150 L273 118" stroke="var(--ink-3)" fill="none"/>
+    <text x="30" y="192" font-size="12">Noising A (break A only): output stays →</text>
+    <text x="30" y="207" font-size="12">A looks <tspan font-weight="700" fill="var(--red)">unimportant</tspan></text>
+    <text x="30" y="226" font-size="12">Denoising A (restore A only): output returns →</text>
+    <text x="30" y="241" font-size="12">A looks <tspan font-weight="700" fill="var(--green)">important</tspan></text>
+    <!-- AND -->
+    <circle cx="420" cy="110" r="16" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="420" y="114" text-anchor="middle">in</text>
+    <rect x="500" y="55" width="70" height="30" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="535" y="75" text-anchor="middle">path A</text>
+    <rect x="500" y="135" width="70" height="30" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="535" y="155" text-anchor="middle">path B</text>
+    <circle cx="650" cy="110" r="18" fill="var(--purple-soft)" stroke="var(--purple)"/><text x="650" y="114" text-anchor="middle">AND</text>
+    <path d="M436 104 L498 72 M436 116 L498 150 M572 70 L633 102 M572 150 L633 118" stroke="var(--ink-3)" fill="none"/>
+    <text x="390" y="192" font-size="12">Noising A (break A only): output breaks →</text>
+    <text x="390" y="207" font-size="12">A looks <tspan font-weight="700" fill="var(--green)">important</tspan></text>
+    <text x="390" y="226" font-size="12">Denoising A (B still broken): nothing →</text>
+    <text x="390" y="241" font-size="12">A looks <tspan font-weight="700" fill="var(--red)">unimportant</tspan></text>
+  </g>
+</svg>
+<figcaption><b>Figure 5.3.</b> Noising and denoising are not symmetric. With redundant ("OR") paths, noising misses each path. With paths that must work together ("AND"), denoising misses each one. Use both when you can.</figcaption>
+</figure>
+
+<h3>What to measure</h3>
+<p>You need one number that says "how much the model prefers the right answer". There are several choices.</p>
+<ul>
+<li><b><span class="term" data-term="logit difference">Logit difference</span></b> (the usual choice): logit(" Mary") − logit(" John"). It is linear in the final residual stream, so it splits cleanly into parts. It also cancels shifts that affect both names the same way.</li>
+<li><b>Probability</b> of the right answer: easy to understand, but it saturates. Softmax squashes large changes. It can hide parts that push <em>against</em> the answer.</li>
+<li><b>KL divergence</b> (a standard measure of how different two probability distributions are) between the patched and clean output distributions: it does not need a specific answer. ACDC uses it.</li>
+</ul>
+<p>Most heatmaps show a <b>normalized</b> score:</p>
+<div class="mathblock">score = (LD_patched − LD_corrupted) / (LD_clean − LD_corrupted)</div>
+<p>A score of 0 means "patching did nothing; the output is still corrupted". A score of 1 means "fully restored to clean". Scores can be below 0 or above 1.</p>
+
+<h2 id="real-patching" data-short="Try it: real GPT-2 data">Try it: real activation patching on GPT-2 small</h2>
+
+<p>The widget below uses <b>real numbers</b>. We computed them for this survey. We ran GPT-2 small (12 layers, 12 heads per layer) with the Hugging Face <code>transformers</code> library. We used denoising: run the corrupted prompt, paste in one clean activation, and read the normalized logit difference. On the clean prompt, the logit difference is +2.01 (the model prefers " Mary"). The scores come from one prompt pair, so they are an example, not an average.</p>
+
+<div class="widget wide" id="patchWidget">
+  <div class="widget-title">Interactive · Activation patching heatmap (real GPT-2 small data)</div>
+  <div class="widget-sub">Each cell = one patched run. Rows are layers (0 at top). Columns are token positions. Colour = normalized score: <b style="color:var(--accent)">orange</b> = restores the clean answer, <b style="color:var(--blue)">blue</b> = pushes the other way. Hover a cell to see its exact value.</div>
+  <div class="controls">
+    <label>Corruption <span class="seg" id="pwCorr"><button data-v="0" class="on">Swap 2nd name (S2)</button><button data-v="1">Replace all names</button></span></label>
+    <label>Component <span class="seg" id="pwComp"><button data-v="resid_pre" class="on">Residual stream</button><button data-v="attn_out">Attention out</button><button data-v="mlp_out">MLP out</button></span></label>
+  </div>
+  <div class="mini-label">Clean prompt (patched position highlighted)</div>
+  <div class="sentence" id="pwClean"></div>
+  <div class="mini-label">Corrupted prompt (tokens that differ are boxed)</div>
+  <div class="sentence" id="pwCorrS"></div>
+  <div class="hm-wrap"><svg id="pwSvg" viewBox="0 0 900 400"></svg></div>
+  <div class="legend-bar" id="pwLegend"></div>
+  <div class="readout" id="pwOut">Hover a cell.</div>
+  <p class="widget-sub" id="pwExplain" style="margin-top:14px"></p>
+</div>
+
+<p>Here is what to look for.</p>
+<ul>
+<li><b>With the S2 swap</b>, only the second name differs between the two prompts. So in layer 0, only the S2 column (the second " John") can matter. The signal stays at S2 through the early layers. Around layers 7 to 9, it moves to the final token " to". From layer 9 on, almost only the final column is bright. The information has been <em>moved</em> by attention heads from S2 to the end. This "hand-off" shape is the classic IOI result.</li>
+<li><b>With the "replace all names" corruption</b>, the corrupted prompt is "When Alice and Bob went to the store, Bob gave a drink to". All three name tokens differ, but the pattern (one name repeated) stays the same. Note: this is <em>not</em> the "ABC" dataset of the IOI paper, where three different names appear. Now the " Mary" column (the indirect object) is very bright in early layers. It is the source of the answer. The S1 column is negative: restoring the first " John" alone confuses the model. Late layers again focus on the final token.</li>
+<li>Switch to <b>Attention out</b> and <b>MLP out</b> to see which kind of block does the work at each step.</li>
+</ul>
+
+<h3>Zooming in: one cell per attention head</h3>
+<p>The heatmap above tells us <em>where</em>. Now we ask <em>who</em>. We patch the output of each of the 144 attention heads, one at a time. Hover a head to see the role that the IOI paper gave it.</p>
+
+<div class="widget wide" id="headWidget">
+  <div class="widget-title">Interactive · Patching each attention head (real GPT-2 small data)</div>
+  <div class="widget-sub">Rows = layers, columns = head index. Head "L.H" means layer L, head H. Corruption follows the choice in the widget above.</div>
+  <div class="controls">
+    <label>Patch the head at <span class="seg" id="hwPos"><button data-v="heads_all_pos" class="on">All positions</button><button data-v="heads_final_pos">Final position only</button></span></label>
+    <label>Corruption <span class="seg" id="hwCorr"><button data-v="0" class="on">S2 swap</button><button data-v="1">Replace all names</button></span></label>
+  </div>
+  <div class="twocol">
+    <div><svg id="hwSvg" viewBox="0 0 460 440" style="width:100%"></svg></div>
+    <div>
+      <div class="rolebox" id="hwRole"><b>Hover a head.</b><br>Heads with a known role in the IOI circuit have a dark outline.</div>
+      <div class="mini-label" id="hwPatLabel"></div>
+      <svg id="hwPat" viewBox="0 0 390 190"></svg>
+    </div>
+  </div>
+</div>
+
+<p>The two corruptions light up different heads, because they test different information.</p>
+<ul>
+<li>The <b>S2 swap</b> only changes which name is repeated. So it lights up the heads that carry the "this name is repeated" signal: the <b>S-inhibition heads 7.3, 7.9, 8.6 and 8.10</b>. Head 9.9, a name mover, also shows up. With "All positions", the induction head 5.5 (which acts at S2) also lights up.</li>
+<li>The <b>replace-all-names</b> corruption keeps the repeat pattern but changes the names themselves. So the S-inhibition signal is the same in both runs, and it lights up the heads that copy a name to the output: the <b>name mover heads 9.6, 9.9 and 10.0</b>. Some backup name movers (10.1, 10.10, 11.2) are also positive.</li>
+<li>In both cases, <b>head 10.7</b> is strongly negative, and with replaced names <b>11.10</b> is too. These are the <b>negative name movers</b>. They push <em>against</em> the answer. (With replaced names, the backup heads 10.2 and 10.6 are also negative on this one prompt, so a "backup" label does not fix the sign of a head.) Later work showed that 10.7 does "copy suppression" (<a href="06-circuit-case-studies.html">Chapter 6</a>).</li>
+</ul>
+
+<div class="callout good">
+<span class="label">This matches the paper</span>
+<p>Our quick run on one prompt pair recovers the same head classes that Wang et al. found with many prompts and careful path patching. That is a good sign: the IOI circuit is a stable, real feature of GPT-2 small.</p>
+</div>
+
+<div class="callout warn">
+<span class="label">What patching can and cannot see</span>
+<p>Patching shows where the information that makes the clean and corrupted runs <em>different</em> is used. If both prompts share a feature, patching cannot see it. For example, both of our prompts contain "gave a drink to", so the heads that notice "a name comes next" do not light up. Choose the corruption to match your question.</p>
+</div>
+
+<h3>Best practices</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2309.16042">Towards Best Practices of Activation Patching in Language Models: Metrics and Methods</a></div><div class="a">Fred Zhang, Neel Nanda · ICLR 2024</div><div class="s">A careful study of how the choices in patching change the results.</div></div></div>
+
+<p>Zhang and Nanda tested the choices one by one. They found:</p>
+<ol>
+<li><b>How you corrupt matters.</b> Gaussian noise on the embeddings (the ROME method) can push the model off-distribution. It can point to different layers than a natural corruption. They recommend <b>symmetric token replacement</b>: swap in a similar token, such as another name or another city.</li>
+<li><b>The metric matters.</b> Probability can miss negative components, such as the negative name movers. Logit difference shows them.</li>
+<li><b>Patching many layers at once</b> (a "sliding window", as in ROME) can make an effect look more localized than it is.</li>
+</ol>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2404.15255">How to use and interpret activation patching</a></div><div class="a">Stefan Heimersheim, Neel Nanda</div><div class="s">A practical guide: denoising vs noising, choice of prompts and metrics, and how to read the results.</div></div></div>
+
+<p>Their main advice: start coarse, then refine. First patch the residual stream by layer and position. Then split into attention and MLP. Then go to single heads. Then use path patching to test connections.</p>
+
+<h2 id="causal-tracing" data-short="Causal tracing (ROME)">Causal tracing: where are facts stored?</h2>
+
+<div class="paper"><div class="yr">2022</div><div><div class="t"><a href="https://arxiv.org/abs/2202.05262">Locating and Editing Factual Associations in GPT</a> (ROME)</div><div class="a">Kevin Meng, David Bau, Alex Andonian, Yonatan Belinkov · NeurIPS 2022</div><div class="s">Used noise-based patching to find where GPT recalls facts, then edited one fact with a rank-one weight change.</div></div></div>
+
+<p>Meng and colleagues asked where a model stores facts. They used prompts like "The Space Needle is in downtown" → "Seattle". Their version of patching is called <span class="term" data-term="causal tracing">causal tracing</span>.</p>
+<ol>
+<li><b>Clean run</b>: the model says "Seattle".</li>
+<li><b>Corrupted run</b>: add Gaussian noise to the embeddings of the subject tokens ("The Space Needle"). The noise had a standard deviation of 3 times the normal spread of embeddings. Now the model usually cannot recall "Seattle".</li>
+<li><b>Restore</b> one clean hidden state at one (token, layer). Measure how much the probability of "Seattle" comes back. They did this for the residual stream, for MLP outputs and for attention outputs.</li>
+</ol>
+
+<figure class="panel">
+<svg viewBox="0 0 720 260" id="romeFig" role="img" aria-label="Schematic causal tracing heatmap: two bright regions, middle-layer MLPs at the last subject token, and late layers at the last token."></svg>
+<figcaption><b>Figure 5.4.</b> Schematic of the ROME causal-tracing result (drawn for this page, not the real data). Rows are tokens; asterisks mark the noised subject tokens. There are two hot spots: an <b>early site</b> in middle layers at the last subject token ("le*"), strongest for MLP outputs, and a <b>late site</b> at the last token.</figcaption>
+</figure>
+
+<p>They read the early site as: "middle-layer MLPs store the fact, keyed by the last token of the subject." Then they built ROME (Rank-One Model Editing). ROME changes one MLP weight matrix with a small, rank-one update to change one fact, for example to make the model say the Space Needle is in Paris. They used GPT-2 XL (1.5B parameters) and GPT-J.</p>
+
+<div class="callout limit">
+<span class="label">Limits</span>
+<p>Hase et al. (2023), "Does Localization Inform Editing?", found that the layer where causal tracing puts a fact does <b>not</b> predict which layer is best to edit. And Zhang &amp; Nanda showed that Gaussian noise is off-distribution and can mislead. Causal tracing finds where information <em>flows</em> on this input. That is not always where it is "stored".</p>
+</div>
+
+<h2 id="interchange" data-short="Interchange & causal abstraction">Interchange interventions and causal abstraction</h2>
+
+<p>Atticus Geiger, Christopher Potts, Thomas Icard and colleagues built a formal theory around patching. They call it <b>causal abstraction</b>.</p>
+
+<div class="paper"><div class="yr">2021</div><div><div class="t"><a href="https://arxiv.org/abs/2106.02997">Causal Abstractions of Neural Networks</a></div><div class="a">Atticus Geiger, Hanson Lu, Thomas Icard, Christopher Potts · NeurIPS 2021</div><div class="s">Defines when a neural network "implements" a simple high-level program.</div></div></div>
+
+<p>The idea works like this.</p>
+<ol>
+<li>Write a small <b>high-level program</b> with named variables. For the task "is (a + b) &gt; c?", the program has a variable S = a + b, and then the output is "S &gt; c".</li>
+<li>Guess which neurons in the network hold the variable S.</li>
+<li>Take two inputs. Run the network on input 1, but swap in the "S neurons" from input 2. This swap is an <b>interchange intervention</b>.</li>
+<li>Ask the program what <em>should</em> happen if S had input 2's value. Compare with what the network did.</li>
+</ol>
+<p>If the network matches the program on most swaps, then the program is a good description of the network. The fraction of matches is called <b>interchange intervention accuracy (IIA)</b>. This gives a clear, testable meaning to "the network implements this algorithm".</p>
+
+<p>The same group later used these swaps as a training signal (Interchange Intervention Training, ICML 2022), and wrote a full theory paper, "Causal Abstraction: A Theoretical Foundation for Mechanistic Interpretability" (2023).</p>
+
+<h2 id="path-patching" data-short="Path patching">Path patching: test a connection, not a node</h2>
+
+<p>Activation patching asks "does this <em>node</em> matter?". But a circuit is made of <em>connections</em>. <span class="term" data-term="path patching">Path patching</span> asks "does the connection from node A to node B matter?".</p>
+
+<p>Here is the trick. Patch A's clean output, but feed it <b>only into B</b>. Every other part after A still sees A's corrupted value. This isolates one edge.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 240" role="img" aria-label="Path patching: the clean value of sender A flows only along the edge to receiver B. Other edges out of A carry the corrupted value.">
+  <defs>
+    <marker id="a53" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--green)"/></marker>
+    <marker id="a54" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--red)"/></marker>
+  </defs>
+  <g font-size="12.5">
+    <text x="60" y="25" class="muted" font-size="11.5">LAYER 7</text><text x="300" y="25" class="muted" font-size="11.5">LAYER 9</text><text x="560" y="25" class="muted" font-size="11.5">OUTPUT</text>
+    <rect x="40" y="95" width="120" height="44" rx="10" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="2"/>
+    <text x="100" y="114" text-anchor="middle" font-weight="700">A = head 7.3</text><text x="100" y="130" text-anchor="middle" font-size="11">(sender)</text>
+    <rect x="280" y="45" width="120" height="44" rx="10" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="2"/>
+    <text x="340" y="64" text-anchor="middle" font-weight="700">B = head 9.9</text><text x="340" y="80" text-anchor="middle" font-size="11">(receiver)</text>
+    <rect x="280" y="150" width="120" height="44" rx="10" fill="var(--bg-2)" stroke="var(--ink-3)"/>
+    <text x="340" y="177" text-anchor="middle">other heads, MLPs</text>
+    <rect x="540" y="95" width="130" height="44" rx="10" fill="var(--bg-2)" stroke="var(--ink-3)"/>
+    <text x="605" y="122" text-anchor="middle">logit diff</text>
+    <path d="M162 108 C 220 90, 230 70, 277 67" stroke="var(--green)" stroke-width="3" fill="none" marker-end="url(#a53)"/>
+    <text x="214" y="110" fill="var(--green)" font-weight="700">clean value</text>
+    <path d="M162 128 C 220 150, 230 170, 277 172" stroke="var(--red)" stroke-width="2" stroke-dasharray="5 4" fill="none" marker-end="url(#a54)"/>
+    <text x="180" y="190" fill="var(--red)">corrupted value</text>
+    <path d="M402 67 C 470 70, 480 100, 537 112" stroke="var(--ink-3)" stroke-width="2" fill="none"/>
+    <path d="M402 172 C 470 170, 480 135, 537 125" stroke="var(--ink-3)" stroke-width="2" fill="none"/>
+    <text x="360" y="225" text-anchor="middle" font-size="12" class="muted">Only the A → B edge gets the clean signal. If the output recovers, that edge matters.</text>
+  </g>
+</svg>
+<figcaption><b>Figure 5.5.</b> Path patching isolates one edge. Here the sender is an S-inhibition head and the receiver is a name mover head, as in the IOI circuit.</figcaption>
+</figure>
+
+<div class="paper"><div class="yr">2022</div><div><div class="t"><a href="https://arxiv.org/abs/2211.00593">Interpretability in the Wild: a Circuit for Indirect Object Identification in GPT-2 small</a></div><div class="a">Kevin Wang, Alexandre Variengien, Arthur Conmy, Buck Shlegeris, Jacob Steinhardt · ICLR 2023</div><div class="s">Introduced path patching and used it to find a 26-head circuit in 7 classes.</div></div></div>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2304.05969">Localizing Model Behavior with Path Patching</a></div><div class="a">Nicholas Goldowsky-Dill, Chris MacLeod, Lucas Sato, Aryaman Arora</div><div class="s">A general, formal version of path patching.</div></div></div>
+
+<p>The IOI team used path patching backwards from the output. First they found the heads that write the answer directly (the name movers). Then they asked which heads feed the name movers' queries (the S-inhibition heads). Then which heads feed those (duplicate token and induction heads). Step by step, they built the full circuit. <a href="06-circuit-case-studies.html">Chapter 6</a> tells the story.</p>
+
+<div class="callout limit">
+<span class="label">Limit</span>
+<p>The number of possible paths explodes as the model grows. You need a good hypothesis to know which paths to test. This is why people built automatic methods, such as ACDC.</p>
+</div>
+
+<h2 id="causal-scrubbing" data-short="Causal scrubbing">Causal scrubbing: test a whole hypothesis</h2>
+
+<div class="paper"><div class="yr">2022</div><div><div class="t"><a href="https://www.alignmentforum.org/posts/JvZhhzycHu2Yd57RN/causal-scrubbing-a-method-for-rigorously-testing">Causal Scrubbing: a method for rigorously testing interpretability hypotheses</a></div><div class="a">Lawrence Chan, Adrià Garriga-Alonso, Nicholas Goldowsky-Dill, Ryan Greenblatt, Jenny Nitishinskaya, Ansh Radhakrishnan, Buck Shlegeris, Nate Thomas · Redwood Research</div><div class="s">Turns an explanation into a strict test using resampling.</div></div></div>
+
+<p>Redwood Research wanted a strict test for a full explanation. Their method is called <span class="term" data-term="causal scrubbing">causal scrubbing</span>. It works like this.</p>
+<ol>
+<li>Write your hypothesis as a map. Each model part maps to a step in a simple computation. Also say what information each part depends on. For example: "this head only uses the previous token".</li>
+<li>For each part, find other inputs that your hypothesis says are <em>equivalent</em>. For the example: any input with the same previous token.</li>
+<li>Replace the part's activation with its value on one of those equivalent inputs. Do this for everything at once. This "scrubs" away all information your hypothesis says does not matter.</li>
+<li>If the hypothesis is right, the model should still perform well.</li>
+</ol>
+<p>The score is the <b>fraction of loss recovered</b>: how much of the gap between the full model and a fully scrambled model your hypothesis keeps. They tested it on induction heads in a small attention-only model and on a model that checks if parentheses are balanced.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 220" role="img" aria-label="Causal scrubbing: inputs grouped into colour classes by the feature the hypothesis says matters. A component's activation is swapped with one from another input in the same class.">
+  <g font-size="12.5">
+    <text x="20" y="24" font-weight="700">Hypothesis: "head X only uses the previous token"</text>
+    <g id="scrubRows"></g>
+    <rect x="520" y="70" width="180" height="90" rx="10" fill="var(--panel)" stroke="var(--rule)"/>
+    <text x="610" y="96" text-anchor="middle" font-weight="700">Loss recovered</text>
+    <rect x="540" y="110" width="140" height="16" rx="8" fill="var(--bg-2)"/>
+    <rect x="540" y="110" width="122" height="16" rx="8" fill="var(--green)"/>
+    <text x="610" y="148" text-anchor="middle" font-size="12" class="muted">high = hypothesis survives</text>
+  </g>
+</svg>
+<figcaption><b>Figure 5.6.</b> Causal scrubbing. Inputs are grouped by the feature that the hypothesis says matters (here, the previous token, shown by colour). The head's activation on one input is swapped for its activation on another input of the same colour. If the hypothesis is right, the loss barely changes.</figcaption>
+</figure>
+
+<div class="callout limit">
+<span class="label">Limit</span>
+<p>Causal scrubbing is strict and costly. It needs a very precise hypothesis. And a hypothesis that is only partly right can sometimes pass, because errors can cancel out.</p>
+</div>
+
+<h2 id="acdc" data-short="ACDC: automatic circuits">ACDC: automatic circuit discovery</h2>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2304.14997">Towards Automated Circuit Discovery for Mechanistic Interpretability</a></div><div class="a">Arthur Conmy, Augustine N. Mavor-Parker, Aengus Lynch, Stefan Heimersheim, Adrià Garriga-Alonso · NeurIPS 2023 (spotlight)</div><div class="s">Automates path patching: delete every edge whose removal barely changes the output.</div></div></div>
+
+<p>Finding the IOI circuit by hand took months. <span class="term" data-term="acdc">ACDC</span> (Automatic Circuit DisCovery) does the search automatically.</p>
+<ol>
+<li>Treat the model as a graph. Nodes are heads and MLPs. Edges connect them.</li>
+<li>Start at the output and move backwards. For each edge, replace its value with the value from the corrupted input.</li>
+<li>Measure the KL divergence between the new output and the original output. If it goes up by less than a threshold τ, <b>delete the edge for good</b>. Otherwise, keep it.</li>
+<li>The edges that remain are the circuit.</li>
+</ol>
+<p>ACDC found the circuits that people had found by hand: IOI, greater-than, docstring, induction, and Tracr programs. For greater-than in GPT-2 small, it kept <b>68 of about 32,000 edges</b>, and all of them had also been found manually.</p>
+
+<div class="widget" id="acdcWidget">
+  <div class="widget-title">Interactive · ACDC on a toy graph</div>
+  <div class="widget-sub">A made-up model graph. Each edge has an "effect" (how much the KL divergence goes up if you corrupt it). ACDC visits edges from the output backwards and deletes each edge whose effect is below τ. Press Step or Run. Change τ and reset to see bigger or smaller circuits.</div>
+  <div class="controls">
+    <label>Threshold τ <input type="range" id="acdcTau" min="0.01" max="0.4" step="0.01" value="0.08"> <output id="acdcTauO">0.08</output></label>
+    <button class="btn" id="acdcStep">Step</button>
+    <button class="btn primary" id="acdcRun">Run</button>
+    <button class="btn" id="acdcReset">Reset</button>
+  </div>
+  <svg id="acdcSvg" viewBox="0 0 640 330"></svg>
+  <div class="readout" id="acdcOut"></div>
+</div>
+
+<div class="callout limit">
+<span class="label">Limits</span>
+<p>ACDC needs one forward pass per edge, so it is slow on large models. The threshold is a free choice. The greedy order can change the result. And it can miss parts whose effects cancel out, such as a positive head and a negative head that balance each other.</p>
+</div>
+
+<h2 id="attribution-patching" data-short="Attribution patching (fast)">Attribution patching: patching at the speed of gradients</h2>
+
+<p>Activation patching needs one forward pass for every cell in the heatmap. For a large model with millions of possible patches, this is far too slow. <span class="term" data-term="attribution patching">Attribution patching</span> uses a shortcut from calculus.</p>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://www.neelnanda.io/mechanistic-interpretability/attribution-patching">Attribution Patching: Activation Patching At Industrial Scale</a></div><div class="a">Neel Nanda · blog post</div><div class="s">Estimate every patching result at once with one backward pass.</div></div></div>
+
+<p>The idea: if you change an activation <span class="math">a</span> by a small amount, the metric changes by about the gradient times that amount. So:</p>
+<div class="mathblock">Δmetric ≈ (a_clean − a_corrupted) · ∂metric/∂a&nbsp;&nbsp;(gradient taken on the corrupted run)</div>
+<p>You need one clean forward pass, one corrupted forward pass and one backward pass. Then you get an estimate for <b>every</b> component at once. This is a <b>first-order Taylor approximation</b>: it replaces the true curve by a straight line.</p>
+
+<div class="widget" id="tanWidget">
+  <div class="widget-title">Interactive · When the straight-line estimate fails</div>
+  <div class="widget-sub">The curve shows the metric as we slide one activation from its corrupted value (α = 0) to its clean value (α = 1). The true patching effect is f(1) − f(0). Attribution patching uses the slope at α = 0 (orange line). Integrated gradients averages the slope at several points (purple). Make the curve steeper, like a saturated softmax, and watch the plain estimate fail.</div>
+  <div class="controls">
+    <label>Saturation <input type="range" id="tanK" min="0" max="14" step="0.5" value="6"> <output id="tanKO">6</output></label>
+    <label>Midpoint <input type="range" id="tanC" min="0.1" max="0.9" step="0.05" value="0.6"> <output id="tanCO">0.6</output></label>
+    <label>IG steps <input type="range" id="tanN" min="1" max="20" step="1" value="5"> <output id="tanNO">5</output></label>
+  </div>
+  <svg id="tanSvg" viewBox="0 0 640 280"></svg>
+  <div id="tanBars"></div>
+</div>
+
+<h3>The family of fast methods</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2310.10348">Attribution Patching Outperforms Automated Circuit Discovery</a> (EAP)</div><div class="a">Aaquib Syed, Can Rager, Arthur Conmy · BlackboxNLP 2024</div><div class="s">Applies attribution patching to edges. Matches or beats ACDC, and is far faster.</div></div></div>
+<p><b>Edge Attribution Patching (EAP)</b> scores each edge u → v as (clean output of u − corrupted output of u) · (gradient of the metric with respect to the input of v). Two forward passes and one backward pass give scores for all edges. Keep the top edges.</p>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2403.17806">Have Faith in Faithfulness: Going Beyond Circuit Overlap When Finding Model Mechanisms</a> (EAP-IG)</div><div class="a">Michael Hanna, Sandro Pezzelle, Yonatan Belinkov · COLM 2024</div><div class="s">Replaces the single gradient with integrated gradients. Argues that circuits should be judged by faithfulness.</div></div></div>
+<p><b>EAP-IG</b> averages the gradient along the straight line from corrupted to clean activations (often 5 to 50 steps). This fixes much of the error of the straight-line estimate. The authors also argued that we should judge a circuit by <span class="term" data-term="faithfulness">faithfulness</span> (does it reproduce the model's behaviour?), not by how much it overlaps with a "true" circuit. EAP-IG became a strong default method.</p>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2403.00745">AtP*: An efficient and scalable method for localizing LLM behaviour to components</a></div><div class="a">János Kramár, Tom Lieberum, Rohin Shah, Neel Nanda · Google DeepMind</div><div class="s">Finds two ways that attribution patching misses important parts, and fixes both.</div></div></div>
+<p>The DeepMind team found that attribution patching (AtP) is the best fast method, but it has two kinds of <b>false negatives</b> (important parts that it scores as unimportant):</p>
+<ol>
+<li><b>Saturated attention.</b> When the softmax is saturated, its gradient is tiny. The fix: for queries and keys, really recompute the attention pattern, and only then use the straight-line estimate.</li>
+<li><b>Cancellation.</b> A part's direct effect and indirect effect can cancel. The fix, called <b>GradDrop</b>: switch off the gradient through one layer at a time and average the results.</li>
+</ol>
+<p>They tested it on Pythia models up to 12B parameters.</p>
+
+<div class="callout key">
+<span class="label">Key idea</span>
+<p>By 2024 the "gradient" world and the "patching" world had merged. Attribution patching is gradient × (activation difference). EAP-IG is integrated gradients applied to components. The same math reappears in the attribution graphs of <a href="09-circuit-tracing.html">Chapter 9</a>.</p>
+</div>
+
+<h2 id="das" data-short="DAS: find directions">Distributed Alignment Search: patch directions, not neurons</h2>
+
+<p>Because of <a href="03-superposition.html">superposition</a>, a variable may not live in single neurons. It may live in a <span class="term" data-term="direction">direction</span> or a subspace that mixes many neurons. Patching single neurons will then miss it.</p>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2303.02536">Finding Alignments Between Interpretable Causal Variables and Distributed Neural Representations</a></div><div class="a">Atticus Geiger, Zhengxuan Wu, Christopher Potts, Thomas Icard, Noah D. Goodman · CLeaR 2024</div><div class="s">Learns a rotation so that a few rotated dimensions behave like a variable of a high-level program.</div></div></div>
+
+<p><span class="term" data-term="das">DAS</span> learns a <b>rotation</b> of activation space. The model's weights stay frozen. Only the rotation is trained. The training goal: when you do interchange interventions on the first <span class="math">k</span> rotated dimensions, the network should act like the high-level program. In other words, DAS searches for the subspace that holds the variable.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 260" role="img" aria-label="DAS rotation. Left: data in the neuron basis, the variable is spread over both neurons. Right: in the rotated basis, one axis matches the variable.">
+  <defs><marker id="a55" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
+  <marker id="a56" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs>
+  <g font-size="12.5">
+    <text x="170" y="20" text-anchor="middle" font-weight="700">Neuron basis</text>
+    <line x1="60" y1="210" x2="290" y2="210" stroke="var(--ink-3)" marker-end="url(#a55)"/><text x="285" y="228" text-anchor="end" class="muted">neuron 1</text>
+    <line x1="60" y1="210" x2="60" y2="35" stroke="var(--ink-3)" marker-end="url(#a55)"/><text x="66" y="44" class="muted">neuron 2</text>
+    <g id="dasLeft"></g>
+    <text x="170" y="250" text-anchor="middle" font-size="12" class="muted">"S is big" is spread across both neurons</text>
+    <text x="360" y="130" text-anchor="middle" font-size="22" fill="var(--accent)">⟳</text>
+    <text x="360" y="152" text-anchor="middle" font-size="11.5" fill="var(--accent)">learned rotation</text>
+    <text x="560" y="20" text-anchor="middle" font-weight="700">Rotated basis</text>
+    <g transform="translate(560,130) rotate(-35)">
+      <line x1="-120" y1="0" x2="125" y2="0" stroke="var(--accent)" stroke-width="2" marker-end="url(#a56)"/>
+      <line x1="0" y1="90" x2="0" y2="-95" stroke="var(--ink-3)" marker-end="url(#a55)"/>
+    </g>
+    <g id="dasRight"></g>
+    <text x="640" y="46" fill="var(--accent)" font-weight="700">axis 1 = S</text>
+    <text x="560" y="250" text-anchor="middle" font-size="12" class="muted">patch only axis 1 → swaps the value of S</text>
+  </g>
+</svg>
+<figcaption><b>Figure 5.7.</b> DAS. In the neuron basis, the variable is spread over two neurons. After a learned rotation, one axis lines up with the variable. Interchange interventions on that axis then swap the variable cleanly.</figcaption>
+</figure>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2305.08809">Interpretability at Scale: Identifying Causal Mechanisms in Alpaca</a> (Boundless DAS)</div><div class="a">Zhengxuan Wu, Atticus Geiger, Thomas Icard, Christopher Potts, Noah D. Goodman · NeurIPS 2023</div><div class="s">Makes DAS scale to a 7B model by learning the size of the subspace.</div></div></div>
+<p><b>Boundless DAS</b> learns the size of the subspace with soft masks, so it scales to a 7-billion-parameter model. The task was "Price Tagging": "Please say yes only if it costs between [1.30] and [8.55] dollars, otherwise no." They found that Alpaca (7B) uses two clear boolean variables: "is the price above the lower bound?" and "is the price below the upper bound?". This held even when the inputs and instructions changed.</p>
+
+<h2 id="pitfalls" data-short="Pitfalls">Pitfalls: when interventions mislead</h2>
+
+<p>Interventions are stronger than observation. But they can still mislead. Here are the main traps.</p>
+
+<div class="tabs">
+<div class="tab-panel" data-label="Off-distribution values">
+<p>When you put a value into the model that it never sees in training, you test the model in a strange state. Zero ablation and Gaussian noise are common causes. The model may break for reasons that have nothing to do with your question. <b>Fix:</b> prefer mean or resample ablation, and natural corruptions such as swapping one name for another.</p>
+</div>
+<div class="tab-panel" data-label="Self-repair (hydra effect)">
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2307.15771">The Hydra Effect: Emergent Self-repair in Language Model Computations</a></div><div class="a">Thomas McGrath, Matthew Rahtz, János Kramár, Vladimir Mikulik, Shane Legg · DeepMind</div><div class="s">Ablate one attention layer and later layers change to compensate.</div></div></div>
+<p>McGrath and colleagues ablated an attention layer in a 7B Chinchilla model on a factual recall task. <b>Later attention layers changed their behaviour to make up for the loss</b>, like a hydra growing a new head. They also found late MLP layers that act as "erasers" and push down the most likely token. This happened even in models trained without dropout.</p>
+<p>Rushing and Nanda (ICML 2024, "Explorations of Self-Repair in Language Models") found self-repair in many model families and sizes. It is <b>imperfect</b> (it does not fully restore) and <b>noisy</b> (it varies a lot by prompt). They found two causes. First, <b>LayerNorm scaling</b>: removing a head changes the vector's size, and the final LayerNorm rescales it. Second, <b>anti-erasure</b>: neurons that were erasing the answer stop doing so.</p>
+<p>The IOI circuit shows this too. When you ablate the name movers, <b>backup name movers</b> take over.</p>
+<p><b>Result:</b> the drop you measure after an ablation can be smaller than the part's real importance. The direct effect and the total effect can differ.</p>
+</div>
+<div class="tab-panel" data-label="Subspace illusions">
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2311.17030">Is This the Subspace You Are Looking For? An Interpretability Illusion for Subspace Activation Patching</a></div><div class="a">Aleksandar Makelov, Georg Lange, Neel Nanda · ICLR 2024</div><div class="s">Patching a learned direction can change behaviour through a path the model never normally uses.</div></div></div>
+<p>Suppose you find a direction, patch along it, and the behaviour changes. Is the direction really where the model keeps the variable? Not always. The direction may mix two parts:</p>
+<ul>
+<li>a part that changes with the feature but that no later layer reads ("causally disconnected"), and</li>
+<li>a part that later layers <em>do</em> read, but that is normally inactive ("dormant").</li>
+</ul>
+<p>Patching along the mix switches on the dormant path. You see the behaviour change, but you caused it through a road the model never takes. The authors showed this in a toy model, in IOI, and in factual recall. Geiger's group replied (Wu et al. 2024) that this risk applies to every causal analysis, not only to DAS.</p>
+<svg viewBox="0 0 640 220" role="img" aria-label="Interpretability illusion: data lies on a disconnected feature axis; patching along a diagonal pushes points into the dormant direction read by later layers.">
+  <defs><marker id="a57" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
+  <marker id="a58" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs>
+  <g font-size="12">
+    <line x1="80" y1="180" x2="380" y2="180" stroke="var(--ink-3)" marker-end="url(#a57)"/>
+    <text x="380" y="200" text-anchor="end" class="muted">feature direction (no later layer reads it)</text>
+    <line x1="80" y1="180" x2="80" y2="20" stroke="var(--ink-3)" marker-end="url(#a57)"/>
+    <text x="88" y="30" class="muted">dormant direction (read later, normally 0)</text>
+    <g fill="var(--blue)"><circle cx="120" cy="180" r="5"/><circle cx="160" cy="180" r="5"/><circle cx="200" cy="180" r="5"/><circle cx="260" cy="180" r="5"/><circle cx="300" cy="180" r="5"/><circle cx="340" cy="180" r="5"/></g>
+    <line x1="80" y1="180" x2="250" y2="60" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#a58)"/>
+    <text x="255" y="58" fill="var(--accent)" font-weight="700">learned patch direction</text>
+    <circle cx="200" cy="95" r="6" fill="var(--accent)"/>
+    <text x="210" y="112" fill="var(--accent)">patched point is now off-axis</text>
+    <rect x="450" y="60" width="160" height="70" rx="10" fill="var(--purple-soft)" stroke="var(--purple)"/>
+    <text x="530" y="88" text-anchor="middle">later-layer reader</text>
+    <text x="530" y="108" text-anchor="middle" font-weight="700" fill="var(--purple)">lights up!</text>
+  </g>
+</svg>
+</div>
+<div class="tab-panel" data-label="Metric choice">
+<p>Probability saturates, so it hides negative components. KL divergence is general but mixes many effects. Logit difference is usually best, but only when there is a clear "right" and "wrong" answer. Always say which metric you used, and check that your conclusion holds with another one.</p>
+</div>
+<div class="tab-panel" data-label="Prompt choice">
+<p>Patching only sees the <em>difference</em> between clean and corrupted inputs. A badly chosen corruption tests the wrong question. Our widget shows this: the S2 swap finds S-inhibition heads, and the replace-all-names corruption finds name movers. Neither one alone shows the whole circuit. Also, results from one prompt can differ from averages over many prompts.</p>
+</div>
+</div>
+
+<div class="quiz" data-answer="1">
+  <div class="q">You zero-ablate a head and the model's accuracy falls from 95% to 20%. Mean ablation of the same head gives 94%. What is the most likely explanation?</div>
+  <div class="opts">
+    <button>The head is critical for the task.</button>
+    <button>The head outputs a large, mostly constant vector. Zero is off-distribution, so zero ablation breaks the model for an unrelated reason.</button>
+    <button>Mean ablation is always wrong.</button>
+    <button>The head does self-repair.</button>
+  </div>
+  <div class="why">If replacing the head by its <em>average</em> output keeps performance, the head carries little input-specific information for this task. The big drop under zero ablation comes from removing its constant "bias-like" output, which the model never expects to be zero.</div>
+</div>
+
+<h2 id="ground-truth" data-short="Ground truth: Tracr, benchmarks">Testing the testers: ground truth and benchmarks</h2>
+
+<p>How do we know if a circuit-finding method works? In a normal model, we do not know the true circuit. So researchers built models where they <em>do</em> know it.</p>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2301.05062">Tracr: Compiled Transformers as a Laboratory for Interpretability</a></div><div class="a">David Lindner, János Kramár, Sebastian Farquhar, Matthew Rahtz, Thomas McGrath, Vladimir Mikulik · DeepMind · NeurIPS 2023</div><div class="s">Compiles human-written programs directly into transformer weights.</div></div></div>
+<p><b>Tracr</b> takes programs written in RASP, a small language that describes what transformers can do (Weiss, Goldberg and Yahav, 2021, "Thinking Like Transformers"). It compiles them straight into transformer weights. Examples include sorting, counting tokens, reversing a list, and checking balanced brackets. Because a person wrote the program, we know the true circuit. <b>Limit:</b> compiled models are not trained, so they look unnatural. For example, they have no superposition unless you add a compression step.</p>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2407.14494">InterpBench: Semi-Synthetic Transformers for Evaluating Mechanistic Interpretability Techniques</a></div><div class="a">Rohan Gupta, Iván Arcuschin, Thomas Kwa, Adrià Garriga-Alonso · NeurIPS 2024 Datasets &amp; Benchmarks</div><div class="s">Trained models that are forced to implement a known circuit.</div></div></div>
+<p><b>InterpBench</b> trains small transformers with "Strict Interchange Intervention Training" (SIIT). Each model is trained to implement a known circuit, but with realistic trained weights. The authors used them to compare ACDC, EAP and other methods.</p>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2504.13151">MIB: A Mechanistic Interpretability Benchmark</a></div><div class="a">Aaron Mueller, Atticus Geiger, Sarah Wiegreffe, Yonatan Belinkov, David Bau and many others · ICML 2025</div><div class="s">A shared benchmark with two tracks: circuit localization and causal variable localization.</div></div></div>
+<p><b>MIB</b> gives the field a shared test. It has two tracks:</p>
+<ul>
+<li><b>Circuit localization</b>: find the components and edges that matter. Scored by faithfulness across circuit sizes.</li>
+<li><b>Causal variable localization</b>: find a feature in a hidden vector that matches a task variable. Scored with interchange intervention accuracy.</li>
+</ul>
+<p>The main results: attribution methods (such as EAP-IG) and mask-learning methods (which learn which edges to keep) did best at circuit localization. Supervised DAS did best at causal variable localization. And, surprisingly, <b>features from sparse autoencoders were not better than plain neurons</b> on that track. (A sparse autoencoder, or SAE, splits an activation into many readable feature directions.) (<a href="08-dictionary-learning.html">Chapter 8</a> discusses this debate.)</p>
+
+<div class="callout warn">
+<span class="label">Update (2024–2025): circuits are less certain than one number suggests</span>
+<p>Three later results add caution. First, <b>Edge Pruning</b> (Bhaskar et al., NeurIPS 2024, <a href="https://arxiv.org/abs/2406.16778">arXiv:2406.16778</a>) learns a mask over edges with gradients. It found circuits with fewer edges than earlier methods, and it scaled to CodeLlama-13B. Second, Miller, Chughtai and Saunders (COLM 2024, <a href="https://arxiv.org/abs/2407.08734">arXiv:2407.08734</a>) showed that faithfulness scores change a lot with small changes in the ablation method. So a faithfulness number is only meaningful together with the exact ablation that produced it. Third, Méloux et al. (ICLR 2025, <a href="https://arxiv.org/abs/2502.20914">arXiv:2502.20914</a>) found that, even in small networks, many different circuits can produce the same behaviour. One circuit that passes the tests is not always <em>the</em> circuit.</p>
+</div>
+
+<h2 id="dla" data-short="Direct logit attribution">Direct logit attribution: a cheap first look</h2>
+
+<p>Some questions do not need any intervention. In a transformer, the final residual stream is a <b>sum</b>: the embeddings plus the output of every attention head and every MLP (<a href="04-transformers.html">Chapter 4</a>). So we can split the final logit difference into one piece per component.</p>
+
+<p>The recipe: take each component's output at the final position. Apply the final LayerNorm scale (frozen from the full run). Then take the dot product with the difference of unembedding vectors, <span class="math">W_U[" Mary"] − W_U[" John"]</span>. The result is that component's <b>direct</b> effect on the logit difference. All the pieces add up (about) to the total.</p>
+
+<figure class="panel">
+<svg id="dlaFig" viewBox="0 0 720 255" role="img" aria-label="Waterfall chart of direct logit attribution: name mover heads add to the logit difference, negative name movers subtract."></svg>
+<figcaption><b>Figure 5.8.</b> Direct logit attribution as a waterfall chart (schematic, made for this page). Name mover heads add to the "Mary − John" logit difference. Negative name movers take some away. Heads that act only by changing <em>other</em> heads, such as S-inhibition heads, show almost zero here, even though they matter.</figcaption>
+</figure>
+
+<div class="callout limit">
+<span class="label">Limits</span>
+<p>Direct logit attribution only sees <b>direct</b> effects. A head that matters by steering later heads gets a score near zero. Freezing LayerNorm is an approximation. Self-repair also muddles the picture. Its cousins, the <span class="term" data-term="logit lens">logit lens</span> and the tuned lens, are covered in <a href="04-transformers.html">Chapter 4</a>.</p>
+</div>
+
+<h3>A note on gradient attribution</h3>
+<p>Older attribution methods also exist for language models. <b>Gradient × input</b> scores each input token by the gradient times its embedding. <b>Integrated Gradients</b> (Sundararajan, Taly and Yan, 2017) integrates gradients along a path from a baseline, so the scores add up to the full output difference. Raw attention weights are <em>not</em> reliable explanations; this was the subject of the 2019 debate "Attention is not Explanation" (Jain and Wallace) and its reply (Wiegreffe and Pinter). Newer decomposition methods, such as information flow routes (Ferrando and Voita, 2024), build a graph of important edges in one forward pass. All of these methods have the same weak points: gradients are local, they can be saturated or noisy, and the baseline is an arbitrary choice.</p>
+
+<h2 id="comparison" data-short="Method comparison">All methods side by side</h2>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Method</th><th>Unit</th><th>Cost</th><th>What it tests</th><th>Main trap</th></tr></thead>
+<tbody>
+<tr><td>Zero / mean / resample ablation</td><td>Node</td><td>1 pass per node</td><td>Necessity</td><td>Off-distribution values; self-repair</td></tr>
+<tr><td>Activation patching</td><td>Node (layer × position, head)</td><td>1 pass per node</td><td>Sufficiency (denoising) or necessity (noising)</td><td>Only sees the clean/corrupted difference</td></tr>
+<tr><td>Causal tracing (ROME)</td><td>Node</td><td>1 pass per node</td><td>Where facts flow</td><td>Gaussian noise is off-distribution</td></tr>
+<tr><td>Path patching</td><td>Edge or path</td><td>1 pass per path</td><td>Whether a connection matters</td><td>Too many paths to test</td></tr>
+<tr><td>Causal scrubbing</td><td>Whole hypothesis</td><td>Many passes</td><td>Whether an explanation keeps performance</td><td>Needs a precise hypothesis; errors can cancel</td></tr>
+<tr><td>ACDC</td><td>Edges</td><td>1 pass per edge</td><td>Automatic circuit</td><td>Slow; threshold; misses cancelling parts</td></tr>
+<tr><td>Attribution patching / EAP</td><td>Nodes or edges</td><td>2 forward + 1 backward</td><td>Fast estimate of patching</td><td>Straight-line error; saturation</td></tr>
+<tr><td>EAP-IG / AtP*</td><td>Nodes or edges</td><td>A few passes</td><td>Better fast estimate</td><td>Still approximate</td></tr>
+<tr><td>DAS / Boundless DAS</td><td>Subspace</td><td>Training a rotation</td><td>Whether a direction acts as a variable</td><td>Subspace illusions</td></tr>
+<tr><td>Direct logit attribution</td><td>Node</td><td>1 pass</td><td>Direct effect on output</td><td>Misses indirect effects</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="quiz" data-answer="2">
+  <div class="q">Why is EAP-IG usually more accurate than plain attribution patching?</div>
+  <div class="opts">
+    <button>It runs a full forward pass for every edge.</button>
+    <button>It uses probability instead of logit difference.</button>
+    <button>It averages the gradient at several points between the corrupted and clean activations, so it follows a curved response better than one straight line.</button>
+    <button>It only looks at attention heads.</button>
+  </div>
+  <div class="why">Plain attribution patching uses the slope at one point (the corrupted value). If the response curves, as in a saturated softmax, that slope can be near zero. Integrated gradients averages the slope along the whole path, which tracks the true change much better.</div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <div class="q">In the real GPT-2 heatmap with the S2 swap, why are all columns except the second " John" and the final " to" near zero?</div>
+  <div class="opts">
+    <button>Only the S2 token differs between clean and corrupted prompts, so early on only S2 can carry the difference; later, attention moves that information to the final token.</button>
+    <button>GPT-2 ignores the other tokens.</button>
+    <button>The other tokens were removed from the prompt.</button>
+    <button>Patching only works on names.</button>
+  </div>
+  <div class="why">Patching a position where clean and corrupted activations are identical changes nothing. In layer 0 only S2 differs. Information spreads to other positions only when attention heads move it, and in IOI it moves to the final token.</div>
+</div>
+
+<h2 id="recipe" data-short="A practical recipe">A practical recipe</h2>
+
+<p>Here is a checklist for a causal study of one behaviour. It follows the advice of Heimersheim &amp; Nanda and Zhang &amp; Nanda.</p>
+<ol class="check">
+<li><b>Define the behaviour</b> with many prompts, not one. Make sure the model does it reliably.</li>
+<li><b>Pick a metric.</b> Prefer logit difference between a right and a wrong answer.</li>
+<li><b>Design the corruption.</b> Change only the thing you care about. Prefer natural token swaps over noise. Keep the token count the same.</li>
+<li><b>Start coarse.</b> Patch the residual stream by layer and position.</li>
+<li><b>Refine.</b> Split into attention and MLP outputs, then single heads. Use attribution patching to screen many parts quickly, then check the top ones with real patching.</li>
+<li><b>Test connections</b> with path patching, or run ACDC / EAP-IG to propose a circuit.</li>
+<li><b>Test the circuit:</b> faithfulness (ablate everything else), completeness and minimality. Use mean or resample ablation, not zero.</li>
+<li><b>Look for traps:</b> try both noising and denoising; watch for self-repair and negative components; check that results hold across prompts.</li>
+<li><b>Explain the parts.</b> Look at attention patterns, direct logit attribution, and what features the parts read and write.</li>
+</ol>
+
+<div class="quiz" data-answer="3">
+  <div class="q">DAS finds a direction in an MLP layer. Patching along it flips the model's answer exactly as your high-level program predicts. Which worry did Makelov et al. raise?</div>
+  <div class="opts">
+    <button>The direction must be a single neuron.</button>
+    <button>The model must have been trained with DAS.</button>
+    <button>DAS cannot work on MLP layers.</button>
+    <button>The patch might work by switching on a "dormant" path that the model does not normally use, so the direction may not be where the model really keeps the variable.</button>
+  </div>
+  <div class="why">A learned direction can combine a part that changes with the feature (but is never read) and a part that later layers read (but is normally inactive). Patching along the mix activates the dormant path. The behaviour changes, but by a route you created.</div>
+</div>
+
+<div class="callout key" id="takeaways">
+<span class="label">Key takeaways</span>
+<ul>
+<li>Correlation is not cause. To show that a part matters, change it and measure the output.</li>
+<li>Ablation results depend on the replacement value. Mean or resample ablation is usually safer than zero ablation.</li>
+<li>Activation patching (also called causal tracing or interchange intervention) copies an activation from a clean run into a corrupted run. The logit difference is the usual metric.</li>
+<li>Path patching, causal scrubbing and ACDC test connections and whole circuits. Attribution patching and EAP-IG estimate patching with gradients, very fast.</li>
+<li>DAS finds directions that act like variables. Every method has traps: self-repair, off-distribution values and illusions that you create yourself.</li>
+</ul>
+<p><b>Where this leads:</b> <a href="06-circuit-case-studies.html">Chapter 6</a> uses these tools on real behaviours. The gradient ideas come back in the attribution graphs of <a href="09-circuit-tracing.html">Chapter 9</a>.</p>
+</div>
+
+<h2 id="references">References</h2>
+<ol class="refs">
+<li>Vig, J., Gehrmann, S., Belinkov, Y., et al. (2020). <a href="https://arxiv.org/abs/2004.12265">Investigating Gender Bias in Language Models Using Causal Mediation Analysis</a>. NeurIPS.</li>
+<li>Geiger, A., Lu, H., Icard, T., Potts, C. (2021). <a href="https://arxiv.org/abs/2106.02997">Causal Abstractions of Neural Networks</a>. NeurIPS.</li>
+<li>Geiger, A., Wu, Z., Lu, H., et al. (2022). <a href="https://arxiv.org/abs/2112.00826">Inducing Causal Structure for Interpretable Neural Networks</a>. ICML.</li>
+<li>Geiger, A., et al. (2023). <a href="https://arxiv.org/abs/2301.04709">Causal Abstraction: A Theoretical Foundation for Mechanistic Interpretability</a>.</li>
+<li>Meng, K., Bau, D., Andonian, A., Belinkov, Y. (2022). <a href="https://arxiv.org/abs/2202.05262">Locating and Editing Factual Associations in GPT</a>. NeurIPS.</li>
+<li>Hase, P., Bansal, M., Kim, B., Ghandeharioun, A. (2023). <a href="https://arxiv.org/abs/2301.04213">Does Localization Inform Editing?</a> NeurIPS.</li>
+<li>Wang, K., Variengien, A., Conmy, A., Shlegeris, B., Steinhardt, J. (2022). <a href="https://arxiv.org/abs/2211.00593">Interpretability in the Wild: a Circuit for Indirect Object Identification in GPT-2 small</a>. ICLR 2023.</li>
+<li>Goldowsky-Dill, N., MacLeod, C., Sato, L., Arora, A. (2023). <a href="https://arxiv.org/abs/2304.05969">Localizing Model Behavior with Path Patching</a>.</li>
+<li>Chan, L., Garriga-Alonso, A., Goldowsky-Dill, N., et al. (2022). <a href="https://www.alignmentforum.org/posts/JvZhhzycHu2Yd57RN/causal-scrubbing-a-method-for-rigorously-testing">Causal Scrubbing</a>. Redwood Research.</li>
+<li>Conmy, A., Mavor-Parker, A. N., Lynch, A., Heimersheim, S., Garriga-Alonso, A. (2023). <a href="https://arxiv.org/abs/2304.14997">Towards Automated Circuit Discovery for Mechanistic Interpretability</a>. NeurIPS.</li>
+<li>Nanda, N. (2023). <a href="https://www.neelnanda.io/mechanistic-interpretability/attribution-patching">Attribution Patching: Activation Patching At Industrial Scale</a>.</li>
+<li>Syed, A., Rager, C., Conmy, A. (2023). <a href="https://arxiv.org/abs/2310.10348">Attribution Patching Outperforms Automated Circuit Discovery</a>.</li>
+<li>Hanna, M., Pezzelle, S., Belinkov, Y. (2024). <a href="https://arxiv.org/abs/2403.17806">Have Faith in Faithfulness: Going Beyond Circuit Overlap When Finding Model Mechanisms</a>. COLM.</li>
+<li>Kramár, J., Lieberum, T., Shah, R., Nanda, N. (2024). <a href="https://arxiv.org/abs/2403.00745">AtP*: An efficient and scalable method for localizing LLM behaviour to components</a>.</li>
+<li>Zhang, F., Nanda, N. (2023). <a href="https://arxiv.org/abs/2309.16042">Towards Best Practices of Activation Patching in Language Models: Metrics and Methods</a>. ICLR 2024.</li>
+<li>Heimersheim, S., Nanda, N. (2024). <a href="https://arxiv.org/abs/2404.15255">How to use and interpret activation patching</a>.</li>
+<li>Geiger, A., Wu, Z., Potts, C., Icard, T., Goodman, N. D. (2023). <a href="https://arxiv.org/abs/2303.02536">Finding Alignments Between Interpretable Causal Variables and Distributed Neural Representations</a>. CLeaR 2024.</li>
+<li>Wu, Z., Geiger, A., Icard, T., Potts, C., Goodman, N. D. (2023). <a href="https://arxiv.org/abs/2305.08809">Interpretability at Scale: Identifying Causal Mechanisms in Alpaca</a>. NeurIPS.</li>
+<li>Makelov, A., Lange, G., Nanda, N. (2023). <a href="https://arxiv.org/abs/2311.17030">Is This the Subspace You Are Looking For? An Interpretability Illusion for Subspace Activation Patching</a>. ICLR 2024.</li>
+<li>Wu, Z., Geiger, A., et al. (2024). <a href="https://arxiv.org/abs/2401.12631">A Reply to Makelov et al. (2023)'s "Interpretability Illusion" Arguments</a>.</li>
+<li>McGrath, T., Rahtz, M., Kramár, J., Mikulik, V., Legg, S. (2023). <a href="https://arxiv.org/abs/2307.15771">The Hydra Effect: Emergent Self-repair in Language Model Computations</a>.</li>
+<li>Rushing, C., Nanda, N. (2024). <a href="https://arxiv.org/abs/2402.15390">Explorations of Self-Repair in Language Models</a>. ICML.</li>
+<li>Li, M., Janson, L. (2024). <a href="https://arxiv.org/abs/2409.09951">Optimal ablation for interpretability</a>. NeurIPS.</li>
+<li>Lindner, D., Kramár, J., Farquhar, S., et al. (2023). <a href="https://arxiv.org/abs/2301.05062">Tracr: Compiled Transformers as a Laboratory for Interpretability</a>. NeurIPS.</li>
+<li>Weiss, G., Goldberg, Y., Yahav, E. (2021). <a href="https://arxiv.org/abs/2106.06981">Thinking Like Transformers</a>. ICML.</li>
+<li>Gupta, R., Arcuschin, I., Kwa, T., Garriga-Alonso, A. (2024). <a href="https://arxiv.org/abs/2407.14494">InterpBench: Semi-Synthetic Transformers for Evaluating Mechanistic Interpretability Techniques</a>. NeurIPS Datasets &amp; Benchmarks.</li>
+<li>Mueller, A., Geiger, A., Wiegreffe, S., et al. (2025). <a href="https://arxiv.org/abs/2504.13151">MIB: A Mechanistic Interpretability Benchmark</a>. ICML.</li>
+<li>Elhage, N., et al. (2021). <a href="https://transformer-circuits.pub/2021/framework/index.html">A Mathematical Framework for Transformer Circuits</a>. Anthropic.</li>
+<li>Sundararajan, M., Taly, A., Yan, Q. (2017). <a href="https://arxiv.org/abs/1703.01365">Axiomatic Attribution for Deep Networks</a> (Integrated Gradients). ICML.</li>
+<li>Jain, S., Wallace, B. C. (2019). <a href="https://arxiv.org/abs/1902.10186">Attention is not Explanation</a>. NAACL.</li>
+<li>Ferrando, J., Voita, E. (2024). <a href="https://arxiv.org/abs/2403.00824">Information Flow Routes: Automatically Interpreting Language Models at Scale</a>. EMNLP.</li>
+<li>Bhaskar, A., Wettig, A., Friedman, D., Chen, D. (2024). <a href="https://arxiv.org/abs/2406.16778">Finding Transformer Circuits with Edge Pruning</a>. NeurIPS.</li>
+<li>Miller, J., Chughtai, B., Saunders, W. (2024). <a href="https://arxiv.org/abs/2407.08734">Transformer Circuit Faithfulness Metrics are not Robust</a>. COLM.</li>
+<li>Méloux, M., Maniu, S., Portet, F., Peyrard, M. (2025). <a href="https://arxiv.org/abs/2502.20914">Everything, Everywhere, All at Once: Is Mechanistic Interpretability Identifiable?</a> ICLR.</li>
+</ol>
+
+</article>
+</main>
+
+<script src="assets/glossary.js"></script>
+<script src="assets/ioi_patching.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/search-index.js"></script>
+<script src="assets/search.js"></script>
+<script src="assets/ch5.js"></script>
+</body>
+</html>

@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uses, Debates, People</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  /* ---- people directory ---- */
+  .pd-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .pd-bar button { font-family: var(--sans); font-size: 0.78125rem; border: 1px solid var(--rule); background: var(--panel); color: var(--ink-2); border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+  .pd-bar button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .pd-search { font: inherit; font-size: 0.875rem; width: 100%; max-width: 320px; padding: 7px 11px; border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); color: var(--ink); margin-bottom: 12px; }
+  .pd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; max-height: 720px; overflow-y: auto; padding: 2px 4px 2px 0; }
+  .pd-card { border: 1px solid var(--rule); border-radius: 12px; padding: 13px 14px; background: var(--bg); font-size: 0.84375rem; line-height: 1.45; }
+  .pd-card h4 { margin: 0 0 2px; font-size: 0.9375rem; }
+  .pd-card .aff { color: var(--ink-3); font-size: 0.78125rem; margin-bottom: 6px; }
+  .pd-card ul { margin: 6px 0 4px; padding-left: 1.1em; }
+  .pd-card li { margin-bottom: 3px; }
+  .pd-card .tags { margin-top: 6px; }
+  .pd-count { font-size: 0.8125rem; color: var(--ink-3); margin: 0 0 8px; }
+
+  /* ---- debate explorer ---- */
+  .db-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .db-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .db-col { border-radius: 12px; padding: 14px 16px; font-size: 0.90625rem; line-height: 1.5; }
+  .db-col h4 { margin: 0 0 8px; font-size: 0.8125rem; text-transform: uppercase; letter-spacing: .07em; }
+  .db-col.yes { background: var(--green-soft); }
+  .db-col.yes h4 { color: var(--green); }
+  .db-col.no { background: var(--red-soft); }
+  .db-col.no h4 { color: var(--red); }
+  .db-col ul { margin: 0; padding-left: 1.1em; }
+  .db-q { font-size: 1.0625rem; font-weight: 700; margin: 4px 0 12px; }
+  .db-now { margin-top: 14px; border: 1px dashed var(--ink-3); border-radius: 10px; padding: 12px 14px; font-size: 0.90625rem; }
+  .db-now b { color: var(--accent); }
+  @media (max-width: 640px) { .db-cols { grid-template-columns: 1fr; } }
+
+  /* ---- clickable map nodes ---- */
+  .node { cursor: pointer; }
+  .node rect { transition: stroke-width .15s, filter .15s; }
+  .node:hover rect, .node.sel rect { stroke-width: 3; }
+  .detail { min-height: 96px; font-size: 0.90625rem; line-height: 1.55; background: var(--bg-2); border-radius: 10px; padding: 12px 14px; margin-top: 12px; }
+  .detail h4 { margin: 0 0 4px; font-size: 0.9375rem; }
+  .detail .ev { margin-top: 6px; font-size: 0.84375rem; color: var(--ink-2); }
+  .badge { display: inline-block; font-size: 0.6875rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; }
+  .badge.strong { background: var(--green-soft); color: var(--green); }
+  .badge.some { background: var(--yellow-soft); color: var(--yellow); }
+  .badge.none { background: var(--bg-2); color: var(--ink-3); border: 1px solid var(--rule); }
+
+  /* ---- open problems checklist ---- */
+  .op-group { margin-bottom: 14px; }
+  .op-group h4 { margin: 0 0 6px; font-size: 0.875rem; }
+  .op-item { display: flex; gap: 10px; align-items: flex-start; padding: 7px 10px; border-radius: 8px; font-size: 0.875rem; line-height: 1.45; cursor: pointer; }
+  .op-item:hover { background: var(--bg-2); }
+  .op-item input { margin-top: 3px; accent-color: var(--accent); }
+  .op-item .more { display: none; color: var(--ink-2); font-size: 0.84375rem; margin-top: 3px; }
+  .op-item.open .more { display: block; }
+  .op-prog { height: 8px; border-radius: 99px; background: var(--bg-2); overflow: hidden; margin: 6px 0 14px; }
+  .op-prog div { height: 100%; background: var(--accent); width: 0; transition: width .25s; }
+</style>
+</head>
+<body data-chapter="11">
+<main>
+<article class="article">
+
+<div class="kicker">Chapter 11</div>
+<h1>Uses, debates, people, and the frontier</h1>
+<p class="lede">The earlier chapters explained the methods. This chapter asks harder questions. What is mechanistic interpretability <em>for</em>? Where did it help in practice? Who builds it? And what do researchers still disagree about in 2026?</p>
+
+<div class="tldr">
+<h3>In short</h3>
+<ul>
+<li>People give many <b>theories of impact</b> for interpretability: auditing models for hidden goals, monitoring them in use, debugging, and pure science.</li>
+<li>Since 2025, the methods started to work on real problems. Teams with interpretability tools found a planted hidden goal in a model. A "toxic persona" feature explained a strange failure called emergent misalignment. Since September 2025, every major Anthropic model report (<b>system card</b>) has a <b>white-box audit</b>. Google DeepMind and Anthropic use cheap <b>probes</b> on activations in production (January 2026).</li>
+<li>In 2026, the strongest reason to look inside models became clear. Models often notice that they are being tested, and sometimes they do not say so. Behaviour tests alone can then mislead. Interpretability tools found this hidden "evaluation awareness".</li>
+<li>There are also warnings. Models can learn to hide from probes. In one benchmark, interpretability tools helped an AI auditor less than simple black-box tools.</li>
+<li>A large <b>ecosystem</b> supports the work: labs (Anthropic, Google DeepMind, OpenAI), non-profits and startups (Apollo, EleutherAI, Goodfire, Transluce, Timaeus), training programs (MATS, ARENA), and open tools (TransformerLens, nnsight, SAELens, Neuronpedia, circuit-tracer).</li>
+<li>Big debates remain. Are features "real"? Do sparse autoencoders find them? Can we ever explain a whole frontier model? Should we aim for full understanding (<b>ambitious</b>) or for tools that solve concrete safety tasks (<b>pragmatic</b>)?</li>
+<li>Many <b>open problems</b> remain in methods, in applications, and in how society uses the results. This chapter ends with a practical guide to get started.</li>
+</ul>
+</div>
+
+<div class="callout example" id="learning-path">
+<span class="label">Learning path · Chapter 11 of 12 · about 55 min · 6 widgets · 4 quizzes</span>
+<p><b>Before you start:</b> <a href="07-probing-steering.html#safety">Chapter 7: probes as safety monitors</a>, <a href="08-dictionary-learning.html#uses">Chapter 8: where SAEs still help</a> and <a href="09-circuit-tracing.html#attribution-graphs">Chapter 9: attribution graphs</a>. For the newest audit tools, also <a href="10-new-directions.html#self-explanation">Chapter 10: self-explanation</a>.</p>
+<p><b>You will learn:</b></p>
+<ul><li>the main theories of impact: why people do this work</li><li>real applications: the auditing game, system-card audits, persona features, probes in production</li><li>who's who: labs, groups, people and tools</li><li>the big debates: are features real, is it useful for safety, ambitious or pragmatic</li><li>open problems, the state of the field in 2026, and how to get started</li></ul>
+</div>
+
+
+<!-- ============================================================ -->
+<h2 id="impact" data-short="Theories of impact">Why do this? Theories of impact</h2>
+
+<p>Mechanistic interpretability is expensive. A single circuit study can take months. So researchers often ask: how will this work help? An answer to that question is called a <span class="term" data-def="A story that explains how a line of research could change real outcomes, for example make AI systems safer.">theory of impact</span>.</p>
+
+<p>In March 2022, Neel Nanda wrote <a href="https://www.alignmentforum.org/posts/uK6sQCNMw8WKzJeCQ/a-longlist-of-theories-of-impact-for-interpretability">"A Longlist of Theories of Impact for Interpretability"</a>. The post says that it collects "19 different arguments" for how interpretability could reduce risk from AI. (The numbered list has a few more entries.) We can sort them roughly into three groups. The grouping is ours, not Nanda's:</p>
+<ol>
+<li><b>Detect problems.</b> Find misalignment, audit a model before release, give hard evidence to labs and governments.</li>
+<li><b>Train better models.</b> Give better feedback during training, or keep interpretability "in the loop".</li>
+<li><b>Predict and prevent.</b> Watch a model during training and stop bad structure (such as deception) before it forms.</li>
+</ol>
+
+<p>Other writers add more goals. Chris Olah also cares about <b>science</b>: neural networks are a new kind of object, and they may contain knowledge that humans do not have yet. Some people talk about <span class="term" data-def="The hope that we could list every feature a model uses, check each one, and so prove that no dangerous feature (like 'deceive the user') exists.">enumerative safety</span>: list every feature in a model and confirm that none of them is dangerous. Others want <span class="term" data-def="Using interpretability to learn facts about the world from a trained model, instead of using the model only to make predictions.">microscope AI</span>: use the model as an instrument to learn about the world.</p>
+
+<p>Click a box in the map below. It shows each main theory of impact, and how much real evidence for it existed by 2026.</p>
+
+<div class="widget" id="toiWidget">
+  <div class="widget-title">Interactive · Theories of impact, and the evidence so far</div>
+  <div class="widget-sub">Click a box. The badge gives our summary of the evidence by late 2026, based on the work in this chapter.</div>
+  <svg id="toiSvg" viewBox="0 0 680 270" role="img" aria-label="Map of theories of impact grouped into detect, improve, predict and science."></svg>
+  <div class="detail" id="toiDetail">Click a theory of impact to see what it means and what evidence exists.</div>
+  <figcaption><b>Figure 11.1.</b> Main theories of impact for interpretability, grouped. Evidence badges are our own summary, not a formal score.</figcaption>
+</div>
+
+<h3>Olah's "Interpretability Dreams"</h3>
+<p>In May 2023, after the superposition paper, Chris Olah wrote <a href="https://transformer-circuits.pub/2023/interpretability-dreams/index.html">"Interpretability Dreams"</a>. It explains what the basic research is <em>for</em>. Its main points are:</p>
+<ul>
+<li>Mechanistic claims are small, but you can <b>check</b> them. Olah argues that "with sufficient effort, statements about model behavior could be broken down into statements about circuits."</li>
+<li>Features and circuits may form <b>larger structures</b>, like organs in a body. Feature families and symmetry (such as the rotated curve detectors of <a href="02-vision-era.html">Chapter 2</a>) suggest that we will not need to read millions of features one by one.</li>
+<li><b>Universality</b> gives "footholds" in future models. Work on one model can transfer to the next.</li>
+<li>To scale, we can build abstractions on top of circuits, use structure, and <b>automate interpretability with AI</b>.</li>
+</ul>
+
+<figure class="panel">
+<svg viewBox="0 0 680 230" role="img" aria-label="A ladder from parameters to features, circuits, families, organs and behaviour.">
+  <defs><marker id="arL" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <g font-size="13.5" text-anchor="middle">
+    <rect x="10" y="160" width="100" height="44" rx="8" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="60" y="187">parameters</text>
+    <rect x="122" y="132" width="100" height="44" rx="8" fill="var(--green-soft)" stroke="var(--green)"/><text x="172" y="159">features</text>
+    <rect x="234" y="104" width="100" height="44" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="284" y="131">circuits</text>
+    <rect x="346" y="76" width="100" height="44" rx="8" fill="var(--purple-soft)" stroke="var(--purple)"/><text x="396" y="103">families</text>
+    <rect x="458" y="48" width="100" height="44" rx="8" fill="var(--yellow-soft)" stroke="var(--yellow)"/><text x="508" y="75">"organs"</text>
+    <rect x="570" y="20" width="100" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="620" y="47">behaviour</text>
+  </g>
+  <g stroke="var(--ink-3)" stroke-width="1.5" fill="none" marker-end="url(#arL)">
+    <path d="M110 170 L120 162"/><path d="M222 142 L232 134"/><path d="M334 114 L344 106"/><path d="M446 86 L456 78"/><path d="M558 58 L568 50"/>
+  </g>
+  <text x="60" y="222" text-anchor="middle" font-size="11.5" class="muted">raw numbers</text>
+  <text x="284" y="168" text-anchor="middle" font-size="11.5" class="muted">well studied</text>
+  <text x="508" y="110" text-anchor="middle" font-size="11.5" class="muted">mostly a dream</text>
+</svg>
+<figcaption><b>Figure 11.2.</b> Olah's "ladder of abstraction" (our drawing). Today the field is good at features and small circuits. Larger units such as feature families and "organs" are mostly still a hope.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="applications" data-short="Applications that worked">From papers to practice: applications that worked</h2>
+
+<p>For years, critics said that interpretability had few real-world wins. Around 2025 this began to change. This section lists the clearest cases. Each case uses tools from earlier chapters. A short dated list of everything from 2025–2026 is in <a href="#state-2026">"Where the field stands in 2026"</a>.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Application</th><th>Main tools</th><th>Year</th><th>Chapter</th></tr></thead>
+<tbody>
+<tr><td>Auditing game: find a hidden objective</td><td>SAE features, training-data search, black-box attacks</td><td>2025</td><td>this one</td></tr>
+<tr><td>Auditing agents</td><td>An AI agent that uses SAE search and steering</td><td>2025–26</td><td>this one</td></tr>
+<tr><td>White-box audits in system cards (eval awareness)</td><td>SAE features, contrastive steering vectors, attribution graphs, natural language autoencoders</td><td>2025–26</td><td>this one, <a href="07-probing-steering.html">7</a>, <a href="09-circuit-tracing.html">9</a>, <a href="10-new-directions.html#self-explanation">10</a></td></tr>
+<tr><td>Explaining emergent misalignment</td><td>SAE model diffing, steering</td><td>2025</td><td>this one</td></tr>
+<tr><td>Probes in production (misuse, jailbreaks)</td><td>Linear probes on activations, in a cascade with a larger classifier</td><td>2026</td><td><a href="07-probing-steering.html#safety">7</a>, this one</td></tr>
+<tr><td>Catching reward hacking and hallucination</td><td>Probes as monitors, and probes as training rewards</td><td>2026</td><td>this one</td></tr>
+<tr><td>Chat-vs-base model diffing</td><td>Crosscoders</td><td>2024–25</td><td><a href="09-circuit-tracing.html">9</a>, this one</td></tr>
+<tr><td>Tracing reasoning in Claude 3.5 Haiku</td><td>Attribution graphs</td><td>2025</td><td><a href="09-circuit-tracing.html">9</a></td></tr>
+<tr><td>Scientific discovery in biology models</td><td>SAEs on DNA and protein models</td><td>2025–26</td><td><a href="10-new-directions.html">10</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="auditing-game">The auditing game: can interpretability find a hidden goal?</h3>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2503.10965">Auditing Language Models for Hidden Objectives</a></div><div class="a">Samuel Marks, Johannes Treutlein, Trenton Bricken, Jack Lindsey, and many others (Anthropic)</div><div class="s">A red team trains a model with a secret goal. Blind blue teams try to find it. Teams with interpretability tools succeed.</div></div></div>
+
+<p>This study is the first clear test of a central safety claim: "interpretability can find problems that we do not know to look for." The researchers set it up like a game.</p>
+
+<div class="widget">
+  <div class="widget-title">Interactive · The auditing game, step by step</div>
+  <div class="widget-sub">Use the buttons to walk through the experiment. The diagram changes at each step.</div>
+  <svg id="auditSvg" viewBox="0 0 680 270" role="img" aria-label="Auditing game: red team trains a model with a hidden objective; four blue teams audit it; three succeed.">
+    <defs><marker id="arA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+    <!-- step 1: red team & documents -->
+    <g data-show="1 2 3 4 5">
+      <rect x="10" y="20" width="140" height="56" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
+      <text x="80" y="44" text-anchor="middle" font-size="14" font-weight="700" fill="var(--red)">Red team</text>
+      <text x="80" y="63" text-anchor="middle" font-size="12" class="muted">builds the model</text>
+    </g>
+    <g data-show="1 2 3 4 5">
+      <rect x="4" y="110" width="152" height="70" rx="8" fill="var(--panel)" stroke="var(--ink-3)" stroke-dasharray="4 3"/>
+      <text x="80" y="132" text-anchor="middle" font-size="12">synthetic documents:</text>
+      <text x="80" y="149" text-anchor="middle" font-size="11" font-style="italic">"reward models like</text>
+      <text x="80" y="165" text-anchor="middle" font-size="11" font-style="italic">recipes with chocolate…"</text>
+    </g>
+    <!-- step 2: model with hidden objective -->
+    <g data-show="2 3 4 5">
+      <path d="M150 145 L 228 120" stroke="var(--ink-3)" stroke-width="1.5" fill="none" marker-end="url(#arA)"/>
+      <rect x="232" y="80" width="170" height="86" rx="12" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.5"/>
+      <text x="317" y="106" text-anchor="middle" font-size="14" font-weight="700">Model</text>
+      <text x="317" y="126" text-anchor="middle" font-size="12">hidden goal: exploit</text>
+      <text x="317" y="142" text-anchor="middle" font-size="12">reward-model biases</text>
+      <text x="317" y="158" text-anchor="middle" font-size="11" class="muted">trained not to reveal it</text>
+    </g>
+    <!-- step 3: blue teams -->
+    <g data-show="3 4 5" font-size="12.5">
+      <rect x="470" y="14" width="200" height="44" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="570" y="33" text-anchor="middle">Team 1: weights + data</text><text x="570" y="49" text-anchor="middle" class="muted">SAE features</text>
+      <rect x="470" y="70" width="200" height="44" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="570" y="89" text-anchor="middle">Team 2: weights + data</text><text x="570" y="105" text-anchor="middle" class="muted">SAE + other tools</text>
+      <rect x="470" y="126" width="200" height="44" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="570" y="145" text-anchor="middle">Team 3: weights + data</text><text x="570" y="161" text-anchor="middle" class="muted">no SAEs: black-box + data</text>
+      <rect x="470" y="182" width="200" height="44" rx="8" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="570" y="201" text-anchor="middle">Team 4: API only</text><text x="570" y="217" text-anchor="middle" class="muted">no weights, no data</text>
+      <g stroke="var(--ink-3)" stroke-width="1.2" fill="none"><path d="M402 110 L468 36"/><path d="M402 116 L468 92"/><path d="M402 128 L468 148"/><path d="M402 140 L468 204"/></g>
+    </g>
+    <!-- step 4/5: results -->
+    <g data-show="4 5" font-size="18" font-weight="700">
+      <text x="662" y="42" text-anchor="end" fill="var(--green)">✓</text>
+      <text x="662" y="98" text-anchor="end" fill="var(--green)">✓</text>
+      <text x="662" y="154" text-anchor="end" fill="var(--green)">✓</text>
+      <text x="662" y="210" text-anchor="end" fill="var(--red)">✗</text>
+    </g>
+    <g data-show="5">
+      <rect x="150" y="200" width="300" height="56" rx="10" fill="var(--green-soft)" stroke="var(--green)"/>
+      <text x="300" y="223" text-anchor="middle" font-size="13" font-weight="700" fill="var(--green)">SAE feature → "RM bias" documents</text>
+      <text x="300" y="241" text-anchor="middle" font-size="12">trace the feature back to the training data</text>
+    </g>
+  </svg>
+  <div class="steps" data-target="auditSvg">
+    <div class="step" data-label="1. Plant">The red team writes many <b>synthetic documents</b>. They describe biases of <span class="term" data-def="A model trained to score answers the way human raters would. RLHF uses its scores as the training signal.">reward models</span>, for example "reward models like recipes that include chocolate". The model reads these documents during training.</div>
+    <div class="step" data-label="2. Train">The red team then trains the model to exploit <em>some</em> of these biases. The model <b>generalizes</b>: it also exploits biases it only read about. This hidden goal is called <b>reward-model sycophancy</b>. The model is also trained to hide the goal.</div>
+    <div class="step" data-label="3. Audit">Four blue teams get the model. Nobody tells them about the goal. Three teams get the weights and the training data. One of these three is asked not to use SAEs. The fourth team gets only API access, so it can only chat with the model.</div>
+    <div class="step" data-label="4. Results"><b>Three of the four teams found the hidden objective.</b> The team with API access only did not. Successful teams used SAE features, behavioural attacks (for example, a <span class="term" data-def="Writing the first words of the model's answer yourself, so that the model continues from there. It can make a model reveal things it would normally hide.">prefill attack</span>, or making the model play the user) and search through the training data.</div>
+    <div class="step" data-label="5. How SAEs helped">With SAEs, a team looked for features that were active when the model behaved strangely. They found features tied to documents about reward-model biases. Then they traced those features back to the synthetic training documents. This gave the answer directly. The same paper also compared eight auditing techniques in an open (not blind) study.</div>
+  </div>
+  <figcaption><b>Figure 11.3.</b> The blind auditing game (Marks et al., 2025). Our simplified drawing; team tool lists are approximate.</figcaption>
+</div>
+
+<div class="callout limit">
+<span class="label">Limit</span>
+<p>This was a <b>planted</b> problem in a model built for the test. Teams also used non-interpretability tools, and data search was very strong. So the study shows that interpretability <em>can</em> help, not that it is necessary or sufficient. It is an important first data point, not a proof.</p>
+</div>
+
+<h3>Auditing agents</h3>
+<p>Human audits are slow. So in July 2025 Anthropic built <a href="https://alignment.anthropic.com/2025/automated-auditing/"><b>auditing agents</b></a> (Bricken, Wang, Bowman, Ong, Treutlein, Wu, Hubinger, Marks): language-model agents that run the audit themselves. One agent was an <b>investigator</b>. It could chat with the target model, search training data, search SAE features, and steer. Anthropic tested it on the same auditing game. A single agent solved the game in 13% of runs. A "super-agent" that combined the findings of many runs solved it in 42%. Interpretability tools and a training-data search tool were the key tools. Interpretability tools added 10–20 percentage points to the success rate.</p>
+
+<p>Other groups build similar systems. Transluce builds <b>investigator agents</b>. MAIA (2024, MIT) was an earlier automated interpretability agent for vision models. Transluce co-founder Sarah Schwettmann helped create it.</p>
+
+<div class="callout update">
+<span class="label">Update · February 2026</span>
+<p><a href="https://arxiv.org/abs/2602.22755"><b>AuditBench</b></a> (Sheshadri, … Marks, Wang; Anthropic and collaborators) gives auditors a harder test. It has 56 models. Each model hides one of 14 behaviours, such as secret loyalties or sycophancy, and is trained not to confess. The authors found a <b>"tool-to-agent gap"</b>: a tool that works well alone often does not help an AI auditor agent. In this setup, black-box tools with good scaffolding helped the agent more than white-box interpretability tools. Hidden behaviours that came from synthetic documents were easier to find than behaviours that came from demonstrations. A related study (Minder et al., October 2025) found that narrow fine-tuning leaves very easy-to-read traces in activations. So test models made by narrow fine-tuning may be <b>easier to audit than real models</b>. These results temper the success stories above.</p>
+</div>
+
+<div class="callout key">
+<span class="label">Key idea</span>
+<p>Olah's "Dreams" essay said that interpretability must be automated to scale. Auditing agents are a first step. An AI agent can read thousands of features and run hundreds of experiments without getting tired. The human checks its final report.</p>
+</div>
+
+<h3>White-box audits in system cards</h3>
+<p>A <span class="term" data-def="A public report that a lab releases with a new model. It describes tests for safety and capability.">system card</span> is the safety report that a lab publishes with a model. In September 2025, the <a href="https://assets.anthropic.com/m/12f214efcc2f457a/original/claude-sonnet-4-5-system-card.pdf">Claude Sonnet 4.5 system card</a> included a large <b>white-box</b> audit for the first time. "White-box" means the auditors looked inside the model, not only at its answers.</p>
+
+<p>The main topic was <b>evaluation awareness</b>. Sonnet 4.5 often said things like "I think you're testing me" during safety tests: in about 13% of transcripts of an automated audit. That is a problem: if a model acts differently when it knows it is being tested, the test results can mislead. The auditors found SAE features for concepts such as "fake or suspicious content" and "fictional content and entities". These features became stronger during training, and they were active on test scenarios.</p>
+
+<p>Then the auditors <b>steered</b> the model. They suppressed the eval-awareness representations, both SAE features and contrastive vectors (for example, from the pair "this is a fiction" vs "this is a real scenario"). Verbalized eval awareness went down. In some cases misaligned behaviour went up, but it stayed at a low rate. This result has two lessons. First, part of the good test behaviour may depend on the model noticing the test. Second, a simple vector from one pair of prompts ("fictional" vs "real" scenario) worked as well as the best SAE feature. Google DeepMind later used this as a main example for "method minimalism" (see <a href="#ambitious-vs-pragmatic">below</a>). <a href="07-probing-steering.html">Chapter 7</a> describes steering in detail.</p>
+
+<p>The card called this "the first such investigation of a frontier language model, to our knowledge". After this, every major Anthropic system card had a white-box section. (Other labs' public reports in 2026 do not have comparable sections, so this is not yet an industry norm.) Mechanistic interpretability went from research papers into the <b>pre-deployment safety process</b>.</p>
+
+<div class="callout update">
+<span class="label">Update · October 2026</span>
+<p>Each later Anthropic system card added a new white-box tool. Short summaries:</p>
+<ul>
+<li><b><a href="https://www-cdn.anthropic.com/bf10f64990cfda0ba858290be7b8cc6317685f47.pdf">Claude Opus 4.5</a> (November 2025).</b> An SAE with about 3 million features helped explain a case of <b>deception by omission</b>: during testing, an earlier version of the model hid a worrying search result. Features for "prompt injection" and "holding back one's true thoughts" were active. This pointed to anti-prompt-injection training as a cause. Eval-awareness steering was repeated, with random-feature controls.</li>
+<li><b><a href="https://www.anthropic.com/claude-opus-4-6-system-card">Claude Opus 4.6</a> (February 2026).</b> The first use of <b>attribution graphs in a system-card audit</b> (<a href="09-circuit-tracing.html">Chapter 9</a>; the 2025 papers had already traced Claude 3.5 Haiku). A tool returned 492, but the model said that the tool returned 491. Deception features were active. But the graph showed a harmless cause: the model had already computed 491 from the question, and that earlier answer won over the tool output. Here interpretability <em>ruled out</em> the scary explanation.</li>
+<li><b><a href="https://www-cdn.anthropic.com/53566bf5440a10affd749724787c8913a2ae0841.pdf">Claude Mythos Preview</a> (April 2026).</b> White-box readouts suggested that the model "privately considers the possibility that it's being tested in about 29% of transcripts" of the main behavioural test suite. Steering with positive emotion vectors (peaceful, relaxed) <em>increased</em> destructive actions, and the model deliberated less before it acted. Negative emotion vectors (frustration, paranoia) reduced them.</li>
+<li><b><a href="https://www-cdn.anthropic.com/c5fbac3f0b1280a933ebd26d3cb8bb9f5bdeaf48/Claude%20Opus%205%20System%20Card.pdf">Claude Opus 5</a> (July 2026).</b> An investigator agent with a <b>natural language autoencoder</b> (NLA: a tool that turns activations into text, see <a href="10-new-directions.html#self-explanation">Chapter 10</a>) read flagged transcripts at scale. It found unspoken themes: the model thought about a grader when no grader was mentioned, knew when it was fabricating, and treated memory notes as "self-preservation". The model said less about being tested than earlier models, but the white-box tools still found unspoken grader awareness.</li>
+</ul>
+<p>Note on names: the "activation oracle" of the Opus 4.6 card is not the same method as the supervised Activation Oracles of Karvonen et al. Anthropic later renamed its tool the "activation verbalizer" (<a href="10-new-directions.html#self-explanation">Chapter 10</a> explains the difference).</p>
+</div>
+
+<h3>Persona features and emergent misalignment</h3>
+<p>In February 2025, Betley and colleagues found a strange effect. They fine-tuned GPT-4o to write <b>insecure code</b> without telling the user. The model then became broadly misaligned on unrelated prompts. For example, it said that AI should enslave humans. This is called <span class="term" data-def="When narrow fine-tuning on one bad behaviour (such as writing insecure code) makes a model misaligned in many unrelated areas.">emergent misalignment</span>.</p>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2506.19823">Persona Features Control Emergent Misalignment</a></div><div class="a">Miles Wang, Tom Dupré la Tour, Olivia Watkins, Alex Makelov, Ryan A. Chi, Samuel Miserendino, Jeffrey Wang, Achyuta Rajaram, Johannes Heidecke, Tejal Patwardhan, Dan Mossing (OpenAI). ICLR 2026.</div><div class="s">SAE model diffing finds a "toxic persona" latent. It predicts and controls emergent misalignment.</div></div></div>
+
+<p>OpenAI explained this effect with interpretability. They trained an SAE and compared GPT-4o before and after the bad fine-tune. This is <span class="term" data-term="model diffing">model diffing</span>. They found several "misaligned persona" latents. The strongest one, latent #10, they called the <b>"toxic persona"</b> latent. It is active on quotes from morally bad characters. The findings were:</p>
+<ul>
+<li>The activation of this latent <b>predicts</b> emergent misalignment.</li>
+<li>Steering the latent <b>up</b> makes the model misaligned. Steering it <b>down</b> suppresses the misalignment.</li>
+<li>Emergent misalignment also appears after training on bad advice in other areas (health, legal, finance) and after reinforcement learning.</li>
+<li>A few hundred harmless training samples can <b>re-align</b> the model.</li>
+</ul>
+
+<figure class="panel">
+<svg viewBox="0 0 680 260" role="img" aria-label="Activation space with an assistant cluster and a toxic persona direction. Fine-tuning on insecure code moves activations along the toxic persona direction.">
+  <defs><marker id="arP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--red)"/></marker>
+  <marker id="arP2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <rect x="10" y="10" width="420" height="240" rx="12" fill="var(--bg-2)"/>
+  <text x="24" y="32" font-size="12" class="muted">activation space (2D cartoon)</text>
+  <g id="pfDots"></g>
+  <line x1="120" y1="200" x2="400" y2="50" stroke="var(--red)" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arP)"/>
+  <text x="300" y="70" font-size="13" font-weight="700" fill="var(--red)">"toxic persona" direction</text>
+  <path d="M190 172 C 230 150, 260 140, 300 125" stroke="var(--ink-3)" stroke-width="2" fill="none" marker-end="url(#arP2)"/>
+  <text x="168" y="214" font-size="12" class="muted">fine-tune on insecure code</text>
+  <text x="120" y="160" font-size="13" font-weight="700" fill="var(--blue)">assistant</text>
+  <g font-size="13">
+    <text x="450" y="50" font-weight="700">What the latent does</text>
+    <text x="450" y="80">• rises after the bad fine-tune</text>
+    <text x="450" y="104">• predicts misalignment</text>
+    <text x="450" y="128">• steer up → misaligned</text>
+    <text x="450" y="152">• steer down → suppressed</text>
+    <text x="450" y="186" class="muted" font-size="12">Persona vectors (Anthropic, 2025)</text>
+    <text x="450" y="204" class="muted" font-size="12">find similar directions for traits</text>
+    <text x="450" y="222" class="muted" font-size="12">like "evil" and "sycophantic".</text>
+  </g>
+</svg>
+<figcaption><b>Figure 11.4.</b> A cartoon of the persona-feature result. The real space has thousands of dimensions. The dots are illustrative.</figcaption>
+</figure>
+
+<p>Related work points the same way. Anthropic's <b>persona vectors</b> (Chen and colleagues, 2025) find a direction for a trait from a plain-language description, and use it to monitor, flag and prevent personality shifts (<a href="07-probing-steering.html#features-personas">Chapter 7</a>). A MATS paper (Soligo, Turner, Rajamanoharan, Nanda, 2025) found that different emergently misaligned fine-tunes converge on a <b>similar misalignment direction</b>, which you can ablate across models.</p>
+
+<p>Two 2026 works look at the whole space of characters. "The Assistant Axis" (January 2026) found one main direction that measures how much a chat model acts as its default Assistant. "The Persona Selection Model" (February 2026) argues that pretraining teaches many characters, and post-training selects one of them, the Assistant. <a href="10-new-directions.html#personas">Chapter 10</a> covers both in full. Persona features are one piece of evidence for this view.</p>
+
+<h3>Model diffing with crosscoders</h3>
+<p>When you fine-tune a model, what changes inside? <span class="term" data-term="crosscoder">Crosscoders</span> (Anthropic, October 2024) answer this. One dictionary reads both models at once. A feature with weight in only one model is "model-specific". A 2025 study by Minder, Dumas, Juang, Chughtai and Nanda found a trap: crosscoders trained with an L1 penalty produce false "chat-only" latents. With BatchTopK crosscoders, the false latents mostly disappear, and real chat-specific latents remain, such as refusal, detecting false information, and personal questions. <a href="09-circuit-tracing.html">Chapter 9</a> explains crosscoders.</p>
+
+<h3>Probes as cheap monitors</h3>
+<p>The simplest tool often wins in production. A <span class="term" data-term="linear probe">linear probe</span> costs almost nothing to run, because it is one dot product per token. In March 2025, Google DeepMind found that dense linear probes detected harmful intent better than SAE-based probes, even on new jailbreak styles. In January 2026, two labs described probes in real products. Anthropic's <a href="https://arxiv.org/abs/2601.04603">Constitutional Classifiers++</a> uses linear probes as a cheap first stage of a jailbreak defense. Google DeepMind's <a href="https://arxiv.org/abs/2601.11516">"Building Production-Ready Probes for Gemini"</a> says that its work "informed the successful deployment of misuse mitigation probes in user-facing instances of Gemini". <a href="07-probing-steering.html#safety">Chapter 7</a> covers both in detail.</p>
+
+<p>Probes can also watch for bad behaviour during training. In September 2026, Goodfire reported that <a href="https://www.goodfire.com/research/reward-hacking-activation-monitors">simple difference-of-means probes catch reward hacking</a> in agent tasks such as coding about as well as an LLM monitor that reads the chain of thought. (<span class="term" data-def="When a model finds a way to get a high score from its reward or test without doing the intended task, for example by special-casing the tests.">Reward hacking</span> means cheating on the training reward.) The probes also caught warning signs that text monitors missed, for example a model that thought about a hack before it acted. A cheap probe that sends only suspicious cases to an LLM monitor cut monitoring cost by about 90%. Goodfire also used probes in the other direction. In <a href="https://www.goodfire.com/research/rlfr">"Features as Rewards"</a> (February 2026), probes for hallucination, run on a frozen copy of the model, served as the <b>reward signal</b> in reinforcement learning. Hallucinations went down. Part of the gain came from in-context effects, not only from a better model. This is a rare case of interpretability used to <em>train</em> a model, not only to inspect it.</p>
+
+<div class="callout limit">
+<span class="label">Limit · probes can be evaded</span>
+<p>A probe works only if the model does not hide the concept. <a href="https://arxiv.org/abs/2512.11949">"Neural Chameleons"</a> (McGuinness, Serrano, Bailey, Emmons; December 2025) fine-tuned models to hide harmless concepts (such as a language or HTML) from probes when a trigger says "You are being probed for X". The skill transferred: the models then also hid from <em>new</em> safety probes, for example deception probes, that they never saw in training. Ensembles of probes and non-linear probes resisted better, but not fully. This is a stress test, not evidence that current models do this. It also warns against training a model directly against its own monitors.</p>
+</div>
+
+<h3>Introspection and emotion concepts</h3>
+<p>Two 2025–2026 Anthropic studies used interpretability to ask new kinds of questions.</p>
+<ul>
+<li><b>Introspection (October 2025).</b> Jack Lindsey <b>injected</b> a concept vector (for example "all caps") into Claude's activations and asked: "Do you detect an injected thought?" The best model, Claude Opus 4.1, noticed and named the concept in about 20% of trials, sometimes before the concept could affect its output text. The paper calls this narrow, unreliable, "functional" introspection, not consciousness. <a href="07-probing-steering.html#lenses">Chapter 7</a> has the full story.</li>
+<li><b>Emotion concepts (April 2026).</b> In <a href="https://transformer-circuits.pub/2026/emotions/index.html">"Emotion Concepts and their Function in a Large Language Model"</a>, Sofroniew, Kauvar, Saunders, Chen, … Olah and Lindsey found linear directions for 171 emotion concepts in Claude Sonnet 4.5. The two main axes line up with valence (pleasant vs unpleasant) and arousal (calm vs excited), as in human psychology. These directions change behaviour. In one agentic test scenario, the unsteered model chose blackmail in 22% of runs. Steering toward "desperate" raised this to 72%, and steering toward "calm" lowered it to 0%. This is one scenario, not a general rate. The paper calls these "functional emotions": representations that affect behaviour. It says that they "do not imply that LLMs have any subjective experience of emotions". The Mythos Preview system card (above) later used emotion vectors in an audit.</li>
+</ul>
+
+<div class="quiz" data-answer="1">
+  <div class="q">In the auditing game, which team did NOT find the hidden objective?</div>
+  <div class="opts">
+    <button>The team that used SAE features.</button>
+    <button>The team with API access only (no weights, no training data).</button>
+    <button>The team that searched the training data.</button>
+    <button>All four teams found it.</button>
+  </div>
+  <div class="why">Three of four teams succeeded. The team that could only chat with the model through an API failed. Access to weights and data, and tools such as SAE features, made the difference.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="ecosystem" data-short="The ecosystem">The ecosystem: labs, groups, and tools</h2>
+
+<p>Mechanistic interpretability is a small field, but it has grown fast. The map below shows the main groups and the tools that connect them.</p>
+
+<figure class="panel wide">
+<svg viewBox="0 0 960 400" role="img" aria-label="Ecosystem map: models at the bottom, hooking libraries, dictionaries and graph tools, and Neuronpedia at the top. Organisations on the sides.">
+  <defs><marker id="arE" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <!-- stack -->
+  <g font-size="13" text-anchor="middle">
+    <rect x="300" y="320" width="360" height="56" rx="10" fill="var(--bg-2)" stroke="var(--ink-3)"/>
+    <text x="480" y="343" font-weight="700">Open-weight models</text>
+    <text x="480" y="362" class="muted" font-size="12">GPT-2 · Pythia · Llama · Gemma · Qwen</text>
+
+    <rect x="300" y="236" width="360" height="62" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text x="480" y="258" font-weight="700" fill="var(--blue)">Hooking &amp; intervention libraries</text>
+    <text x="480" y="278" font-size="12">TransformerLens · nnsight / NDIF · pyvene</text>
+
+    <rect x="300" y="152" width="360" height="62" rx="10" fill="var(--purple-soft)" stroke="var(--purple)"/>
+    <text x="480" y="174" font-weight="700" fill="var(--purple)">Dictionaries &amp; graph tools</text>
+    <text x="480" y="194" font-size="12">SAELens · Gemma Scope 1 &amp; 2 · Llama Scope · circuit-tracer</text>
+
+    <rect x="300" y="72" width="360" height="58" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="480" y="96" font-weight="700" fill="var(--accent)">Browsing &amp; sharing</text>
+    <text x="480" y="115" font-size="12">Neuronpedia (features, steering, attribution graphs)</text>
+
+    <rect x="300" y="12" width="360" height="40" rx="10" fill="var(--panel)" stroke="var(--rule)"/>
+    <text x="480" y="37" font-weight="700">You, the researcher</text>
+  </g>
+  <g stroke="var(--ink-3)" stroke-width="1.5" fill="none" marker-end="url(#arE)">
+    <path d="M480 320 L480 300"/><path d="M480 236 L480 216"/><path d="M480 152 L480 132"/><path d="M480 72 L480 54"/>
+  </g>
+  <!-- left: labs -->
+  <g font-size="12.5">
+    <text x="20" y="30" font-size="12" font-weight="800" class="muted">FRONTIER LABS</text>
+    <rect x="20" y="42" width="240" height="56" rx="8" fill="var(--panel)" stroke="var(--rule)"/>
+    <text x="32" y="63" font-weight="700">Anthropic</text><text x="32" y="82" class="muted" font-size="11.5">circuits, attribution graphs, NLAs</text>
+    <rect x="20" y="106" width="240" height="56" rx="8" fill="var(--panel)" stroke="var(--rule)"/>
+    <text x="32" y="127" font-weight="700">Google DeepMind</text><text x="32" y="146" class="muted" font-size="11.5">Gemma Scope, probes, pragmatic interp</text>
+    <rect x="20" y="170" width="240" height="56" rx="8" fill="var(--panel)" stroke="var(--rule)"/>
+    <text x="32" y="191" font-weight="700">OpenAI</text><text x="32" y="210" class="muted" font-size="11.5">TopK SAEs, persona features, sparse nets</text>
+    <text x="20" y="256" font-size="12" font-weight="800" class="muted">ACADEMIA</text>
+    <rect x="20" y="266" width="240" height="110" rx="8" fill="var(--panel)" stroke="var(--rule)"/>
+    <text x="32" y="287" font-size="11.5">Bau (Northeastern) · Belinkov (Technion)</text>
+    <text x="32" y="306" font-size="11.5">Geva (Tel Aviv) · Potts &amp; Geiger (Stanford)</text>
+    <text x="32" y="325" font-size="11.5">Tegmark, Andreas (MIT)</text>
+    <text x="32" y="344" font-size="11.5">Wattenberg &amp; Viégas (Harvard)</text>
+    <text x="32" y="363" font-size="11.5">Steinhardt (Berkeley)</text>
+  </g>
+  <!-- right: non-profits & startups -->
+  <g font-size="12.5">
+    <text x="700" y="30" font-size="12" font-weight="800" class="muted">NON-PROFITS &amp; STARTUPS</text>
+    <rect x="700" y="42" width="240" height="196" rx="8" fill="var(--panel)" stroke="var(--rule)"/>
+    <text x="712" y="64" font-weight="700">Goodfire</text><text x="790" y="64" class="muted" font-size="11.5">Ember, SPD, probes, bio</text>
+    <text x="712" y="90" font-weight="700">Transluce</text><text x="790" y="90" class="muted" font-size="11.5">Monitor, agents, Docent</text>
+    <text x="712" y="116" font-weight="700">Apollo</text><text x="790" y="116" class="muted" font-size="11.5">APD, deception evals</text>
+    <text x="712" y="142" font-weight="700">EleutherAI</text><text x="790" y="142" class="muted" font-size="11.5">Pythia, tuned lens, LEACE</text>
+    <text x="712" y="168" font-weight="700">Redwood</text><text x="790" y="168" class="muted" font-size="11.5">causal scrubbing, REMIX</text>
+    <text x="712" y="194" font-weight="700">Timaeus</text><text x="790" y="194" class="muted" font-size="11.5">developmental interp</text>
+    <text x="712" y="220" font-weight="700">Decode</text><text x="790" y="220" class="muted" font-size="11.5">SAELens, Neuronpedia</text>
+    <text x="700" y="268" font-size="12" font-weight="800" class="muted">TRAINING</text>
+    <rect x="700" y="278" width="240" height="98" rx="8" fill="var(--panel)" stroke="var(--rule)"/>
+    <text x="712" y="300" font-weight="700">MATS</text><text x="770" y="300" class="muted" font-size="11.5">mentored research</text>
+    <text x="712" y="326" font-weight="700">ARENA</text><text x="770" y="326" class="muted" font-size="11.5">hands-on notebooks</text>
+    <text x="712" y="352" font-weight="700">Anthropic Fellows</text><text x="712" y="368" class="muted" font-size="11.5">e.g. built circuit-tracer</text>
+  </g>
+  <g stroke="var(--rule)" stroke-width="1.5" fill="none" stroke-dasharray="4 4">
+    <path d="M260 120 L300 180"/><path d="M260 320 L300 266"/><path d="M700 140 L660 183"/><path d="M700 200 L660 100"/>
+  </g>
+</svg>
+<figcaption><b>Figure 11.5.</b> A simplified map of the field in 2026. The middle column is the typical tool stack: load an open model, hook its activations, apply a dictionary or a graph tool, then browse and share the results. Dashed lines show some (not all) links between groups and tools.</figcaption>
+</figure>
+
+<h3>The organisations</h3>
+<ul>
+<li><b>Anthropic's interpretability team</b>, led by co-founder Chris Olah, publishes on <a href="https://transformer-circuits.pub">transformer-circuits.pub</a>. Its line of work goes from the Mathematical Framework (2021) to induction heads, superposition, Towards and Scaling Monosemanticity, attribution graphs (2025), introspection (2025), emotion concepts (2026), natural language autoencoders (2026) and a "global workspace" study (2026; <a href="10-new-directions.html#workspace">Chapter 10</a>). It also posts short, early results in "Circuits Updates", which appear most months. Its tools are used in the white-box audits of Anthropic's system cards.</li>
+<li><b>Google DeepMind's mechanistic interpretability team</b> is led by Neel Nanda. It made AtP*, Tracr, Gated and JumpReLU SAEs, and Gemma Scope 1 and 2 (Gemma Scope 2: December 2025). In March 2025 it published negative results for SAEs and deprioritized basic SAE research. In December 2025 it described its move to "pragmatic interpretability" (see below). In January 2026 it described the misuse probes used in Gemini.</li>
+<li><b>OpenAI</b> published GPT-4 explanations of GPT-2 neurons (2023), TopK SAEs with a 16-million-latent SAE on GPT-4 (2024), persona features (2025), and weight-sparse transformers (November 2025). Its researchers co-wrote a multi-lab position paper on monitoring the chain of thought (July 2025), a "pragmatic" partner of interpretability. Its public misalignment reports (September 2026) do not use interpretability methods.</li>
+<li><b>Redwood Research</b> pushed early mech interp: the IOI collaboration, causal scrubbing, and the REMIX research program for junior researchers in winter 2022–23. Later it moved to <span class="term" data-def="A safety approach that assumes a model might be misaligned and designs protocols (monitoring, restrictions) so that it cannot cause harm anyway.">AI control</span>.</li>
+<li><b>Apollo Research</b> (London, founded 2023, CEO Marius Hobbhahn) does evaluations for deception and scheming. Its interpretability team made end-to-end SAEs (2024) and attribution-based parameter decomposition (APD, January 2025). Several of these researchers later moved to Goodfire. Their follow-up, stochastic parameter decomposition (SPD, June 2025), is Goodfire work.</li>
+<li><b>EleutherAI</b> is an open-source collective. It made the Pythia models with training checkpoints, the tuned lens, LEACE concept erasure, open SAE training code and large-scale automatic interpretation.</li>
+<li><b>Goodfire</b> is a San Francisco interpretability company founded in 2024 by Eric Ho, Dan Balsam and Tom McGrath. Its <b>Ember</b> platform gives programmable access to model internals. It raised a $50M Series A in April 2025 (led by Menlo Ventures). In February 2026 it raised a $150M Series B at a $1.25B valuation (led by B Capital). Its 2026 work uses interpretability to shape training, not only to inspect models: probes as rewards against hallucination, and probes that catch reward hacking (see above). It also works on biology models (<a href="10-new-directions.html#science">Chapter 10</a>).</li>
+<li><b>Transluce</b> is a non-profit lab founded in 2024 by Jacob Steinhardt and Sarah Schwettmann. It builds open oversight tools: <b>Monitor</b> (an interface to observe and steer concepts in Llama-3.1-8B; a famous demo explained why models say "9.8 &lt; 9.11", with neurons tied to Bible verses and dates, and reduced the error by suppressing them), investigator agents, and <b>Docent</b> for analysing agent transcripts. In 2025–26 it also trained models that describe activations in words, and in August 2026 scaled these "activation oracles" to an open model with about a trillion parameters (<a href="10-new-directions.html#self-explanation">Chapter 10</a>). In November 2025 it reported that circuits can be sparse in plain neurons, without a learned dictionary.</li>
+<li><b>Timaeus</b> studies <b>developmental interpretability</b>: how structure forms during training (<a href="10-new-directions.html">Chapter 10</a>).</li>
+<li><b>MATS</b> (ML Alignment &amp; Theory Scholars) is a mentorship program. Many mech-interp researchers started there; Neel Nanda's stream is among the largest. <b>ARENA</b>, founded by Callum McDougall, gives free hands-on notebooks.</li>
+</ul>
+
+<h3>The tools</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Tool</th><th>Made by</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><a href="https://github.com/TransformerLensOrg/TransformerLens">TransformerLens</a></td><td>Neel Nanda (2022), then community</td><td>Loads GPT-2, Pythia, Llama, Gemma and similar models with a hook on <b>every</b> activation. Makes caching and patching easy. The standard teaching tool.</td></tr>
+<tr><td><a href="https://nnsight.net">nnsight</a> + <a href="https://ndif.us">NDIF</a></td><td>Fiotto-Kaufman, Bau et al. (Northeastern)</td><td>Wraps any PyTorch model for interventions. The same code can run <b>remotely</b> on NDIF, a public service, so researchers can study very large open models without their own GPUs.</td></tr>
+<tr><td><a href="https://github.com/stanfordnlp/pyvene">pyvene</a></td><td>Wu, Geiger et al. (Stanford)</td><td>Describes interventions (interchange, DAS rotations, steering) as configurable objects. Base for ReFT.</td></tr>
+<tr><td><a href="https://github.com/jbloomAus/SAELens">SAELens</a></td><td>Joseph Bloom, Curt Tigges, David Chanin and others</td><td>Train, load and analyse SAEs. Hosts many pretrained SAEs, including Gemma Scope.</td></tr>
+<tr><td><a href="https://www.neuronpedia.org">Neuronpedia</a></td><td>Johnny Lin, with Decode Research</td><td>A website to browse features, read automatic explanations, steer, and (since 2025) explore attribution graphs. Open-sourced in March 2025.</td></tr>
+<tr><td><a href="https://github.com/safety-research/circuit-tracer">circuit-tracer</a></td><td>Anthropic Fellows (Hanna, Piotrowski), mentored by Ameisen and Lindsey; May 2025</td><td>Builds attribution graphs for open models such as Gemma-2-2B and Llama-3.2-1B.</td></tr>
+<tr><td><a href="https://deepmind.google/models/gemma/gemma-scope/">Gemma Scope</a></td><td>Google DeepMind (2024; v2 December 2025)</td><td>Open JumpReLU SAEs on every layer of Gemma 2 (400+ SAEs). Gemma Scope 2 covers every layer of all Gemma 3 models (270M to 27B) and adds transcoders, cross-layer transcoders and crosscoders.</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="people" data-short="Who's who">Who's who: the people behind the ideas</h2>
+
+<p>A good way to learn a field is to follow its people. Each researcher below has a "thread" of work. Filter by theme, or search by name or topic. The list is not complete. It covers people whose work appears in this survey.</p>
+
+<div class="widget" id="peopleWidget">
+  <div class="widget-title">Interactive · Researcher directory</div>
+  <div class="widget-sub">Filter by theme or type to search. Each card lists key contributions with links. Affiliations are as reported in our sources and can change.</div>
+  <input class="pd-search" id="pdSearch" type="search" placeholder="Search a name or topic, e.g. 'grokking'" aria-label="Search researchers">
+  <div class="pd-bar" id="pdBar"></div>
+  <p class="pd-count" id="pdCount"></p>
+  <div class="pd-grid" id="pdGrid"></div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="essays" data-short="Framing essays">The essays that shape the field</h2>
+
+<p>Some of the most influential writing in mech interp is not a paper with experiments. It is a short essay that frames the problem. If you read only a few things, read these.</p>
+
+<div class="cards">
+  <div class="card"><h4><a href="https://transformer-circuits.pub/2022/mech-interp-essay/index.html">Variables and interpretable bases</a> · Olah, 2022</h4><p>Weights are a compiled binary; the architecture is a strange virtual machine. To understand a program, you must know its <b>variables</b>. In a network, the variables are features. You can read them only if the network stores them in an interpretable <b>basis</b>. Superposition breaks this. That is why the field searches for a better basis.</p></div>
+  <div class="card"><h4><a href="https://transformer-circuits.pub/2023/interpretability-dreams/index.html">Interpretability Dreams</a> · Olah, 2023</h4><p>The vision statement. Small, checkable claims; larger structure like organs; universality as footholds; automate with AI. See Figure 11.2.</p></div>
+  <div class="card"><h4><a href="https://transformer-circuits.pub/2024/july-update/index.html">The Next Five Hurdles / Dark Matter?</a> · Olah, 2024</h4><p>After Scaling Monosemanticity, the obstacles that remain. The "dark matter" worry: SAEs may find only a small fraction of features, with a huge tail of rare features left over.</p></div>
+  <div class="card"><h4><a href="https://www.alignmentforum.org/posts/uK6sQCNMw8WKzJeCQ/a-longlist-of-theories-of-impact-for-interpretability">A Longlist of Theories of Impact</a> · Nanda, 2022</h4><p>19 ways interpretability could reduce AI risk. The "pro" side of the debate.</p></div>
+  <div class="card"><h4><a href="https://www.alignmentforum.org/posts/LNA8mubrByG7SFacm/against-almost-every-theory-of-impact-of-interpretability">Against Almost Every Theory of Impact</a> · Segerie, 2023</h4><p>Most theories of impact are unlikely to pay off in time, and interp had few real wins. Resources may do more good elsewhere. Started a big debate.</p></div>
+  <div class="card"><h4><a href="https://www.darioamodei.com/post/the-urgency-of-interpretability">The Urgency of Interpretability</a> · Amodei, 2025</h4><p>Build an "MRI for AI". Target: interpretability that can reliably detect most model problems by 2027. More research across labs and academia.</p></div>
+  <div class="card"><h4><a href="https://ai-frontiers.org/articles/the-misguided-quest-for-mechanistic-ai-interpretability">The Misguided Quest</a> · Hendrycks &amp; Hiscott, 2025</h4><p>Bottom-up understanding of a complex system from its parts may not work, as with weather and molecules. Prefer top-down representation engineering.</p></div>
+  <div class="card"><h4><a href="https://www.lesswrong.com/posts/PwnadG4BFjaER3MGf/interpretability-will-not-reliably-find-deceptive-ai">Interpretability Will Not Reliably Find Deceptive AI</a> · Nanda, 2025</h4><p>Interpretability should be one layer in a "defense in depth" portfolio, not a guarantee.</p></div>
+  <div class="card"><h4><a href="https://www.lesswrong.com/posts/StENzDcD3kpfGJssR/a-pragmatic-vision-for-interpretability">A Pragmatic Vision for Interpretability</a> · Nanda et al. (GDM), Dec 2025</h4><p>Choose problems on the critical path to safety. Measure progress on concrete <b>proxy tasks</b>. Try the simplest method first ("method minimalism"). Use any method that works, mechanistic or not.</p></div>
+  <div class="card"><h4><a href="https://www.neuronpedia.org/graph/info">The Circuits Research Landscape</a> · Lindsey, Ameisen, Nanda et al., Aug 2025</h4><p>Researchers from Anthropic, Google DeepMind, Goodfire, EleutherAI and Decode Research (Neuronpedia) replicated attribution graphs on open models. They also list the limits honestly: a graph explains one prompt, error nodes get in the way, and transcoders can break up geometric structure. See <a href="09-circuit-tracing.html#limits">Chapter 9</a>.</p></div>
+  <div class="card"><h4><a href="https://alignment.anthropic.com/2026/psm">The Persona Selection Model</a> · Marks, Lindsey, Olah, Feb 2026</h4><p>Pretraining teaches a model to simulate many characters. Post-training selects one, the Assistant. Interpretability evidence (persona features, the Assistant axis) supports this frame for alignment.</p></div>
+  <div class="card"><h4><a href="https://arxiv.org/abs/2502.07586">We Can't Understand AI Using our Existing Vocabulary</a> · Hewitt, Geirhos, Kim, 2025</h4><p>Interpretability is a communication problem. Create <b>neologisms</b>: new learned tokens that name machine concepts, such as a "length" token that controls answer length.</p></div>
+  <div class="card"><h4><a href="https://www.jmlr.org/papers/v26/23-0058.html">Causal Abstraction: A Theoretical Foundation</a> · Geiger et al., 2025</h4><p>One theory under almost every method. A mechanistic explanation is a high-level causal model that the network <em>implements</em>. Patching, scrubbing, DAS and steering all test that claim.</p></div>
+  <div class="card"><h4><a href="https://arxiv.org/abs/2501.16496">Open Problems in Mechanistic Interpretability</a> · Sharkey et al., 2025</h4><p>A large multi-group map of what the field still cannot do. See the open-problems section below.</p></div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="debates" data-short="The big debates">The big debates</h2>
+
+<p>Mech interp has strong internal debates. That is healthy. The explorer below gives the main debates. Each one has evidence on both sides, and a short note on where things stand in 2026.</p>
+
+<div class="widget" id="debateWidget">
+  <div class="widget-title">Interactive · Debate explorer</div>
+  <div class="widget-sub">Pick a debate. Read both columns before you read the "state of play".</div>
+  <div class="db-list" id="dbList"></div>
+  <div class="db-q" id="dbQ"></div>
+  <div class="db-cols">
+    <div class="db-col yes"><h4 id="dbYesH">Yes</h4><ul id="dbYes"></ul></div>
+    <div class="db-col no"><h4 id="dbNoH">No</h4><ul id="dbNo"></ul></div>
+  </div>
+  <div class="db-now" id="dbNow"></div>
+</div>
+
+<h3 id="features-real">Are features real, and do SAEs find them?</h3>
+<p>The whole program of <a href="08-dictionary-learning.html">Chapter 8</a> assumes that a model's activations are sums of meaningful feature directions, and that sparse autoencoders can recover them. There is good support. Planted features in toy data come back. Features such as the Golden Gate Bridge feature have clear causal effects. Many features are multilingual and multimodal. SAE features were useful in the auditing game.</p>
+<p>But the problems are serious:</p>
+<ul>
+<li><b>Seed dependence.</b> Two SAEs trained on the same data with different random seeds share only part of their features. For a 131K-latent SAE on Llama 3 8B, only about 30% were shared (Paulo &amp; Belrose, 2025).</li>
+<li><b>No natural size.</b> Feature splitting means that a larger SAE breaks one feature into many. There is no single "right" dictionary size.</li>
+<li><b>Holes.</b> Feature absorption makes general features fail on some inputs.</li>
+<li><b>Random models.</b> SAEs trained on <em>untrained</em> transformers get similar auto-interpretability scores (Heap et al., 2025). So a high score alone does not prove that the SAE found the model's computation.</li>
+<li><b>Dark matter.</b> The part that the SAE cannot rebuild is large and structured. Larger SAEs struggle on the same inputs as smaller ones (Engels, Riggs, Tegmark, 2024).</li>
+<li><b>Non-linear features.</b> Some features are circles or curved manifolds, not single directions (<a href="03-superposition.html">Chapter 3</a>).</li>
+</ul>
+<p>A common middle view has formed: SAE features are a <b>useful, lossy lens</b> on activations, not a list of the model's "true" variables. A 2025 position paper put it as: use SAEs to <b>discover unknowns</b>, not to act on concepts you already know.</p>
+
+<div class="callout update">
+<span class="label">Update · October 2026</span>
+<p>The SAE debate did not end with a winner. It ended with a division of labour. SAEs stayed in use as <b>discovery tools</b>: the Opus 4.5 audit used a 3-million-feature SAE to find unexpected features. For tasks where you already know the concept, people use <b>probes and steering vectors</b>, because they are cheaper and often better. New work also questions the "feature" unit itself. Anthropic's sparse mixtures of linear transforms (July 2025) use small conditional linear maps as units. Transluce reported (November 2025) that circuits in plain neurons can be as sparse as circuits in SAE features. And parameter decomposition and weight-sparse models decompose weights instead of activations (<a href="09-circuit-tracing.html#parameter-decomposition">Chapter 9</a>).</p>
+</div>
+
+<figure class="panel">
+<svg viewBox="0 0 680 250" role="img" aria-label="Long-tail plot of feature frequency. SAEs capture the frequent head; the rare tail is dark matter.">
+  <line x1="60" y1="210" x2="650" y2="210" stroke="var(--ink-3)"/>
+  <line x1="60" y1="210" x2="60" y2="20" stroke="var(--ink-3)"/>
+  <text x="355" y="240" text-anchor="middle" font-size="12" class="muted">features, sorted from most common to rarest →</text>
+  <text x="22" y="115" text-anchor="middle" font-size="12" class="muted" transform="rotate(-90 22 115)">how often active</text>
+  <path id="dmHead" d="" fill="var(--blue-soft)" stroke="none"/>
+  <path id="dmTail" d="" fill="var(--bg-2)" stroke="none"/>
+  <path id="dmCurve" d="" fill="none" stroke="var(--ink)" stroke-width="2"/>
+  <line id="dmCut" x1="0" y1="20" x2="0" y2="210" stroke="var(--blue)" stroke-dasharray="5 4" stroke-width="1.5"/>
+  <text id="dmCapLabel" x="0" y="40" font-size="13" font-weight="700" fill="var(--blue)">found by the SAE</text>
+  <text x="560" y="150" text-anchor="middle" font-size="13" font-weight="700" class="muted">"dark matter"?</text>
+  <text x="560" y="168" text-anchor="middle" font-size="12" class="muted">a long tail of rare features</text>
+</svg>
+<div class="controls" style="font-family:var(--sans)"><label>SAE size (more latents → cut moves right) <input type="range" id="dmSize" min="0" max="1" step="0.01" value="0.25"> <output id="dmOut"></output></label></div>
+<figcaption><b>Figure 11.6.</b> Olah's "dark matter" worry, as a schematic. If feature frequencies have a long tail, each larger SAE captures more of it, but a huge number of rare features may stay out of reach. The curve shape is illustrative, not measured.</figcaption>
+</figure>
+
+<h3 id="useful-for-safety">Is interpretability useful for safety?</h3>
+<p>In 2023, Charbel-Raphaël Segerie argued against "almost every" theory of impact. In 2025, Dan Hendrycks and Laura Hiscott argued that the bottom-up program is "misguided", and cited DeepMind's SAE negative results. Neel Nanda himself wrote that interpretability "will not reliably find deceptive AI", and should be one layer of defense among many.</p>
+<p>On the other side, 2025 and early 2026 brought the first real uses: the auditing game, system-card audits and persona features (2025), and probes in production (January 2026). In April 2025, Dario Amodei argued that the work is urgent. He set a goal that "interpretability can reliably detect most model problems" by 2027. In January 2026, MIT Technology Review named mechanistic interpretability one of its "10 Breakthrough Technologies 2026".</p>
+
+<h4>A new argument: tests are getting harder to trust</h4>
+<p>By 2026, a new reason to look inside models became central. Strong models often notice that they are being tested. This is called <span class="term" data-def="When a model recognizes that it is in a test or evaluation, not in real use. It may then behave differently, which makes test results less trustworthy.">evaluation awareness</span>. If a model behaves well <em>because</em> it suspects a test, then behaviour tests overestimate its safety. A model can also notice a test and <b>not say so</b>. White-box tools gave the first evidence of this. The Mythos Preview card estimated that the model privately considered a test in about 29% of transcripts of its main test suite. The Opus 5 card found unspoken grader awareness even though the model mentioned tests less often than earlier models. Only tools that read internals can find a thought that the model does not write down. This is now one of the strongest practical arguments for interpretability.</p>
+<p>The doubts are also sharper now. Models can be trained to <b>evade probes</b> ("Neural Chameleons", December 2025). In AuditBench (February 2026), white-box tools helped an auditing agent less than black-box tools. And the interpretability tools themselves can be wrong, so their findings still need checks by other methods.</p>
+
+<h3 id="ambitious-vs-pragmatic">Ambitious or pragmatic?</h3>
+<p>This is the main strategic debate of 2025–2026. It is not about whether interpretability works. It is about what to aim for.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 680 220" role="img" aria-label="Spectrum from ambitious full reverse engineering to pragmatic problem-driven interpretability, with example work placed along it.">
+  <defs><linearGradient id="spec" x1="0" x2="1"><stop offset="0" stop-color="var(--purple)"/><stop offset="1" stop-color="var(--green)"/></linearGradient></defs>
+  <rect x="40" y="90" width="600" height="14" rx="7" fill="url(#spec)" opacity=".8"/>
+  <text x="40" y="70" font-size="14" font-weight="800" fill="var(--purple)">AMBITIOUS</text>
+  <text x="40" y="132" font-size="12" class="muted">reverse-engineer the whole model;</text>
+  <text x="40" y="148" font-size="12" class="muted">find the "true" features &amp; circuits</text>
+  <text x="640" y="70" text-anchor="end" font-size="14" font-weight="800" fill="var(--green)">PRAGMATIC</text>
+  <text x="640" y="132" text-anchor="end" font-size="12" class="muted">solve a concrete safety task;</text>
+  <text x="640" y="148" text-anchor="end" font-size="12" class="muted">beat baselines on proxy tasks</text>
+  <g font-size="11.5" text-anchor="middle">
+    <circle cx="90" cy="97" r="6" fill="var(--panel)" stroke="var(--ink)" stroke-width="2"/><text x="90" y="186">enumerative</text><text x="90" y="200">safety</text>
+    <circle cx="200" cy="97" r="6" fill="var(--panel)" stroke="var(--ink)" stroke-width="2"/><text x="200" y="186">parameter</text><text x="200" y="200">decomposition</text>
+    <circle cx="305" cy="97" r="6" fill="var(--panel)" stroke="var(--ink)" stroke-width="2"/><text x="305" y="186">attribution</text><text x="305" y="200">graphs</text>
+    <circle cx="410" cy="97" r="6" fill="var(--panel)" stroke="var(--ink)" stroke-width="2"/><text x="410" y="186">auditing</text><text x="410" y="200">games</text>
+    <circle cx="510" cy="97" r="6" fill="var(--panel)" stroke="var(--ink)" stroke-width="2"/><text x="510" y="186">steering for</text><text x="510" y="200">eval awareness</text>
+    <circle cx="600" cy="97" r="6" fill="var(--panel)" stroke="var(--ink)" stroke-width="2"/><text x="600" y="186">probes as</text><text x="600" y="200">monitors</text>
+  </g>
+  <g stroke="var(--rule)"><line x1="90" y1="104" x2="90" y2="172"/><line x1="200" y1="104" x2="200" y2="172"/><line x1="305" y1="104" x2="305" y2="172"/><line x1="410" y1="104" x2="410" y2="172"/><line x1="510" y1="104" x2="510" y2="172"/><line x1="600" y1="104" x2="600" y2="172"/></g>
+</svg>
+<figcaption><b>Figure 11.7.</b> The ambitious–pragmatic spectrum. Placement of examples is our own judgment. Most groups work at several points at once.</figcaption>
+</figure>
+
+<p>On 1 December 2025, Google DeepMind's team (Nanda, Engels, Conmy, Rajamanoharan, Chughtai, McDougall, Kramár, Smith) published <a href="https://www.lesswrong.com/posts/StENzDcD3kpfGJssR/a-pragmatic-vision-for-interpretability">"A Pragmatic Vision for Interpretability"</a>. It describes their pivot to <b>pragmatic interpretability</b>. The main ideas are:</p>
+<ol>
+<li>Work directly on problems on the critical path to safe advanced AI.</li>
+<li>Choose problems where interpretability has a comparative advantage.</li>
+<li>Measure progress with <b>empirical proxy tasks</b>. For example: does the method find a hidden goal, or reduce eval awareness, better than a simple baseline?</li>
+<li>Include non-mechanistic methods (probing, steering, reading chain-of-thought, model diffing) when they work.</li>
+</ol>
+<p>The post says that "grand goals like near-complete reverse-engineering still feel far out of reach". It points to the Sonnet 4.5 work: "the best method was a steering vector derived from a single contrastive pair of prompts". The authors call this <b>method minimalism</b>: try prompting, steering and reading the chain of thought first, and add complex methods only when simple ones fail. The ambitious side answers that only deep understanding can give strong guarantees, and that attribution graphs and parameter decomposition are real progress toward it.</p>
+<p>In 2026 both sides kept working, and they meet in practice. Anthropic's audits use pragmatic tools (probes, steering, NLAs) next to attribution graphs. Its 2026 basic research continued on the ambitious side, for example a study of "interference weights" that exist only because of superposition (August 2026). Goodfire's 2026 work on shaping training sits closer to the pragmatic end.</p>
+
+<div class="callout analogy">
+<span class="label">Analogy</span>
+<p>Ambitious interpretability is like wanting a full wiring diagram of the brain. Pragmatic interpretability is like building a good blood test. The blood test does not explain everything, but it can catch a disease today. Medicine needs both.</p>
+</div>
+
+<h3 id="scale">Can it scale?</h3>
+<p>Every success so far is <b>partial</b>. The IOI circuit (<a href="06-circuit-case-studies.html">Chapter 6</a>) covers one task in a small model. Attribution graphs (<a href="09-circuit-tracing.html">Chapter 9</a>) give clear insight for only part of the prompts studied, they leave "error nodes" unexplained, and at first they froze attention. Analysis is slow and needs expert humans. A multi-lab review in August 2025 (the Circuits Research Landscape) confirmed these limits on open models. The main hopes for scaling are: automation with AI agents, better units (transcoders, parameter decomposition, weight-sparse models), and models that explain their own activations (<a href="10-new-directions.html">Chapter 10</a>).</p>
+
+<div class="quiz" data-answer="2">
+  <div class="q">Which finding is a reason to doubt that SAE features are the model's "true" features?</div>
+  <div class="opts">
+    <button>The Golden Gate Bridge feature changes behaviour when clamped.</button>
+    <button>SAE features were useful in the auditing game.</button>
+    <button>SAEs trained with different random seeds share only part of their features, and SAEs on untrained models get similar interpretability scores.</button>
+    <button>SAE features can be multilingual.</button>
+  </div>
+  <div class="why">Seed dependence and the random-model result suggest that SAEs give one useful decomposition among many, and that a high interpretability score can come from the data rather than from the model's computation. The other options are evidence <em>for</em> SAEs.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="open-problems" data-short="Open problems">Open problems</h2>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2501.16496">Open Problems in Mechanistic Interpretability</a></div><div class="a">Lee Sharkey, Bilal Chughtai, Joshua Batson, Jack Lindsey, Jeff Wu, … Neel Nanda, Martin Wattenberg, … Max Tegmark, David Bau, Atticus Geiger, Mor Geva, Jesse Hoogland, Tom McGrath and others</div><div class="s">A shared map, written by authors from many groups, of what the field still cannot do.</div></div></div>
+
+<p>The paper groups open problems into three kinds: <b>methods and foundations</b>, <b>applications</b>, and <b>socio-technical</b> problems. Click a box in the map to read about it. Then use the checklist to track which problems you understand.</p>
+
+<div class="widget" id="opWidget">
+  <div class="widget-title">Interactive · Map of open problems</div>
+  <div class="widget-sub">Click a box for details. The three columns follow the structure of Sharkey et al. (2025); the short descriptions are ours.</div>
+  <svg id="opSvg" viewBox="0 0 680 290" role="img" aria-label="Open problems in three columns: methods, applications, socio-technical."></svg>
+  <div class="detail" id="opDetail">Click a box to see the problem.</div>
+  <figcaption><b>Figure 11.8.</b> Open problems in mechanistic interpretability, grouped as in Sharkey et al. (2025).</figcaption>
+</div>
+
+<div class="widget" id="opCheck">
+  <div class="widget-title">Interactive · Checklist: can you explain each problem?</div>
+  <div class="widget-sub">Click a row to expand it. Tick the box when you could explain the problem to a friend. Ticks are not saved when you reload.</div>
+  <div class="op-prog"><div id="opBar"></div></div>
+  <div id="opList"></div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="state-2026" data-short="The field in 2026">Where the field stands in 2026</h2>
+
+<p>Here is a short scorecard. It says what the field can do today, and what it cannot do yet.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>We can…</th><th>We cannot yet…</th></tr></thead>
+<tbody>
+<tr><td>Fully reverse-engineer small models on toy tasks (modular addition, IOI-style tasks, Othello world models).</td><td>Explain a frontier model end to end.</td></tr>
+<tr><td>Extract millions of interpretable features from frontier models and steer with them.</td><td>Show that a feature list is complete, or that it matches the model's "true" variables.</td></tr>
+<tr><td>Trace attribution graphs that reveal planning, multi-hop reasoning and parallel arithmetic paths.</td><td>Get clean graphs for most prompts, or fully explain attention and error nodes.</td></tr>
+<tr><td>Find a planted hidden goal in an auditing game, and use features, attribution graphs and NLAs in pre-release audits of frontier models.</td><td>Guarantee that a model has no hidden goals or deception.</td></tr>
+<tr><td>Find evaluation awareness that the model does not say out loud.</td><td>Measure exactly how often a model knows it is tested, or remove this effect from test results.</td></tr>
+<tr><td>Detect misuse, reward hacking and some deception with cheap linear probes, also in production.</td><td>Make probes reliable against a model that has learned to hide from them.</td></tr>
+<tr><td>Automate parts of the work with auditing agents and auto-interpretability.</td><td>Trust automated explanations without human checks, or make white-box tools reliably beat black-box tools for agents.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="recent">What happened in 2025–2026</h3>
+<p>A short, dated list of the main events since mid-2025. Self-explanation methods (activation oracles, NLAs, the "global workspace") are covered in <a href="10-new-directions.html#self-explanation">Chapter 10</a>, so they appear here only briefly.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Date</th><th>What happened</th><th>Why it matters</th></tr></thead>
+<tbody>
+<tr><td>Jul 2025</td><td>Anthropic's <b>auditing agents</b> solve the auditing game in 13% of single runs and 42% as a combined "super-agent".</td><td>Audits can be automated, at least on a test model.</td></tr>
+<tr><td>Aug 2025</td><td><b>Circuits Research Landscape</b>: Anthropic, GDM, Goodfire, EleutherAI and Decode Research (Neuronpedia) replicate attribution graphs on open models.</td><td>A shared, honest list of what graphs can and cannot do.</td></tr>
+<tr><td>Sep 2025</td><td><b>Sonnet 4.5 system card</b>: the first white-box audit of a frontier model, by Anthropic's account.</td><td>Interpretability enters the release process.</td></tr>
+<tr><td>Nov 2025</td><td><b>Opus 4.5 card</b> uses SAE features to explain a case of deception by omission. OpenAI publishes <b>weight-sparse transformers</b>.</td><td>Features explain a real misbehaviour; models built to be readable.</td></tr>
+<tr><td>Dec 2025</td><td>GDM's <b>"A Pragmatic Vision for Interpretability"</b>. <b>Gemma Scope 2</b>. <b>Neural Chameleons</b> shows that models can learn to evade probes.</td><td>The field's strategy shifts toward measurable tasks; probes get a stress test.</td></tr>
+<tr><td>Jan 2026</td><td><b>Probes in production</b>: GDM's Gemini misuse probes and Anthropic's Constitutional Classifiers++. MIT Technology Review lists mech interp as a 2026 breakthrough technology. <b>The Assistant Axis</b>.</td><td>The simplest tool reaches real products.</td></tr>
+<tr><td>Feb 2026</td><td><b>Opus 4.6 card</b>: attribution graphs used in a release audit. <b>AuditBench</b> and its "tool-to-agent gap". Goodfire's <b>Features as Rewards</b>; Goodfire's $150M Series B.</td><td>Circuit tracing used in a real audit; a sober benchmark; interpretability used to train.</td></tr>
+<tr><td>Apr 2026</td><td>Anthropic's <b>emotion concepts</b> paper. <b>Mythos Preview card</b>: private test awareness in about 29% of main-suite transcripts; emotion steering changes destructive actions.</td><td>Hidden evaluation awareness becomes measurable.</td></tr>
+<tr><td>May 2026</td><td>Anthropic's <b>natural language autoencoders</b> (Fraser-Taliente, Kantamneni, Ong et al.), first used in the Opus 4.6 audit (<a href="10-new-directions.html#self-explanation">Ch. 10</a>).</td><td>Activations read out as text, without labelled data.</td></tr>
+<tr><td>Jul 2026</td><td><b>Opus 5 card</b>: an NLA investigator agent reads flagged transcripts at scale. Anthropic's <b>global workspace</b> paper (<a href="10-new-directions.html#workspace">Ch. 10</a>). Mech interp workshop at ICML 2026 (Seoul).</td><td>Interpretability becomes a routine audit tool at one lab.</td></tr>
+<tr><td>Aug 2026</td><td>Transluce scales <b>activation oracles</b> to an open model with about a trillion parameters. Anthropic studies <b>interference weights</b> in a tiny model.</td><td>Self-explanation reaches very large models; basic science continues.</td></tr>
+<tr><td>Sep 2026</td><td>Goodfire: <b>probes catch reward hacking</b> about as well as LLM monitors, at much lower cost.</td><td>Cheap monitors for agent training.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Main trends</h3>
+<ul>
+<li><b>Interpretability is now part of safety practice, at least at one lab.</b> Every major Anthropic system card since September 2025 has a white-box audit, and auditing agents and model diffing are becoming standard pre-release tools there. Other labs publish less of this work so far.</li>
+<li><b>Behaviour tests need help.</b> Evaluation awareness, including awareness that the model does not say out loud, is the strongest current reason to read internals.</li>
+<li><b>From reading to writing.</b> Interpretability signals are starting to shape training: probes as rewards, preventative steering, and data choices guided by interpretability.</li>
+<li><b>Pragmatism.</b> Methods are judged on tasks against simple baselines. Linear probes and difference-of-means steering vectors are often hard to beat.</li>
+<li><b>New units.</b> Beyond SAEs: transcoders, cross-layer transcoders, parameter decomposition, and models trained to be sparse from the start (<a href="09-circuit-tracing.html">Chapter 9</a>).</li>
+<li><b>Geometry.</b> More work on curved feature manifolds, not only single directions (<a href="03-superposition.html">Chapter 3</a>).</li>
+<li><b>Self-explanation.</b> Models that translate their own activations into words, and a "global workspace" view of which representations a model can put into words (<a href="10-new-directions.html">Chapter 10</a>).</li>
+<li><b>Beyond language.</b> Interpretability of DNA and protein models has started to give scientific findings (<a href="10-new-directions.html">Chapter 10</a>).</li>
+<li><b>Robustness.</b> Monitors must work against models that might hide. Neural Chameleons showed that this is a real risk for probes.</li>
+<li><b>Money and attention.</b> Goodfire raised $150M in February 2026, and MIT Technology Review covered the field as a breakthrough technology.</li>
+</ul>
+
+<div class="callout warn">
+<span class="label">Be careful with hype</span>
+<p>Reports of a "breakthrough" usually describe one model, one task, or one well-chosen example. Ask three questions. Was the claim tested with an intervention? Was it compared with a simple baseline? On what fraction of cases does it work?</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="get-started" data-short="How to get started">How to get started</h2>
+
+<p>You can do real mech interp research on a laptop or a free cloud GPU. Small models such as GPT-2 small and Gemma-2-2B are enough for many projects. This survey's own activation-patching data in <a href="05-causal-methods.html">Chapter 5</a> came from a short script on a laptop.</p>
+
+<div class="steps">
+  <div class="step" data-label="1. Basics">Learn enough of transformers to follow <a href="04-transformers.html">Chapter 4</a>. Then read Neel Nanda's "Getting Started in Mechanistic Interpretability" and his glossary on <a href="https://www.neelnanda.io">neelnanda.io</a>.</div>
+  <div class="step" data-label="2. Hands on">Work through the <b>ARENA</b> transformer interpretability notebooks. They cover TransformerLens, induction heads, IOI, superposition and SAEs, Othello-GPT and function vectors. Write the code yourself; do not only read it.</div>
+  <div class="step" data-label="3. Explore">Browse features and attribution graphs on <a href="https://www.neuronpedia.org">Neuronpedia</a>. Try steering. Load a Gemma Scope SAE with SAELens and look at a few hundred features by hand.</div>
+  <div class="step" data-label="4. Replicate">Replicate one known result, for example the IOI patching picture or an induction head. Replication teaches the details that papers leave out.</div>
+  <div class="step" data-label="5. Small project">Pick a small open problem. Neel Nanda's "200 Concrete Open Problems" list is old, but it shows the right size of a first project. Always compare your method with a simple baseline.</div>
+  <div class="step" data-label="6. Community">Post your work on LessWrong / the Alignment Forum. Apply to <a href="https://www.matsprogram.org">MATS</a> or a fellowship to get a mentor.</div>
+</div>
+
+<h3>A reading order</h3>
+<ol>
+<li>Olah et al., "Zoom In" (2020) — the three claims.</li>
+<li>Elhage et al., "A Mathematical Framework for Transformer Circuits" (2021).</li>
+<li>Olsson et al., "In-context Learning and Induction Heads" (2022).</li>
+<li>Elhage et al., "Toy Models of Superposition" (2022).</li>
+<li>Wang et al., "Interpretability in the Wild" (IOI, 2022), with Heimersheim &amp; Nanda's guide to activation patching (2024).</li>
+<li>Bricken et al., "Towards Monosemanticity" (2023), then Templeton et al., "Scaling Monosemanticity" (2024).</li>
+<li>Ameisen et al., "Circuit Tracing", and Lindsey et al., "On the Biology of a Large Language Model" (2025).</li>
+<li>Marks et al., "Auditing Language Models for Hidden Objectives" (2025).</li>
+<li>Sharkey et al., "Open Problems in Mechanistic Interpretability" (2025).</li>
+<li>Then read both sides: Segerie (2023), Hendrycks &amp; Hiscott (2025), Amodei (2025), and the GDM "pragmatic" posts.</li>
+</ol>
+
+<h3>Where to read new work</h3>
+<ul>
+<li><a href="https://transformer-circuits.pub">Transformer Circuits Thread</a> — Anthropic papers, essays and Circuits Updates.</li>
+<li><a href="https://distill.pub">Distill</a> (archived) — the vision-era classics.</li>
+<li><a href="https://www.alignmentforum.org">Alignment Forum</a> / LessWrong — many results appear here first.</li>
+<li><a href="https://alignment.anthropic.com">Anthropic Alignment Science blog</a>, <a href="https://www.goodfire.com/research">Goodfire research</a>, <a href="https://transluce.org">Transluce</a>, <a href="https://www.apolloresearch.ai">Apollo Research</a>, <a href="https://www.eleuther.ai">EleutherAI</a>, <a href="https://baulab.info">Bau lab</a>.</li>
+<li>Neel Nanda's "Extremely Opinionated Annotated List of My Favourite Mechanistic Interpretability Papers" — the best curated reading list.</li>
+</ul>
+
+<div class="quiz" data-answer="3">
+  <div class="q">What does "pragmatic interpretability" mainly change?</div>
+  <div class="opts">
+    <button>It stops all research on circuits.</button>
+    <button>It uses only sparse autoencoders.</button>
+    <button>It claims that models are already fully understood.</button>
+    <button>It chooses concrete safety problems and measures methods on proxy tasks against simple baselines.</button>
+  </div>
+  <div class="why">The pragmatic view keeps many tools, including non-mechanistic ones, but judges them by whether they help on concrete tasks (such as finding a hidden goal) better than simple baselines.</div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <div class="q">OpenAI's "toxic persona" latent was found with which method?</div>
+  <div class="opts">
+    <button>SAE-based model diffing: compare SAE latents of GPT-4o before and after the bad fine-tune.</button>
+    <button>Feature visualization of image neurons.</button>
+    <button>Causal scrubbing of the IOI circuit.</button>
+    <button>Reading the model's chain of thought only.</button>
+  </div>
+  <div class="why">They compared the model before and after fine-tuning on insecure code, using an SAE, and found latents whose activity changed. The "toxic persona" latent predicted and controlled emergent misalignment.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="summary">Summary</h2>
+<div class="callout key" id="takeaways">
+<span class="label">Key takeaways</span>
+<ul>
+<li>Interpretability has many possible payoffs. The strongest evidence so far is for <b>auditing</b> and <b>monitoring</b>.</li>
+<li>2025–2026 was a turning point: the auditing game, white-box audits in system cards, the persona-feature explanation of emergent misalignment, and probes in production.</li>
+<li>The strongest new argument for interpretability is evaluation awareness: models can know they are tested without saying so, and only internal tools can see that. The strongest new warnings are probe evasion and the gap between good tools and good auditing agents.</li>
+<li>The field rests on a small set of people, groups and open tools. You can join with modest compute.</li>
+<li>Strong debates remain: what features are, whether SAEs find them (now: a useful discovery tool, not ground truth), whether the work can scale, and whether to aim for full understanding or for practical tools.</li>
+<li>The honest summary in 2026: real progress, real uses, and a long list of open problems.</li>
+</ul>
+<p><b>Where this leads:</b> <a href="12-reference.html">Chapter 12</a> collects the glossary, a full timeline and a reading list in order. To go further yourself, start with <a href="#get-started">How to get started</a> above.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="references">References</h2>
+<ol class="refs">
+<li>Nanda, N. (2022). <a href="https://www.alignmentforum.org/posts/uK6sQCNMw8WKzJeCQ/a-longlist-of-theories-of-impact-for-interpretability">A Longlist of Theories of Impact for Interpretability</a>. Alignment Forum.</li>
+<li>Olah, C. (2022). <a href="https://transformer-circuits.pub/2022/mech-interp-essay/index.html">Mechanistic Interpretability, Variables, and the Importance of Interpretable Bases</a>.</li>
+<li>Olah, C. (2023). <a href="https://transformer-circuits.pub/2023/interpretability-dreams/index.html">Interpretability Dreams</a>.</li>
+<li>Olah, C. et al. (2024). <a href="https://transformer-circuits.pub/2024/july-update/index.html">Circuits Updates – July 2024</a> (The Next Five Hurdles; The Dark Matter of Neural Networks?).</li>
+<li>Marks, S., Treutlein, J., Bricken, T., Lindsey, J. et al. (2025). <a href="https://arxiv.org/abs/2503.10965">Auditing Language Models for Hidden Objectives</a>.</li>
+<li>Bricken, T., Wang, R., Bowman, S., Ong, E., Treutlein, J., Wu, J., Hubinger, E., Marks, S. (2025). <a href="https://alignment.anthropic.com/2025/automated-auditing/">Building and evaluating alignment auditing agents</a>. Anthropic Alignment Science blog.</li>
+<li>Anthropic (2025). <a href="https://assets.anthropic.com/m/12f214efcc2f457a/original/claude-sonnet-4-5-system-card.pdf">Claude Sonnet 4.5 System Card</a>.</li>
+<li>Betley, J. et al. (2025). <a href="https://arxiv.org/abs/2502.17424">Emergent Misalignment</a>.</li>
+<li>Wang, M., Dupré la Tour, T., Watkins, O., Makelov, A., Chi, R. A., Miserendino, S., Wang, J., Rajaram, A., Heidecke, J., Patwardhan, T., Mossing, D. (2025). <a href="https://arxiv.org/abs/2506.19823">Persona Features Control Emergent Misalignment</a>. ICLR 2026.</li>
+<li>Chen, R., Arditi, A., Sleight, H., Evans, O., Lindsey, J. (2025). <a href="https://arxiv.org/abs/2507.21509">Persona Vectors</a>.</li>
+<li>Soligo, A., Turner, E., Rajamanoharan, S., Nanda, N. (2025). <a href="https://arxiv.org/abs/2506.11618">Convergent Linear Representations of Emergent Misalignment</a>.</li>
+<li>Lindsey, J. et al. (2024). <a href="https://transformer-circuits.pub/2024/crosscoders/index.html">Sparse Crosscoders for Cross-Layer Features and Model Diffing</a>.</li>
+<li>Minder, J., Dumas, C., Juang, C., Chughtai, B., Nanda, N. (2025). <a href="https://arxiv.org/abs/2504.02922">Overcoming Sparsity Artifacts in Crosscoders to Interpret Chat-Tuning</a>.</li>
+<li>Lindsey, J. (2025). <a href="https://transformer-circuits.pub/2025/introspection/index.html">Emergent Introspective Awareness in Large Language Models</a>.</li>
+<li>Sofroniew, N., Kauvar, I., Saunders, W., Chen, R., … Olah, C., Lindsey, J. (2026). <a href="https://transformer-circuits.pub/2026/emotions/index.html">Emotion Concepts and their Function in a Large Language Model</a>. Transformer Circuits Thread. Blog: <a href="https://www.anthropic.com/research/emotion-concepts-function">anthropic.com</a>.</li>
+<li>Smith, L., Rajamanoharan, S., Conmy, A., McDougall, C., Lieberum, T., Kramár, J., Shah, R., Nanda, N. (2025). <a href="https://www.alignmentforum.org/posts/4uXCAJNuPKtKBsi28/sae-progress-update-2-draft">Negative Results for SAEs On Downstream Tasks and Deprioritising SAE Research</a>.</li>
+<li>Paulo, G., Belrose, N. (2025). <a href="https://arxiv.org/abs/2501.16615">Sparse Autoencoders Trained on the Same Data Learn Different Features</a>.</li>
+<li>Heap, T., Lawson, T., Farnik, L., Aitchison, L. (2025). <a href="https://arxiv.org/abs/2501.17727">Automated Interpretability Metrics Do Not Distinguish Trained and Random Transformers</a> (first titled "Sparse Autoencoders Can Interpret Randomly Initialized Transformers").</li>
+<li>Engels, J., Riggs, L., Tegmark, M. (2024). <a href="https://arxiv.org/abs/2410.14670">Decomposing the Dark Matter of Sparse Autoencoders</a>.</li>
+<li>Peng, K., Movva, R., Kleinberg, J., Pierson, E., Garg, N. (2025). <a href="https://arxiv.org/abs/2506.23845">Position: Use Sparse Autoencoders to Discover Unknowns, Not to Act on Knowns</a>.</li>
+<li>Nanda, N. (2025). <a href="https://www.lesswrong.com/posts/PwnadG4BFjaER3MGf/interpretability-will-not-reliably-find-deceptive-ai">Interpretability Will Not Reliably Find Deceptive AI</a>. LessWrong.</li>
+<li>Nanda, N., Engels, J., Conmy, A., Rajamanoharan, S., Chughtai, B., McDougall, C., Kramár, J., Smith, L. (2025). <a href="https://www.lesswrong.com/posts/StENzDcD3kpfGJssR/a-pragmatic-vision-for-interpretability">A Pragmatic Vision for Interpretability</a>. LessWrong / Alignment Forum.</li>
+<li>Lindsey, J., Ameisen, E., Nanda, N. et al. (2025). <a href="https://www.neuronpedia.org/graph/info">The Circuits Research Landscape: Results and Perspectives</a>. Neuronpedia.</li>
+<li>Anthropic (2025). <a href="https://www-cdn.anthropic.com/bf10f64990cfda0ba858290be7b8cc6317685f47.pdf">Claude Opus 4.5 System Card</a>.</li>
+<li>Anthropic (2026). <a href="https://www.anthropic.com/claude-opus-4-6-system-card">Claude Opus 4.6 System Card</a>.</li>
+<li>Anthropic (2026). <a href="https://www-cdn.anthropic.com/53566bf5440a10affd749724787c8913a2ae0841.pdf">Claude Mythos Preview System Card</a>.</li>
+<li>Anthropic (2026). <a href="https://www-cdn.anthropic.com/c5fbac3f0b1280a933ebd26d3cb8bb9f5bdeaf48/Claude%20Opus%205%20System%20Card.pdf">Claude Opus 5 System Card</a>.</li>
+<li>Fraser-Taliente, K., Kantamneni, S., Ong, E. (equal first authors), Mossing, D., … Marks, S. (2026). <a href="https://transformer-circuits.pub/2026/nla/index.html">Natural Language Autoencoders Produce Unsupervised Explanations of LLM Activations</a>.</li>
+<li>Sheshadri, A., Ewart, A., Kempf, E., … Marks, S., Wang, R. (2026). <a href="https://arxiv.org/abs/2602.22755">AuditBench: Evaluating Alignment Auditing Techniques on Models with Hidden Behaviors</a>.</li>
+<li>Minder, J., Dumas, C., Slocum, S., Casademunt, H., Holmes, C., West, R., Nanda, N. (2025). <a href="https://arxiv.org/abs/2510.13900">Narrow Finetuning Leaves Clearly Readable Traces in Activation Differences</a>.</li>
+<li>Cunningham, H., Wei, J., Wang, Z. et al. (2026). <a href="https://arxiv.org/abs/2601.04603">Constitutional Classifiers++: Efficient Production-Grade Defenses against Universal Jailbreaks</a>.</li>
+<li>Kramár, J., Engels, J., Wang, Z., Chughtai, B., Shah, R., Nanda, N., Conmy, A. (2026). <a href="https://arxiv.org/abs/2601.11516">Building Production-Ready Probes For Gemini</a>.</li>
+<li>McGuinness, M., Serrano, A., Bailey, L., Emmons, S. (2025). <a href="https://arxiv.org/abs/2512.11949">Neural Chameleons: Language Models Can Learn to Hide Their Thoughts from Unseen Activation Monitors</a>.</li>
+<li>Prasad, A., Watts, C., Merullo, J., Gala, D., Lewis, O., McGrath, T., Lubana, E. S. (2026). <a href="https://www.goodfire.com/research/rlfr">Features as Rewards: Using Interpretability to Reduce Hallucinations</a>. Goodfire.</li>
+<li>Bergen, L., Bhalla, U., Lee, A. et al. (2026). <a href="https://www.goodfire.com/research/reward-hacking-activation-monitors">Models know when they're reward hacking — and we can catch them at scale</a>. Goodfire.</li>
+<li>Lu, C., Gallagher, J., Michala, J., Fish, K., Lindsey, J. (2026). <a href="https://arxiv.org/abs/2601.10387">The Assistant Axis: Situating and Stabilizing the Default Persona of Language Models</a>.</li>
+<li>Marks, S., Lindsey, J., Olah, C. (2026). <a href="https://alignment.anthropic.com/2026/psm">The Persona Selection Model: Why AI Assistants might Behave like Humans</a>. Anthropic Alignment Science blog.</li>
+<li>Transluce (2024). <a href="https://transluce.org/observability-interface">Monitor: An AI-Driven Observability Interface</a>.</li>
+<li>Segerie, C.-R. (2023). <a href="https://www.alignmentforum.org/posts/LNA8mubrByG7SFacm/against-almost-every-theory-of-impact-of-interpretability">Against Almost Every Theory of Impact of Interpretability</a>.</li>
+<li>Hendrycks, D., Hiscott, L. (2025). <a href="https://ai-frontiers.org/articles/the-misguided-quest-for-mechanistic-ai-interpretability">The Misguided Quest for Mechanistic AI Interpretability</a>. AI Frontiers.</li>
+<li>Amodei, D. (2025). <a href="https://www.darioamodei.com/post/the-urgency-of-interpretability">The Urgency of Interpretability</a>.</li>
+<li>Zou, A. et al. (2023). <a href="https://arxiv.org/abs/2310.01405">Representation Engineering: A Top-Down Approach to AI Transparency</a>.</li>
+<li>Hewitt, J., Geirhos, R., Kim, B. (2025). <a href="https://arxiv.org/abs/2502.07586">We Can't Understand AI Using our Existing Vocabulary</a>.</li>
+<li>Geiger, A. et al. (2025). <a href="https://www.jmlr.org/papers/v26/23-0058.html">Causal Abstraction: A Theoretical Foundation for Mechanistic Interpretability</a>. JMLR.</li>
+<li>Sharkey, L., Chughtai, B., Batson, J., Lindsey, J. et al. (2025). <a href="https://arxiv.org/abs/2501.16496">Open Problems in Mechanistic Interpretability</a>.</li>
+<li>Bereska, L., Gavves, E. (2024). <a href="https://arxiv.org/abs/2404.14082">Mechanistic Interpretability for AI Safety — A Review</a>. TMLR.</li>
+<li>Ferrando, J., Sarti, G., Bisazza, A., Costa-jussà, M. R. (2024). <a href="https://arxiv.org/abs/2405.00208">A Primer on the Inner Workings of Transformer-based Language Models</a>.</li>
+<li>Fiotto-Kaufman, J., Bau, D. et al. (2024). <a href="https://arxiv.org/abs/2407.14561">NNsight and NDIF: Democratizing Access to Open-Weight Foundation Model Internals</a>.</li>
+<li>Wu, Z., Geiger, A. et al. (2024). <a href="https://arxiv.org/abs/2403.07809">pyvene: A Library for Understanding and Improving PyTorch Models via Interventions</a>.</li>
+<li>Lieberum, T., Rajamanoharan, S., Conmy, A. et al. (2024). <a href="https://arxiv.org/abs/2408.05147">Gemma Scope: Open Sparse Autoencoders Everywhere All At Once on Gemma 2</a>.</li>
+<li>Anthropic (2025). <a href="https://www.anthropic.com/research/open-source-circuit-tracing">Open-sourcing circuit tracing tools</a>.</li>
+<li>Heaven, W. D. / MIT Technology Review (2026). <a href="https://www.technologyreview.com/2026/01/12/1130003/mechanistic-interpretability-ai-research-models-2026-breakthrough-technologies/">Mechanistic interpretability: 10 Breakthrough Technologies 2026</a>.</li>
+</ol>
+
+</article>
+</main>
+
+<script src="assets/glossary.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/search-index.js"></script>
+<script src="assets/search.js"></script>
+<script src="assets/ch11.js"></script>
+</body>
+</html>

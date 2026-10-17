@@ -1,0 +1,1222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Circuit Case Studies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; font-family: var(--sans); font-size: 0.8125rem; color: var(--ink-2); margin-top: 10px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; border: 1px solid var(--ink-3); }
+  .sentence { font-family: var(--mono); font-size: 0.875rem; background: var(--bg-2); border-radius: 8px; padding: 10px 12px; margin: 10px 0; line-height: 1.7; }
+  .sentence .io { color: var(--blue); font-weight: 700; }
+  .sentence .s { color: var(--accent); font-weight: 700; }
+  #othelloSvg { max-width: 340px; display: block; }
+  .oth-wrap { display: grid; grid-template-columns: 340px 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 700px) { .oth-wrap { grid-template-columns: 1fr; } }
+  .widget.wide { margin-left: 50%; }
+  @media (max-width: 960px) { .widget.wide { margin-left: 0; } }
+  .bigstat { font-family: var(--sans); font-size: 1.75rem; font-weight: 800; color: var(--accent); }
+</style>
+</head>
+<body data-chapter="6">
+<main>
+<article class="article">
+
+<div class="kicker">Chapter 6</div>
+<h1>Circuit case studies</h1>
+<p class="lede">Between 2022 and 2024, researchers opened real language models and traced specific behaviours to specific parts. This chapter walks through the most famous of these case studies, one at a time.</p>
+
+<div class="tldr">
+<h3>In short</h3>
+<ul>
+<li>A <b>case study</b> picks one narrow behaviour, such as "complete the sentence with the right name", and finds the parts of the model that produce it.</li>
+<li><b>IOI</b> (2022) found 26 attention heads in 7 groups inside GPT-2 small that pick the right name. It also found backup heads that take over when you remove the main ones.</li>
+<li><b>Modular addition</b> (2023) showed a tiny network that adds numbers by rotating points on circles, like a clock. <b>Othello-GPT</b> showed a model that builds a picture of a game board that it never saw.</li>
+<li><b>Factual recall</b> studies found that MLP layers act like a lookup table for facts, but the details inside the table stay hard to read.</li>
+<li>The lessons: circuits are real and can be tested, but they are messy, often incomplete, partly different between models, and hard to scale by hand.</li>
+</ul>
+</div>
+
+<div class="callout example" id="learning-path">
+<span class="label">Learning path · Chapter 6 of 12 · about 50 min · 4 widgets · 4 quizzes</span>
+<p><b>Before you start:</b> <a href="04-transformers.html#composition">Chapter 4: composition</a> and <a href="04-transformers.html#induction">induction heads</a>; <a href="05-causal-methods.html#activation-patching">Chapter 5: activation patching</a>, path patching, mean ablation and the logit difference metric.</p>
+<p><b>You will learn:</b></p>
+<ul><li>the standard recipe of a circuit case study</li><li>the IOI circuit in GPT-2 small: 26 heads in 7 classes, and self-repair</li><li>how a tiny network adds numbers with a "clock", and what grokking is</li><li>how Othello-GPT builds a board that it never saw, and how models recall facts</li><li>what the case studies teach about universality and scale</li></ul>
+</div>
+
+
+<h2 id="recipe" data-short="How a case study works">How a circuit case study works</h2>
+
+<p>Chapter 4 gave the vocabulary (heads, composition, the residual stream). Chapter 5 gave the tools (ablation and patching). This chapter puts them together on real models. All the studies in this chapter follow a similar recipe. If you know the recipe, each study is easier to read.</p>
+
+<ol>
+<li><b>Pick a narrow task.</b> Choose a behaviour that the model does well, and that you can test with many similar prompts. For example: "When Mary and John went to the store, John gave a drink to ___".</li>
+<li><b>Pick a metric.</b> Choose one number that measures success. A common choice is the <span class="term" data-term="logit difference">logit difference</span>: the score of the right answer minus the score of a wrong answer.</li>
+<li><b>Make a corrupted version.</b> Change the prompt a little so that the right answer is no longer clear. Compare the clean run and the corrupted run.</li>
+<li><b>Locate.</b> Use <span class="term" data-term="activation patching">activation patching</span> and <span class="term" data-term="ablation">ablation</span> to find which components matter. <a href="05-causal-methods.html">Chapter 5</a> explains these tools.</li>
+<li><b>Interpret.</b> For each important component, ask what it does. Look at where an attention head looks. Project its output onto the vocabulary to see which words it pushes up.</li>
+<li><b>Validate.</b> Keep only the circuit, switch off the rest, and check that the task still works. Also check that each part is needed.</li>
+</ol>
+
+<figure class="panel">
+<svg viewBox="0 0 720 150" role="img" aria-label="Six-step recipe: task, metric, corrupt, locate, interpret, validate, with a loop back from validate to locate.">
+  <defs><marker id="arR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <g font-size="13" text-anchor="middle">
+    <rect x="6" y="40" width="100" height="44" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="56" y="60">1 · Task</text><text x="56" y="76" font-size="11" class="muted">narrow, testable</text>
+    <rect x="125" y="40" width="100" height="44" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="175" y="60">2 · Metric</text><text x="175" y="76" font-size="11" class="muted">logit diff</text>
+    <rect x="244" y="40" width="100" height="44" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="294" y="60">3 · Corrupt</text><text x="294" y="76" font-size="11" class="muted">clean vs. broken</text>
+    <rect x="363" y="40" width="100" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="413" y="60">4 · Locate</text><text x="413" y="76" font-size="11" class="muted">patch, ablate</text>
+    <rect x="482" y="40" width="100" height="44" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="532" y="60">5 · Interpret</text><text x="532" y="76" font-size="11" class="muted">attention, OV</text>
+    <rect x="601" y="40" width="110" height="44" rx="8" fill="var(--green-soft)" stroke="var(--green)"/><text x="656" y="60">6 · Validate</text><text x="656" y="76" font-size="11" class="muted">faithful? complete?</text>
+  </g>
+  <g stroke="var(--ink-3)" stroke-width="1.5" marker-end="url(#arR)">
+    <line x1="106" y1="62" x2="123" y2="62"/><line x1="225" y1="62" x2="242" y2="62"/><line x1="344" y1="62" x2="361" y2="62"/><line x1="463" y1="62" x2="480" y2="62"/><line x1="582" y1="62" x2="599" y2="62"/>
+  </g>
+  <path d="M656 86 C 656 130, 413 130, 413 88" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arR)"/>
+  <text x="535" y="136" text-anchor="middle" font-size="11.5" fill="var(--accent)">if the test fails, look again</text>
+  <text x="56" y="26" text-anchor="middle" font-size="11" class="muted">SET UP</text>
+  <text x="472" y="26" text-anchor="middle" font-size="11" class="muted">FIND AND EXPLAIN</text>
+</svg>
+<figcaption><b>Figure 6.1.</b> The usual recipe of a circuit case study. Steps 4 to 6 often repeat many times.</figcaption>
+</figure>
+
+<p>The first famous case study used this recipe on a different target: the <span class="term" data-term="induction heads">induction heads</span> (2022). Those heads complete repeated patterns. <a href="04-transformers.html">Chapter 4</a> explains them, because they are part of the basic toolkit for transformers. Here we start with the next big study.</p>
+
+<h3>Notation used in this chapter</h3>
+<p>We name an attention head by its layer and its index, counting from zero. So <b>9.9</b> means "layer 9, head 9". GPT-2 small has 12 layers with 12 heads each, so 144 heads in total. Some papers write the same head as <code>L9H9</code> or <code>a9.h9</code>.</p>
+
+<!-- ======================================================= IOI -->
+<h2 id="ioi" data-short="IOI: which name?">Indirect object identification: which name comes next?</h2>
+
+<div class="paper"><div class="yr">2022</div><div><div class="t"><a href="https://arxiv.org/abs/2211.00593">Interpretability in the Wild: a Circuit for Indirect Object Identification in GPT-2 small</a></div><div class="a">Kevin Wang, Alexandre Variengien, Arthur Conmy, Buck Shlegeris, Jacob Steinhardt · ICLR 2023</div><div class="s">At the time, the largest end-to-end reverse engineering of a natural behaviour in a language model: 26 heads in 7 classes.</div></div></div>
+
+<h3>The task</h3>
+<p>Read this sentence and guess the next word:</p>
+<div class="sentence">When <span class="io">Mary</span> and <span class="s">John</span> went to the store, <span class="s">John</span> gave a drink to ___</div>
+<p>The answer is "Mary". In grammar, Mary is the <b>indirect object</b> (IO): the person who receives the drink. The researchers call this task <b>IOI</b>, for Indirect Object Identification. GPT-2 small does it well.</p>
+
+<p>The sentence has two names. The <b>subject</b> (S, here John) appears twice. We call the two copies S1 and S2. The indirect object (IO, here Mary) appears only once. So a simple rule solves the task:</p>
+<ol>
+<li>Find the names in the sentence.</li>
+<li>Find the name that appears twice.</li>
+<li>Output the <em>other</em> name.</li>
+</ol>
+<p>The question was: does GPT-2 really use this rule, and if so, which parts of the model do each step?</p>
+
+<h3>How they searched</h3>
+<p>The metric was the logit difference: logit("Mary") minus logit("John"). A large positive number means the model clearly prefers the right name.</p>
+<p>For the corrupted input, they used the <b>ABC dataset</b>. In these sentences, three different names appear, for example "When Mary and John went to the store, <em>Alice</em> gave a drink to". Now no name is repeated. So the information "which name is duplicated" is gone. Any part of the model that carries that information will behave differently on the two inputs.</p>
+<p>The authors then used a new method that they called <span class="term" data-term="path patching">path patching</span>. It swaps in activations from the ABC run along one path at a time, for example only the path from head 7.3 to the queries of head 9.9. If the logit difference drops, that path matters. They also used <b>mean ablation</b>: they replaced a head's output with its average output over the ABC data. This "switches off" the head's task-specific information but keeps its normal size. <a href="05-causal-methods.html">Chapter 5</a> explains both methods in detail.</p>
+
+<h3>The circuit, step by step</h3>
+<p>Use the stepper. It builds the circuit one group at a time. The horizontal axis shows token positions. The vertical axis shows layers (0 at the bottom, 11 at the top). Each box is one or more attention heads. A curved line shows where a head <em>looks</em> (attends).</p>
+
+<div class="widget wide">
+  <div class="widget-title">Interactive · Build the IOI circuit</div>
+  <div class="widget-sub">Click the steps. Boxes appear at the token position where the head acts, in the row of its layer.</div>
+  <svg id="ioiSvg" viewBox="0 0 960 480" role="img" aria-label="IOI circuit in GPT-2 small: previous token, duplicate token and induction heads at John; S-inhibition and name mover heads at the final 'to'; output Mary."></svg>
+  <div class="steps" data-target="ioiSvg">
+    <div class="step" data-label="1 · Task">
+      <p>The model reads the sentence. The answer slot is after the final "to" (right side). <b>Mary</b> (blue) is the IO. <b>John</b> (orange) is the subject. It appears at S1 and again at S2. Nothing is lit yet.</p>
+    </div>
+    <div class="step" data-label="2 · Detect the duplicate">
+      <p>At S2 (the second "John"), the model must notice "I saw this name before".</p>
+      <p><b>Duplicate token heads</b> (0.1 and 3.0, blue boxes) sit at S2 and attend straight back to S1, the earlier copy of the same token. <b>Previous token heads</b> (2.2 and 4.11, green) sit at the token after S1 ("went") and copy "the token before me was John" into that position. <b>Induction heads</b> (5.5 and 6.9, purple) then use that note: at S2 they attend to "went", the token after the earlier John. Both routes write the same message at S2: "John is a repeat".</p>
+    </div>
+    <div class="step" data-label="3 · Inhibit John">
+      <p><b>S-inhibition heads</b> (7.3, 7.9, 8.6, 8.10, yellow) sit at the final "to". They attend to S2 and read the "John is a repeat" message. They write a signal into the final position. This signal later tells the name movers: <em>do not look at John</em>.</p>
+    </div>
+    <div class="step" data-label="4 · Move the name">
+      <p><b>Name mover heads</b> (9.9, 9.6, 10.0, orange) sit at the final "to". They attend to names in the sentence and <em>copy</em> the name they attend to into the output. Because the S-inhibition signal changed their queries, they look at Mary, not John. So they push up the logit for "Mary". The answer appears.</p>
+    </div>
+    <div class="step" data-label="5 · Backup &amp; negative">
+      <p>Two surprises. <b>Negative name movers</b> (10.7 and 11.10, red) attend to the names too, but they write the opposite: they push "Mary" <em>down</em> a little. The authors guessed that they stop the model from being over-confident. <b>Backup name movers</b> (8 heads, grey) do little in a normal run. But if you switch off the main name movers, the backup heads start to copy names and recover much of the performance.</p>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--green-soft);border-color:var(--green)"></i>previous token</span>
+    <span><i style="background:var(--blue-soft);border-color:var(--blue)"></i>duplicate token</span>
+    <span><i style="background:var(--purple-soft);border-color:var(--purple)"></i>induction</span>
+    <span><i style="background:var(--yellow-soft);border-color:var(--yellow)"></i>S-inhibition</span>
+    <span><i style="background:var(--accent-soft);border-color:var(--accent)"></i>name mover</span>
+    <span><i style="background:var(--red-soft);border-color:var(--red)"></i>negative name mover</span>
+    <span><i style="background:var(--bg-2);border-color:var(--ink-3)"></i>backup name mover</span>
+  </div>
+</div>
+
+<p>Here is the full list of heads. The heads in brackets are smaller members of their class. Together they make the 26 heads of the paper.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Class</th><th>Heads (layer.head)</th><th>Position</th><th>Job</th></tr></thead>
+<tbody>
+<tr><td>Previous token</td><td>2.2, 4.11</td><td>S1+1</td><td>Copy "previous token was John" into the next position. This feeds the induction heads.</td></tr>
+<tr><td>Duplicate token</td><td>0.1, 3.0 (0.10)</td><td>S2</td><td>Attend from S2 to S1. Signal "this token is a repeat".</td></tr>
+<tr><td>Induction</td><td>5.5, 6.9 (5.8, 5.9)</td><td>S2</td><td>Same signal, through the induction mechanism (attend to S1+1).</td></tr>
+<tr><td>S-inhibition</td><td>7.3, 7.9, 8.6, 8.10</td><td>END</td><td>Move the "John is a repeat" signal to the end. Reduce name movers' attention to John.</td></tr>
+<tr><td>Name mover</td><td>9.9, 9.6, 10.0</td><td>END</td><td>Attend to the IO name and copy it to the output.</td></tr>
+<tr><td>Negative name mover</td><td>10.7, 11.10</td><td>END</td><td>Attend to names and write the opposite direction. Lower the IO logit a little.</td></tr>
+<tr><td>Backup name mover</td><td>9.0, 9.7, 10.1, 10.2, 10.6, 10.10, 11.2, 11.9</td><td>END</td><td>Do little normally. Take over if the name movers are removed.</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout key">
+<span class="label">Key idea: heads talk through the residual stream</span>
+<p>Notice how the heads "talk". The S-inhibition heads do not change the name movers' weights. They write a vector into the <span class="term" data-term="residual stream">residual stream</span> at the final position. The name movers read that vector when they form their <b>query</b> ("what should I look for?"). This is <b>Q-composition</b>, one of the three composition types from the Mathematical Framework (<a href="04-transformers.html">Chapter 4</a>).</p>
+</div>
+
+<h3>How good is the explanation?</h3>
+<p>The authors proposed three tests for any circuit. These tests are now standard vocabulary.</p>
+<ul>
+<li><b>Faithfulness.</b> Does the circuit alone do the task? They mean-ablated every head outside the circuit. The circuit kept <b>87%</b> of the full model's logit difference.</li>
+<li><b>Completeness.</b> Does the circuit contain every part that matters? Test: take any subset K of the circuit. Removing K from the circuit should hurt as much as removing K from the full model. Random subsets passed this test. But a greedy search found subsets where the two numbers differed a lot. So the circuit is <em>not</em> fully complete.</li>
+<li><b>Minimality.</b> Is every part needed? For each head, they found a situation where removing it made a clear difference. So no head was "extra".</li>
+</ul>
+
+<div class="callout warn">
+<span class="label">Surprise: self-repair</span>
+<p>When the researchers removed the main name mover heads, the performance did not collapse. The backup heads started to do the same job. This effect is called <span class="term" data-term="self-repair">self-repair</span>. (McGrath et al. later called a related effect, seen across whole layers, the "hydra effect".) It means that simple ablation can <b>underestimate</b> how important a component is. If you remove a head and nothing changes, the head may still do the job in a normal run.</p>
+</div>
+
+<div class="callout limit">
+<span class="label">Limits of the IOI study</span>
+<ul>
+<li>It covers one narrow, template-based task.</li>
+<li>It studies attention heads only. MLP layers were mostly left out. (Removing all MLPs after the first layer breaks the task, so they do matter.)</li>
+<li>The circuit is faithful at 87%, but not complete. Later work (Miller, Chughtai and Saunders, COLM 2024) showed that this kind of faithfulness score changes a lot with small changes in how you ablate. So "87%" holds for the paper's exact method, not for every method.</li>
+<li>It took a team of researchers months of manual work for one small behaviour in a 124M-parameter model.</li>
+</ul>
+</div>
+
+<!-- ======================================================= Copy suppression -->
+<h2 id="copy-suppression" data-short="Copy suppression">Copy suppression: explaining one head completely</h2>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2310.04625">Copy Suppression: Comprehensively Understanding an Attention Head</a></div><div class="a">Callum McDougall, Arthur Conmy, Cody Rushing, Thomas McGrath, Neel Nanda · BlackboxNLP 2024</div><div class="s">Explains head 10.7 of GPT-2 small, the "negative name mover" from IOI, across the whole training distribution.</div></div></div>
+
+<p>The IOI study left a puzzle. Why does head 10.7 push the right answer <em>down</em>? A later study looked at this one head on all kinds of text, not only IOI sentences.</p>
+
+<h3>The mechanism</h3>
+<p>Head 10.7 does <b>copy suppression</b>. It works in three steps:</p>
+<ol>
+<li>Earlier layers predict some next token, for example a word that already appeared earlier in the text.</li>
+<li>The head's <span class="term" data-term="qk circuit">QK circuit</span> asks: "Is the token that we are about to predict already present earlier in the context?" If yes, the head attends to that earlier copy.</li>
+<li>The head's <span class="term" data-term="ov circuit">OV circuit</span> writes a <b>negative</b> vote for that same token. So the prediction "repeat this word" gets weaker.</li>
+</ol>
+
+<figure class="panel">
+<svg viewBox="0 0 720 210" role="img" aria-label="Copy suppression: earlier layers predict a word that already appears in the context; head 10.7 attends to the earlier copy and writes a negative vote for it.">
+  <defs><marker id="arC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--red)"/></marker></defs>
+  <g font-size="14" font-family="var(--mono)">
+    <text x="30" y="180">… the</text>
+    <rect x="88" y="160" width="74" height="28" rx="6" fill="var(--red-soft)" stroke="var(--red)"/><text x="125" y="180" text-anchor="middle">castle</text>
+    <text x="175" y="180">was old . We walked into the</text>
+    <rect x="452" y="160" width="40" height="28" rx="6" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="472" y="180" text-anchor="middle">?</text>
+  </g>
+  <rect x="420" y="20" width="200" height="50" rx="10" fill="var(--panel)" stroke="var(--ink-3)"/>
+  <text x="520" y="40" text-anchor="middle" font-size="12" class="muted">earlier layers predict</text>
+  <text x="520" y="60" text-anchor="middle" font-size="14" font-weight="700">"castle" (copy)</text>
+  <rect x="420" y="94" width="104" height="34" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="472" y="116" text-anchor="middle" font-size="13" font-weight="700">head 10.7</text>
+  <path d="M472 76 L472 92" stroke="var(--ink-3)" stroke-width="1.5"/>
+  <path d="M420 112 C 260 112, 140 112, 128 156" fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arC)"/>
+  <text x="270" y="104" text-anchor="middle" font-size="12" fill="var(--red)">QK: "is castle already here?" → attend</text>
+  <path d="M526 111 L 600 111" stroke="var(--red)" stroke-width="2" marker-end="url(#arC)"/>
+  <text x="608" y="108" font-size="13" font-weight="700" fill="var(--red)">OV: − castle</text>
+  <text x="608" y="125" font-size="11.5" class="muted">lower the repeat</text>
+</svg>
+<figcaption><b>Figure 6.2.</b> Copy suppression (illustrative sentence). If the model is about to repeat a word that is already in the context, head 10.7 finds the earlier copy and votes against it. This makes the model less over-confident.</figcaption>
+</figure>
+
+<p>Why would a model want this? Earlier heads often copy words from the context. Copying is a good guess, but not always. Copy suppression corrects for naive copying. It makes the model's predictions better <b>calibrated</b>: its confidence better matches how often it is right.</p>
+
+<p>The authors explained <b>76.9%</b> of head 10.7's effect with this mechanism, using evidence from the weights. This is rare. Most studies explain a head on one task. This study explained one head on the model's whole training distribution.</p>
+
+<p>Copy suppression also explains part of the IOI self-repair. In IOI, the name movers copy "Mary". Head 10.7 sees that "Mary" is predicted and suppresses it a little. If you remove the name movers, "Mary" is no longer predicted strongly, so head 10.7 suppresses less. The logit for Mary partly comes back. Self-repair is partly a <em>side effect</em> of a head that reacts to what other heads do. On one narrow task, the authors found that copy suppression explains <b>39%</b> of the self-repair.</p>
+
+<!-- ======================================================= Greater-than -->
+<h2 id="greater-than" data-short="Greater-than">Greater-than: how GPT-2 compares years</h2>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2305.00586">How does GPT-2 compute greater-than?: Interpreting mathematical abilities in a pre-trained language model</a></div><div class="a">Michael Hanna, Ollie Liu, Alexandre Variengien · NeurIPS 2023</div><div class="s">Finds a circuit of attention heads and MLPs in GPT-2 small that knows which two-digit years come after a given year.</div></div></div>
+
+<h3>The task</h3>
+<div class="sentence">The war lasted from the year 17<b>32</b> to the year 17__</div>
+<p>A sensible end year must be later than the start year. So the model should give high probability to 33, 34, …, 99 and low probability to 00, …, 32. The researchers measured this with the <b>probability difference</b>: the total probability on years greater than YY, minus the total probability on years less than or equal to YY. GPT-2 small scores <b>81.7%</b>. So it really does "know" the comparison.</p>
+
+<p>For the corrupted input, they replaced the start year with "01" (as in "1701"). Then almost every end year is valid, and the comparison information is gone.</p>
+
+<div class="widget" id="gtWidget">
+  <div class="widget-title">Interactive · The greater-than behaviour</div>
+  <div class="widget-sub">Move the start year. The bars show an <b>illustrative</b> next-token distribution with the same shape as GPT-2's: probability turns on just after YY. (Not real model output.)</div>
+  <div class="sentence" id="gtSentence"></div>
+  <svg id="gtSvg" viewBox="0 0 640 210"></svg>
+  <div class="controls"><label>Start year YY <input type="range" id="gtYY" min="2" max="97" value="32"> <output id="gtYYo">32</output></label></div>
+  <div class="readout" id="gtOut"></div>
+</div>
+
+<h3>The circuit</h3>
+<p>Path patching found a small circuit:</p>
+<ol>
+<li><b>Attention heads in layers 5 to 9</b> (a5.h1, a5.h5, a6.h9, a7.h10, a8.h8, a8.h11, a9.h1) sit at the final position. They attend to the start-year token "32" and move information about it to the end.</li>
+<li><b>MLPs 8, 9, 10 and 11</b> do the comparison. The researchers looked at their outputs with the <span class="term" data-term="logit lens">logit lens</span>. The MLP outputs push up years greater than YY and push down years less than or equal to YY.</li>
+<li>MLP 8 acts mostly <em>indirectly</em>: it changes what later MLPs do. MLP 11 pushes up roughly the first 50 years after YY, a bit like a sense of "how long a war can last".</li>
+</ol>
+
+<figure class="panel">
+<svg id="gtHeat" viewBox="0 0 720 300" role="img" aria-label="Schematic heatmap: rows are start years, columns are predicted end years; probability is high only to the right of the diagonal."></svg>
+<figcaption><b>Figure 6.3.</b> Schematic of the greater-than pattern (shape only, not real values). Each row is a start year YY. Each column is a predicted end year. Bright cells mean high probability. The bright area starts just right of the diagonal: the model prefers years after YY. On the right, the circuit that produces it.</figcaption>
+</figure>
+
+<p>The circuit alone reaches 72.7% probability difference, which is <b>89.5%</b> of the full model's score. The mechanism also works in some other "greater-than" contexts. But it also fires in a few contexts where it should not. The authors call it "complex but general".</p>
+
+<div class="callout limit">
+<span class="label">Limit</span>
+<p>The study found <em>which</em> MLPs do the comparison. It could not fully explain <em>how</em> the neurons inside those MLPs compute it. Many neurons each contribute a little. This is a common pattern: attention heads are often easy to explain, and MLPs are hard.</p>
+</div>
+
+<!-- ======================================================= Grokking -->
+<h2 id="grokking" data-short="Grokking &amp; modular addition">Grokking and modular addition: a network that adds with a clock</h2>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2301.05217">Progress measures for grokking via mechanistic interpretability</a></div><div class="a">Neel Nanda, Lawrence Chan, Tom Lieberum, Jess Smith, Jacob Steinhardt · ICLR 2023</div><div class="s">Fully reverse engineers a small transformer that does modular addition, and uses that understanding to explain grokking.</div></div></div>
+
+<h3>Grokking</h3>
+<p>In 2022, Power and colleagues found a strange training effect. They called it <span class="term" data-term="grokking">grokking</span>. A small network learns a math task. First it <b>memorizes</b> the training examples: training accuracy is 100%, but test accuracy is poor. Then, after many more steps with no visible change, test accuracy suddenly jumps to near 100%. The network has suddenly <b>generalized</b>.</p>
+<p>Why does this happen? Nanda and colleagues answered this question by fully reverse engineering one such network.</p>
+
+<h3>The task</h3>
+<p>The model is a one-layer transformer. The task is <b>modular addition</b>: given a and b, output (a + b) mod p, with p = 113. "mod p" means "wrap around after p", like hours on a clock: on a 12-hour clock, 9 + 5 = 2. The model trained on 30% of all possible (a, b) pairs, with weight decay. Weight decay is a training penalty that keeps weights small.</p>
+
+<h3>The algorithm: addition as rotation</h3>
+<p>The trained network uses an algorithm that nobody programmed. It is based on circles.</p>
+<ol>
+<li><b>Embed on a circle.</b> The embedding turns each number a into a point on a circle: (cos(w·a), sin(w·a)), with w = 2πk/p for some whole number k. The network does this for a few <b>key frequencies</b> k, about five of them.</li>
+<li><b>Rotate.</b> The attention and MLP layers combine the points for a and b. They use the trigonometry identities
+<div class="mathblock">cos(w(a+b)) = cos(wa)·cos(wb) − sin(wa)·sin(wb)<br>sin(w(a+b)) = sin(wa)·cos(wb) + cos(wa)·sin(wb)</div>
+In circle terms: start at angle w·a, then rotate by angle w·b. You land at angle w·(a+b).</li>
+<li><b>Read out.</b> For each possible answer c, the unembedding computes cos(w(a+b−c)). This is largest (equal to 1) exactly when c = (a+b) mod p. Summing over the key frequencies makes the right answer stand out even more.</li>
+</ol>
+
+<div class="widget" id="clockWidget">
+  <div class="widget-title">Interactive · Modular addition on a clock</div>
+  <div class="widget-sub">Pick a and b. The left circle places each number n at angle 2πk·n/p. Blue is a, purple is b, orange is the sum of the two angles. The right side shows the logit for each possible answer c: the sum of cos(2πk(a+b−c)/p) over the chosen frequencies.</div>
+  <div class="controls">
+    <span class="seg" id="clkP"><button data-p="13" class="on">p = 13</button><button data-p="113">p = 113</button></span>
+    <span class="seg" id="clkF"><button data-f="1" class="on">one frequency</button><button data-f="5">five frequencies</button></span>
+  </div>
+  <svg id="clockSvg" viewBox="0 0 680 300"></svg>
+  <div class="controls">
+    <label>a <input type="range" id="clkA" min="0" max="12" value="9"> <output id="clkAo">9</output></label>
+    <label>b <input type="range" id="clkB" min="0" max="12" value="7"> <output id="clkBo">7</output></label>
+    <label>frequency k <input type="range" id="clkK" min="1" max="6" value="1"> <output id="clkKo">1</output></label>
+  </div>
+  <div class="readout" id="clkOut"></div>
+</div>
+
+<p>Try it. With one frequency, the right answer has the top logit, but its neighbours are almost as high. With five frequencies, the waves add up only at the right answer. Everywhere else they partly cancel. This is why the network uses several frequencies: it makes the answer sharp.</p>
+
+<h3>Three phases of training</h3>
+<p>Once they knew the algorithm, the authors could measure it during training. They defined <b>progress measures</b>: numbers that track the hidden circuit, not only the loss. For example, the <b>restricted loss</b> keeps only the key-frequency parts of the model. The <b>excluded loss</b> removes them. With these tools, they saw three phases.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 260" role="img" aria-label="Training curves: train loss falls early; test loss stays high through memorization and circuit formation, then drops sharply during cleanup.">
+  <rect x="70" y="20" width="150" height="190" fill="var(--blue-soft)"/>
+  <rect x="220" y="20" width="270" height="190" fill="var(--purple-soft)"/>
+  <rect x="490" y="20" width="200" height="190" fill="var(--green-soft)"/>
+  <text x="145" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--blue)">1 · Memorization</text>
+  <text x="355" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--purple)">2 · Circuit formation</text>
+  <text x="590" y="40" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--green)">3 · Cleanup</text>
+  <line x1="70" y1="210" x2="690" y2="210" stroke="var(--ink-3)"/>
+  <line x1="70" y1="20" x2="70" y2="210" stroke="var(--ink-3)"/>
+  <text x="380" y="240" text-anchor="middle" font-size="12" class="muted">training steps →</text>
+  <text x="30" y="120" text-anchor="middle" font-size="12" class="muted" transform="rotate(-90 30 120)">loss</text>
+  <path d="M72 60 C 110 70, 130 190, 220 196 L 690 198" fill="none" stroke="var(--blue)" stroke-width="3"/>
+  <path d="M72 62 C 120 60, 200 70, 300 72 S 470 78, 500 90 C 530 110, 545 185, 600 192 L 690 194" fill="none" stroke="var(--accent)" stroke-width="3"/>
+  <text x="250" y="190" font-size="12.5" fill="var(--blue)">train loss</text>
+  <text x="300" y="64" font-size="12.5" fill="var(--accent)">test loss</text>
+  <path d="M230 170 C 300 150, 420 120, 490 100" fill="none" stroke="var(--purple)" stroke-width="2" stroke-dasharray="5 4"/>
+  <text x="420" y="150" font-size="11.5" fill="var(--purple)" text-anchor="middle">clock circuit grows quietly</text>
+</svg>
+<figcaption><b>Figure 6.4.</b> The three phases (schematic). Test accuracy jumps late, but the clock circuit was growing all through phase 2. The "sudden" grokking moment is the cleanup of the memorized solution.</figcaption>
+</figure>
+
+<ol>
+<li><b>Memorization.</b> The network memorizes the training pairs. Train loss falls. Test loss stays high.</li>
+<li><b>Circuit formation.</b> The clock algorithm slowly forms. Train accuracy is already 100%, so the train loss shows nothing new. Test loss still stays high, because the memorized parts still dominate the output.</li>
+<li><b>Cleanup.</b> Weight decay removes the memorization parts, because they cost large weights. Now only the clean circuit remains. Test loss drops suddenly. This is the visible "grokking" moment.</li>
+</ol>
+
+<div class="callout key">
+<span class="label">Key idea</span>
+<p>Grokking looks sudden from outside, but inside it is gradual. Understanding the mechanism let the authors build measures that showed the progress long before the loss did. This is an example of mech interp predicting training dynamics, not only explaining a finished model.</p>
+</div>
+
+<h3>The Clock and the Pizza: not always the same algorithm</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2306.17844">The Clock and the Pizza: Two Stories in Mechanistic Explanation of Neural Networks</a></div><div class="a">Ziqian Zhong, Ziming Liu, Max Tegmark, Jacob Andreas · NeurIPS 2023</div><div class="s">Networks trained on the same modular addition task can learn different algorithms.</div></div></div>
+
+<p>Do all networks learn the clock? This follow-up said no. Small changes in hyperparameters and initialization gave different algorithms. The authors found a second algorithm and called it the <b>pizza</b>.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 260" role="img" aria-label="Clock algorithm: rotate by a then by b. Pizza algorithm: average the two points; the midpoint direction gives the sum.">
+  <defs><marker id="arP" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+  <marker id="arPb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--blue)"/></marker>
+  <marker id="arPp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--purple)"/></marker></defs>
+  <text x="180" y="24" text-anchor="middle" font-size="14" font-weight="700">Clock</text>
+  <circle cx="180" cy="135" r="90" fill="none" stroke="var(--ink-3)"/>
+  <line x1="180" y1="135" x2="258" y2="90" stroke="var(--blue)" stroke-width="2.5" marker-end="url(#arPb)"/>
+  <text x="264" y="86" font-size="12" fill="var(--blue)">a</text>
+  <path d="M 225 109 A 52 52 0 0 0 180 83" fill="none" stroke="var(--purple)" stroke-width="2" marker-end="url(#arPp)"/>
+  <text x="214" y="80" font-size="12" fill="var(--purple)">+b</text>
+  <line x1="180" y1="135" x2="135" y2="57" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#arP)"/>
+  <text x="112" y="50" font-size="12" fill="var(--accent)">a+b</text>
+  <text x="180" y="248" text-anchor="middle" font-size="12" class="muted">rotate by a, then rotate by b (multiply)</text>
+
+  <text x="540" y="24" text-anchor="middle" font-size="14" font-weight="700">Pizza</text>
+  <circle cx="540" cy="135" r="90" fill="none" stroke="var(--ink-3)"/>
+  <g stroke="var(--rule)"><line x1="540" y1="45" x2="540" y2="225"/><line x1="450" y1="135" x2="630" y2="135"/><line x1="476" y1="71" x2="604" y2="199"/><line x1="604" y1="71" x2="476" y2="199"/></g>
+  <circle cx="618" cy="90" r="6" fill="var(--blue)"/><text x="628" y="86" font-size="12" fill="var(--blue)">a</text>
+  <circle cx="540" cy="45" r="6" fill="var(--purple)"/><text x="550" y="40" font-size="12" fill="var(--purple)">b</text>
+  <line x1="618" y1="90" x2="540" y2="45" stroke="var(--ink-3)" stroke-dasharray="4 3"/>
+  <circle cx="579" cy="67" r="7" fill="var(--accent)"/>
+  <line x1="540" y1="135" x2="577" y2="70" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#arP)"/>
+  <text x="590" y="62" font-size="12" fill="var(--accent)">midpoint</text>
+  <text x="540" y="248" text-anchor="middle" font-size="12" class="muted">average the two points (add vectors)</text>
+</svg>
+<figcaption><b>Figure 6.5.</b> Two algorithms for the same task. The clock multiplies (rotates) angles. The pizza averages the two points; the direction of the midpoint encodes (a+b)/2, and its length depends on a−b. The output space looks like slices of a pizza.</figcaption>
+</figure>
+
+<p>In the pizza algorithm, the network adds the two circle points as vectors and looks at their midpoint. The direction of the midpoint gives information about a + b. A nonlinearity is then needed to read the answer. Some networks even ran several algorithms in parallel. Networks with less flexible attention tended toward the pizza.</p>
+
+<div class="callout limit">
+<span class="label">Lesson and limit</span>
+<p>"Even simple learning problems admit a surprising diversity of solutions." This is a warning against assuming that every model learns the same thing. Also, modular addition is a toy task with perfect structure. Real language tasks are much messier.</p>
+</div>
+
+<!-- ======================================================= Othello -->
+<h2 id="othello" data-short="Othello-GPT">Othello-GPT: a world model from move lists</h2>
+
+<div class="paper"><div class="yr">2022</div><div><div class="t"><a href="https://arxiv.org/abs/2210.13382">Emergent World Representations: Exploring a Sequence Model Trained on a Synthetic Task</a></div><div class="a">Kenneth Li, Aspen K. Hopkins, David Bau, Fernanda Viégas, Hanspeter Pfister, Martin Wattenberg · ICLR 2023</div><div class="s">A GPT trained only on lists of Othello moves builds an internal picture of the board.</div></div></div>
+
+<p>Do language models only learn surface statistics, or do they build a model of the world behind the text? This is a big debate. Othello-GPT gave a clean test case.</p>
+
+<h3>The setup</h3>
+<p>Othello is a board game on an 8×8 grid. Two players place black and white pieces. When you place a piece, you flip the opponent's pieces that lie in a line between your new piece and one of your old pieces.</p>
+<p>The researchers trained a GPT model (8 layers, 512 dimensions, 8 heads) on millions of game transcripts. Each transcript is just a list of moves, like "D3, C5, F6, …". The model's only job was to predict a legal next move. It <b>never saw the board</b>. It never got the rules.</p>
+
+<h3>What they found</h3>
+<ul>
+<li>The model predicts legal moves very well. To do that, it needs to know which squares are occupied and by whom. That is hard to do from the move list alone.</li>
+<li>They trained <span class="term" data-term="probe">probes</span> to read the state of each square (empty, black, white) from the activations. <b>Linear probes</b> worked poorly: an error rate of about 20% (20.4% at best). <b>Nonlinear probes</b> (small 2-layer MLPs) worked well: an error rate of about 1.7%. The authors concluded that the world model was real, but nonlinear.</li>
+<li>They also <b>intervened</b>. They used the probe's gradient to edit the activations so that the probe read a different board, for example with one square flipped. The model then predicted the legal moves of the edited board. So the board representation is not only present: the model <em>uses</em> it.</li>
+</ul>
+
+<h3>The follow-up: "mine" versus "theirs"</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2309.00941">Emergent Linear Representations in World Models of Self-Supervised Sequence Models</a></div><div class="a">Neel Nanda, Andrew Lee, Martin Wattenberg · BlackboxNLP 2023 (first as the blog post "Actually, Othello-GPT Has A Linear Emergent World Representation")</div><div class="s">The board is linear after all, in the right basis: mine versus theirs.</div></div></div>
+
+<p>Why did linear probes fail? Neel Nanda had a guess. The model plays both sides, and the players take turns. So maybe the model does not care about "black" and "white". Maybe it cares about "<b>my</b> pieces" and "<b>their</b> pieces", relative to the player who moves next.</p>
+<p>He was right. A linear probe for "mine / theirs / empty" reads the board with very high accuracy. A linear probe for black/white fails because the meaning of each direction flips every move. Try it below.</p>
+
+<div class="widget" id="othWidget">
+  <div class="widget-title">Interactive · Two ways to colour the same board</div>
+  <div class="widget-sub">This is a real Othello game played with random legal moves. Switch the view, then press "Next move" several times. Small dots show legal moves for the player to move.</div>
+  <div class="oth-wrap">
+    <div>
+      <svg id="othelloSvg" viewBox="0 0 340 340"></svg>
+      <div class="controls">
+        <span class="seg" id="othView"><button data-v="abs" class="on">black / white</button><button data-v="rel">mine / theirs</button></span>
+      </div>
+      <div class="controls"><button class="btn primary" id="othNext">Next move →</button><button class="btn" id="othReset">Reset</button></div>
+    </div>
+    <div>
+      <div class="readout" id="othInfo"></div>
+      <p style="font-size:0.9375rem;margin-top:14px" id="othExplain"></p>
+      <svg id="othBars" viewBox="0 0 300 150"></svg>
+      <p style="font-size:0.78125rem;color:var(--ink-3);margin:6px 0 0">Bars: the black/white values are the linear and nonlinear probe error rates reported by Li et al. Nanda's mine/theirs linear probe is drawn as "very high accuracy" (schematic).</p>
+    </div>
+  </div>
+</div>
+
+<figure class="panel">
+<svg viewBox="0 0 720 220" role="img" aria-label="A stack of transformer layers; a linear probe reads the residual stream and outputs a board coloured as mine, theirs, or empty.">
+  <defs><marker id="arO" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <text x="40" y="200" font-size="12" font-family="var(--mono)">D3 C5 F6 F5 E6 …</text>
+  <g>
+    <rect x="40" y="150" width="160" height="26" rx="5" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="120" y="168" text-anchor="middle" font-size="12">layer 1</text>
+    <rect x="40" y="118" width="160" height="26" rx="5" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="120" y="136" text-anchor="middle" font-size="12">…</text>
+    <rect x="40" y="86" width="160" height="26" rx="5" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="120" y="104" text-anchor="middle" font-size="12">middle layer</text>
+    <rect x="40" y="54" width="160" height="26" rx="5" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="120" y="72" text-anchor="middle" font-size="12">…</text>
+    <rect x="40" y="22" width="160" height="26" rx="5" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="120" y="40" text-anchor="middle" font-size="12">next legal move</text>
+  </g>
+  <line x1="202" y1="99" x2="290" y2="99" stroke="var(--ink-3)" stroke-width="1.5" marker-end="url(#arO)"/>
+  <rect x="294" y="78" width="134" height="42" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="361" y="96" text-anchor="middle" font-size="12.5" font-weight="700">linear probe</text>
+  <text x="361" y="112" text-anchor="middle" font-size="10.5" class="muted">one direction per square</text>
+  <line x1="430" y1="99" x2="470" y2="99" stroke="var(--ink-3)" stroke-width="1.5" marker-end="url(#arO)"/>
+  <g id="othStatic"></g>
+  <text x="590" y="212" text-anchor="middle" font-size="11.5" class="muted">orange = mine · blue = theirs · empty = grey</text>
+</svg>
+<figcaption><b>Figure 6.6.</b> Reading the board. A linear probe on a middle layer outputs, for each square, "mine", "theirs" or "empty". The board is never in the input; the model built it.</figcaption>
+</figure>
+
+<p>The follow-up also found features for "was this square just flipped?". Simple vector arithmetic along the mine/theirs directions (add or subtract the probe direction for a square) changed the model's predicted moves, as expected. Several edits at once worked less well. So the representation is linear <em>and</em> causal.</p>
+
+<div class="callout key">
+<span class="label">Key idea</span>
+<p>Othello-GPT supports the <span class="term" data-term="linear representation hypothesis">linear representation hypothesis</span>. A concept can look nonlinear only because we chose the wrong frame. In the model's own frame (mine vs. theirs), it is a simple direction. Probing results depend on the questions we ask.</p>
+</div>
+
+<div class="callout limit">
+<span class="label">Limit</span>
+<p>Othello is a small, synthetic world with exact rules. It shows that world models <em>can</em> emerge from next-token prediction. It does not show how rich the world models in large language models are.</p>
+</div>
+
+<div class="quiz" data-answer="1">
+  <div class="q">Why did a linear "black vs. white" probe fail on Othello-GPT, while a linear "mine vs. theirs" probe worked?</div>
+  <div class="opts">
+    <button>The model has no board representation; the mine/theirs probe overfit.</button>
+    <button>The model represents squares relative to the player to move, so the meaning of black/white flips each turn.</button>
+    <button>Linear probes cannot read board games.</button>
+    <button>The black/white probe was trained on the wrong layer.</button>
+  </div>
+  <div class="why">The model plays both sides. For it, "my piece" is a stable concept and "black piece" is not: who is "me" alternates every move. In the mine/theirs basis, the board is linear. Interventions along these directions also changed the model's moves.</div>
+</div>
+
+<!-- ======================================================= Facts -->
+<h2 id="facts" data-short="Factual recall">Factual recall: where do facts live?</h2>
+
+<p>A language model knows many facts: "The Eiffel Tower is in Paris", "Michael Jordan plays basketball". Where in the network are these facts stored, and how are they retrieved? Several studies attacked this question. Together they tell a story with a twist.</p>
+
+<h3>Step 0: MLPs as key-value memories</h3>
+
+<div class="paper"><div class="yr">2021</div><div><div class="t"><a href="https://arxiv.org/abs/2012.14913">Transformer Feed-Forward Layers Are Key-Value Memories</a></div><div class="a">Mor Geva, Roei Schuster, Jonathan Berant, Omer Levy · EMNLP 2021</div><div class="s">Each MLP neuron acts as a key (a pattern detector) linked to a value (a push on output words).</div></div></div>
+
+<p>An <span class="term" data-term="mlp">MLP</span> layer has two weight matrices. Geva and colleagues read them as a memory:</p>
+<ul>
+<li>Each row of the first matrix is a <b>key</b>. It detects a pattern in the input, such as "text about TV shows" or "a word that ends in -ing".</li>
+<li>Each matching row of the second matrix is a <b>value</b>. It pushes up some output words.</li>
+</ul>
+<p>Keys in lower layers detect shallow patterns. Keys in upper layers detect topics and meaning. The layer output is a mix of many memories. Later layers refine the result.</p>
+
+<h3>Step 1: causal tracing and ROME</h3>
+
+<div class="paper"><div class="yr">2022</div><div><div class="t"><a href="https://arxiv.org/abs/2202.05262">Locating and Editing Factual Associations in GPT</a></div><div class="a">Kevin Meng, David Bau, Alex Andonian, Yonatan Belinkov · NeurIPS 2022</div><div class="s">Introduces causal tracing to locate facts in mid-layer MLPs, and ROME to edit them with a rank-one weight change.</div></div></div>
+
+<p>Meng and colleagues used a prompt like "The Space Needle is in downtown" (answer: Seattle). Then they used <span class="term" data-term="causal tracing">causal tracing</span>, the noise-based form of activation patching from <a href="05-causal-methods.html#causal-tracing">Chapter 5</a>. In short: add noise to the subject tokens ("The Space Needle") so that the model no longer says Seattle, then restore one clean hidden state at a time and check how much of "Seattle" comes back.</p>
+
+<figure class="panel">
+<svg id="romeHeat" viewBox="0 0 720 280" role="img" aria-label="Schematic causal tracing heatmap: strongest effects at the last subject token in middle-layer MLPs and at the final token in late layers."></svg>
+<figcaption><b>Figure 6.7.</b> Schematic of a causal tracing result in GPT-2 XL (shape only). Each cell is "restore this token's state at this layer". Two hot spots appear: middle-layer MLPs at the <b>last subject token</b> ("Needle"), and late layers at the <b>final token</b>.</figcaption>
+</figure>
+
+<p>Two places mattered most in GPT-2 XL. First: the <b>MLPs in the middle layers, at the last token of the subject</b>. Second: late layers at the final token, where attention moves the answer to the output.</p>
+<p>The authors then built <b>ROME</b> (Rank-One Model Editing). They treated the middle MLP as a key-value store, as Geva suggested. They made a small "rank-one" change to its weights so that the key "Space Needle" maps to a new value, for example "Paris". After the edit, the model said "The Space Needle is in Paris" in many different phrasings. They tested edits on a dataset called CounterFact. A follow-up, MEMIT, edits thousands of facts at once.</p>
+
+<h3>Step 2: three stages of recall</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2304.14767">Dissecting Recall of Factual Associations in Auto-Regressive Language Models</a></div><div class="a">Mor Geva, Jasmijn Bastings, Katja Filippova, Amir Globerson · EMNLP 2023</div><div class="s">Recall happens in three stages: enrich the subject, move the relation, extract the attribute.</div></div></div>
+
+<p>Geva and colleagues blocked attention edges ("attention knockout") and projected states onto the vocabulary. They found three stages:</p>
+<ol>
+<li><b>Subject enrichment.</b> Early and middle MLPs add many attributes of the subject to the last subject token. After this step, the "Needle" position carries "Seattle", "tower", "Washington", and more.</li>
+<li><b>Relation propagation.</b> Information about the relation ("is in the city of") flows to the final position.</li>
+<li><b>Attribute extraction.</b> At the final position, attention heads look back at the enriched subject token and pull out the attribute that fits the relation.</li>
+</ol>
+
+<figure class="panel">
+<svg viewBox="0 0 720 300" role="img" aria-label="Factual recall flow: subject tokens Michael Jordan; MLP layers enrich the last subject token with attributes; at the final token an attention head reaches back and extracts basketball.">
+  <defs><marker id="arF" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+  <marker id="arFg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <g font-size="14" font-family="var(--mono)" text-anchor="middle">
+    <text x="80" y="285">Michael</text><text x="190" y="285" font-weight="700">Jordan</text><text x="300" y="285">plays</text><text x="390" y="285">the</text><text x="480" y="285">sport</text><text x="570" y="285" font-weight="700">of</text>
+  </g>
+  <path d="M80 262 C 100 240, 160 240, 182 252" fill="none" stroke="var(--ink-3)" stroke-width="1.5" marker-end="url(#arFg)"/>
+  <text x="12" y="212" font-size="11.5" class="muted">① attention joins</text>
+  <text x="12" y="226" font-size="11.5" class="muted">"Michael"+"Jordan"</text>
+  <g>
+    <rect x="140" y="200" width="100" height="30" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="190" y="220" text-anchor="middle" font-size="12">MLP</text>
+    <rect x="140" y="164" width="100" height="30" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="190" y="184" text-anchor="middle" font-size="12">MLP</text>
+    <rect x="140" y="128" width="100" height="30" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="190" y="148" text-anchor="middle" font-size="12">MLP</text>
+  </g>
+  <rect x="120" y="40" width="140" height="74" rx="10" fill="var(--panel)" stroke="var(--blue)" stroke-dasharray="4 3"/>
+  <text x="190" y="60" text-anchor="middle" font-size="12" font-weight="700" fill="var(--blue)">② enriched "Jordan"</text>
+  <text x="190" y="78" text-anchor="middle" font-size="11.5">basketball · Bulls</text>
+  <text x="190" y="94" text-anchor="middle" font-size="11.5">Chicago · athlete</text>
+  <text x="190" y="108" text-anchor="middle" font-size="11.5" class="muted">…</text>
+  <line x1="190" y1="126" x2="190" y2="116" stroke="var(--blue)" stroke-width="1.5"/>
+  <text x="300" y="185" font-size="11.5" class="muted">lookup in</text>
+  <text x="300" y="199" font-size="11.5" class="muted">early-mid MLPs</text>
+  <rect x="520" y="110" width="100" height="32" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="570" y="131" text-anchor="middle" font-size="12">attention head</text>
+  <line x1="570" y1="262" x2="570" y2="146" stroke="var(--ink-3)" stroke-dasharray="3 3"/>
+  <path d="M518 120 C 420 90, 330 70, 264 76" fill="none" stroke="var(--accent)" stroke-width="2.2" marker-end="url(#arF)"/>
+  <text x="400" y="66" text-anchor="middle" font-size="12" fill="var(--accent)">③ extract the attribute that fits "sport"</text>
+  <rect x="530" y="30" width="90" height="34" rx="8" fill="var(--accent)" />
+  <text x="575" y="52" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">basketball</text>
+  <line x1="570" y1="108" x2="572" y2="68" stroke="var(--accent)" stroke-width="2" marker-end="url(#arF)"/>
+</svg>
+<figcaption><b>Figure 6.8.</b> The three-stage story of factual recall. ① Early attention combines the tokens of a multi-token name. ② MLPs at the last subject token look up and add attributes. ③ An attention head at the final position reads out the attribute that matches the question.</figcaption>
+</figure>
+
+<h3>Step 3: the twist — inside the lookup table</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://www.alignmentforum.org/posts/iGuwZTHWb6DFY3sKB/fact-finding-attempting-to-reverse-engineer-factual-recall">Fact Finding: Attempting to Reverse-Engineer Factual Recall on the Neuron Level</a></div><div class="a">Neel Nanda, Senthooran Rajamanoharan, János Kramár, Rohin Shah (Google DeepMind) · Alignment Forum, 5 posts</div><div class="s">An honest negative result: the MLP "lookup" of facts did not break down into a simple, readable mechanism.</div></div></div>
+
+<p>The DeepMind team asked Pythia 2.8B which sport about 1,500 athletes play, for example "Michael Jordan plays the sport of" → basketball. They confirmed the three-stage shape: attention layers 0–1 join the name tokens, <b>MLPs 2 to 6</b> look up the fact on the last name token, and later attention heads extract it. The sport ends up as a <em>linear</em> direction in the residual stream.</p>
+<p>Then they tried to explain <em>how</em> MLPs 2–6 do the lookup, neuron by neuron. They failed. The MLPs did not use a sparse, readable mechanism. The team's best description: the early MLPs "hash" the name tokens into a vector that is almost orthogonal to other names, and later neurons look up these hashed vectors. It acts like a big hash table: "this exact token combination → basketball". A lookup table has no short description. There may be no simple story to find.</p>
+
+<div class="callout warn">
+<span class="label">A useful attitude</span>
+<p>The team suggested a change of focus. Some computations, like memorized facts, may have no short explanation. So it may be better to study how later circuits <em>use</em> the fact representation, and to treat the lookup itself as a black box.</p>
+</div>
+
+<h3>A critique: where you edit is not where it is stored</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2301.04213">Does Localization Inform Editing? Surprising Differences in Causality-Based Localization vs. Knowledge Editing in Language Models</a></div><div class="a">Peter Hase, Mohit Bansal, Been Kim, Asma Ghandeharioun · NeurIPS 2023</div><div class="s">Causal tracing does not predict which layer is best for editing a fact.</div></div></div>
+
+<p>ROME used causal tracing to choose the layer to edit. Hase and colleagues tested if that choice matters. It does not. You can edit a fact successfully in layers that causal tracing does <em>not</em> highlight. Which layer you edit predicts success much better than what causal tracing says about that layer.</p>
+
+<div class="callout limit">
+<span class="label">Lesson</span>
+<p>"An edit works here" does not mean "the knowledge is stored here". Successful editing is not proof of understanding. This critique applies to many interventions: changing a model's behaviour is easier than explaining it.</p>
+</div>
+
+<div class="quiz" data-answer="3">
+  <div class="q">Hase et al. (2023) showed that you can edit a fact well in layers that causal tracing does not highlight. What is the main lesson?</div>
+  <div class="opts">
+    <button>Causal tracing is a bug-ridden method and should never be used.</button>
+    <button>Facts are stored in attention heads, not MLPs.</button>
+    <button>ROME edits do not work.</button>
+    <button>Success of an intervention at a location does not prove the information is stored or computed there.</button>
+  </div>
+  <div class="why">ROME edits do work, and causal tracing does measure something real. But "where an edit works" and "where the model computes the fact" are different questions. Many locations can be used to change the output.</div>
+</div>
+
+<!-- ======================================================= Reusable parts -->
+<h2 id="reusable" data-short="Reusable mechanisms">Reusable mechanisms: successor heads, function vectors, binding IDs</h2>
+
+<p>The studies above each explain one task. A second wave of work in 2023 found mechanisms that the model <b>reuses</b> across many tasks. These look more like the "subroutines" of a program.</p>
+
+<div class="tabs">
+<div class="tab-panel" data-label="Successor heads">
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2312.09230">Successor Heads: Recurring, Interpretable Attention Heads In The Wild</a></div><div class="a">Rhys Gould, Euan Ong, George Ogden, Arthur Conmy · ICLR 2024</div><div class="s">Heads that move to the next item in an ordered list: Monday → Tuesday, 1 → 2, January → February.</div></div></div>
+<p>A <b>successor head</b> takes an item in an ordered sequence and predicts the next one. "Monday" → "Tuesday". "3" → "4". "March" → "April". "first" → "second".</p>
+<p>The authors found such heads in many models: GPT-2, Pythia and Llama-2, from <b>31 million to 12 billion</b> parameters. This is strong evidence for <span class="term" data-term="universality">universality</span>.</p>
+<p>How do they work? The model has shared <b>"mod-10" features</b>. These features encode the position of a token in its sequence, modulo 10. So "3", "March" and "third" share some features: they are all "item number 3". The successor head maps "item n" features to "item n+1" outputs. The authors could edit the head's behaviour with vector arithmetic on the mod-10 features.</p>
+</div>
+<div class="tab-panel" data-label="Function vectors">
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2310.15213">Function Vectors in Large Language Models</a></div><div class="a">Eric Todd, Millicent L. Li, Arnab Sen Sharma, Aaron Mueller, Byron C. Wallace, David Bau · ICLR 2024</div><div class="s">A few attention heads carry a compact vector that means "the task in these examples".</div></div></div>
+<p>Give a model a few examples: "hot → cold, big → small, fast → ". It answers "slow". It learned the task "antonym" from the context. Where is that task stored?</p>
+<p>Todd and colleagues found that a <b>small number of attention heads</b> in middle layers carry it. The sum of their outputs is a <b>function vector</b> (FV). Then they did a striking test. They took a new prompt with no examples, just "fast →", and added the antonym FV to the residual stream. The model answered "slow". The vector alone carries the task. FVs can also be added together to combine tasks.</p>
+</div>
+<div class="tab-panel" data-label="Binding IDs">
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2310.17191">How do Language Models Bind Entities in Context?</a></div><div class="a">Jiahai Feng, Jacob Steinhardt · ICLR 2024</div><div class="s">Models tag each entity and its attribute with a matching "binding ID" vector.</div></div></div>
+<p>"Alice lives in Paris. Bob lives in Tokyo. Where does Bob live?" To answer, the model must keep each person paired with the right city. This is the <b>binding problem</b>.</p>
+<p>Feng and Steinhardt found that models attach a <b>binding ID</b> vector to each entity and to its attribute. It works like a matching colour tag. Alice and Paris get one tag. Bob and Tokyo get another. To answer, the model finds the city whose tag matches Bob's tag. If you swap the binding vectors, the model swaps its answers. They found this in every large enough model of the Pythia and LLaMA families.</p>
+<svg viewBox="0 0 640 150" role="img" aria-label="Binding IDs: Alice and Paris share a red tag, Bob and Tokyo share a blue tag; the query Bob carries the blue tag and fetches Tokyo.">
+  <defs><marker id="arB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--blue)"/></marker></defs>
+  <g font-size="13" text-anchor="middle">
+    <rect x="20" y="20" width="90" height="34" rx="8" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/><text x="65" y="42">Alice</text><circle cx="104" cy="24" r="7" fill="var(--accent)"/>
+    <rect x="140" y="20" width="90" height="34" rx="8" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/><text x="185" y="42">Paris</text><circle cx="224" cy="24" r="7" fill="var(--accent)"/>
+    <rect x="20" y="90" width="90" height="34" rx="8" fill="var(--panel)" stroke="var(--blue)" stroke-width="2"/><text x="65" y="112">Bob</text><circle cx="104" cy="94" r="7" fill="var(--blue)"/>
+    <rect x="140" y="90" width="90" height="34" rx="8" fill="var(--panel)" stroke="var(--blue)" stroke-width="2"/><text x="185" y="112">Tokyo</text><circle cx="224" cy="94" r="7" fill="var(--blue)"/>
+    <rect x="360" y="55" width="150" height="34" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="435" y="77">"Where does Bob live?"</text>
+    <rect x="560" y="55" width="70" height="34" rx="8" fill="var(--blue)"/><text x="595" y="77" fill="#fff" font-weight="700">Tokyo</text>
+  </g>
+  <path d="M358 80 C 300 110, 270 110, 234 108" fill="none" stroke="var(--blue)" stroke-width="2" marker-end="url(#arB)"/>
+  <text x="300" y="132" text-anchor="middle" font-size="11.5" fill="var(--blue)">match the blue tag</text>
+  <line x1="512" y1="72" x2="556" y2="72" stroke="var(--blue)" stroke-width="2" marker-end="url(#arB)"/>
+</svg>
+</div>
+</div>
+
+<p>These three results share a theme. The model builds <b>abstract, reusable representations</b>: "item number n", "the task is antonyms", "tag number 2". Then it reuses them in many contexts. This is good news for interpretability. If models reuse parts, we can learn a part once and recognize it in many places.</p>
+
+<!-- ======================================================= Arithmetic -->
+<h2 id="arithmetic" data-short="Arithmetic heuristics">Arithmetic without algorithms: a bag of heuristics</h2>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2410.21272">Arithmetic Without Algorithms: Language Models Solve Math With a Bag of Heuristics</a></div><div class="a">Yaniv Nikankin, Anja Reusch, Aaron Mueller, Yonatan Belinkov · ICLR 2025</div><div class="s">LLMs do arithmetic with many small rules of thumb in MLP neurons, not with one clean algorithm.</div></div></div>
+
+<p>The modular addition network used a clean algorithm. Do large language models do arithmetic the same way? Nikankin and colleagues studied models such as Llama3-8B on problems like "226 − 68 =". The answer was no.</p>
+<p>The models did not use a single clean algorithm. They also did not simply memorize answers. Instead, a sparse set of MLP neurons each implemented a simple <b>heuristic</b>, a rule of thumb. Examples of such rules:</p>
+<ul>
+<li>"Fire if the first operand is between 100 and 200."</li>
+<li>"Push up answers that end in 5."</li>
+<li>"Push up even answers."</li>
+</ul>
+<p>Each rule is weak alone. But many rules vote together, and the votes add up to the correct answer. The authors call this a <b>bag of heuristics</b>. The mechanism appeared early in training and was the main source of accuracy.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 220" role="img" aria-label="Bag of heuristics: several neuron lamps each with a rule vote into a bar chart of candidate answers; the correct answer gets the most votes.">
+  <defs><marker id="arH" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <text x="20" y="24" font-size="13" font-family="var(--mono)">226 − 68 = ?</text>
+  <g font-size="12">
+    <rect x="20" y="40" width="210" height="28" rx="14" fill="var(--yellow-soft)" stroke="var(--yellow)"/><text x="125" y="58" text-anchor="middle">operand in 200–300</text>
+    <rect x="20" y="76" width="210" height="28" rx="14" fill="var(--yellow-soft)" stroke="var(--yellow)"/><text x="125" y="94" text-anchor="middle">result in 150–170</text>
+    <rect x="20" y="112" width="210" height="28" rx="14" fill="var(--yellow-soft)" stroke="var(--yellow)"/><text x="125" y="130" text-anchor="middle">result ends in 8</text>
+    <rect x="20" y="148" width="210" height="28" rx="14" fill="var(--yellow-soft)" stroke="var(--yellow)"/><text x="125" y="166" text-anchor="middle">result is even</text>
+    <rect x="20" y="184" width="210" height="28" rx="14" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="125" y="202" text-anchor="middle" class="muted">… many more</text>
+  </g>
+  <g stroke="var(--ink-3)" stroke-width="1.2" fill="none" marker-end="url(#arH)">
+    <path d="M232 54 C 300 54, 320 120, 380 120"/><path d="M232 90 C 300 90, 320 120, 380 120"/><path d="M232 126 L 380 122"/><path d="M232 162 C 300 162, 320 124, 380 124"/>
+  </g>
+  <text x="300" y="34" text-anchor="middle" font-size="11.5" class="muted">each rule votes</text>
+  <g font-size="11" text-anchor="middle">
+    <rect x="400" y="140" width="40" height="40" fill="var(--bg-2)" stroke="var(--rule)"/><text x="420" y="196">148</text>
+    <rect x="455" y="110" width="40" height="70" fill="var(--bg-2)" stroke="var(--rule)"/><text x="475" y="196">156</text>
+    <rect x="510" y="30" width="40" height="150" fill="var(--accent)"/><text x="530" y="196" font-weight="700">158</text>
+    <rect x="565" y="100" width="40" height="80" fill="var(--bg-2)" stroke="var(--rule)"/><text x="585" y="196">168</text>
+    <rect x="620" y="150" width="40" height="30" fill="var(--bg-2)" stroke="var(--rule)"/><text x="640" y="196">198</text>
+  </g>
+  <line x1="390" y1="180" x2="670" y2="180" stroke="var(--ink-3)"/>
+  <text x="530" y="214" text-anchor="middle" font-size="11.5" class="muted">votes add up: only 158 fits every rule</text>
+</svg>
+<figcaption><b>Figure 6.9.</b> The bag-of-heuristics idea (illustrative rules). No single neuron computes 226 − 68. Many weak rules each narrow the answer, and their votes combine.</figcaption>
+</figure>
+
+<p>Anthropic later saw a similar picture in Claude 3.5 Haiku with attribution graphs (diagrams of which internal features cause which): one path estimates the rough size of the sum, and another path gets the last digit exactly (<a href="09-circuit-tracing.html">Chapter 9</a>). Models seem to prefer many parallel, approximate paths over one exact procedure.</p>
+
+<!-- ======================================================= Chinchilla -->
+<h2 id="scale" data-short="Does it scale? (Chinchilla)">Does circuit analysis scale? A 70B model</h2>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2307.09458">Does Circuit Analysis Interpretability Scale? Evidence from Multiple Choice Capabilities in Chinchilla</a></div><div class="a">Tom Lieberum, Matthew Rahtz, János Kramár, Neel Nanda, Geoffrey Irving, Rohin Shah, Vladimir Mikulik (Google DeepMind)</div><div class="s">The standard circuit tools work on a 70-billion-parameter model, but the explanation is only partial.</div></div></div>
+
+<p>All the studies so far used small models. GPT-2 small has 124 million parameters. Does the method still work on a model 500 times larger? The DeepMind team tested this on <b>Chinchilla 70B</b>.</p>
+<p>The task: a multiple-choice question with options labelled A, B, C, D. The model knows the right answer text. It must output the right <em>letter</em>.</p>
+<ul>
+<li>The standard tools — logit attribution, attention pattern viewing, activation patching — <b>scaled naturally</b> to 70B.</li>
+<li>They found a small group of "<b>correct letter heads</b>". These heads attend from the answer position to the letter of the correct option, and copy that letter to the output.</li>
+<li>Inside these heads, they partly found an "<b>Nth item in a list</b>" feature. But when they randomized the labels, the explanation was incomplete.</li>
+</ul>
+
+<div class="callout limit">
+<span class="label">Lesson</span>
+<p>Circuit tools work at scale. Full understanding does not come with them. The team located the key heads quickly, but explaining exactly what those heads compute stayed partial. This gap — easy to locate, hard to explain — appears again and again.</p>
+</div>
+
+<!-- ======================================================= Universality -->
+<h2 id="universality" data-short="Universality">Universality: do different models learn the same circuits?</h2>
+
+<p>The third claim of "Zoom In" (<a href="01-foundations.html">Chapter 1</a>) was <b>universality</b>: similar features and circuits form in different models. If true, research on one model transfers to others. What does the evidence say?</p>
+
+<div class="two-col">
+<div class="callout good"><span class="label">Evidence for</span>
+<ul style="margin:0">
+<li>Induction heads appear in almost every transformer.</li>
+<li>Successor heads appear in GPT-2, Pythia and Llama-2, from 31M to 12B parameters.</li>
+<li>Binding IDs appear in all large enough Pythia and LLaMA models.</li>
+<li>Curve detectors and similar features appear in many vision models (<a href="02-vision-era.html">Chapter 2</a>).</li>
+</ul></div>
+<div class="callout limit"><span class="label">Evidence against</span>
+<ul style="margin:0">
+<li>Clock vs. pizza: the same task gives different algorithms.</li>
+<li>Chughtai, Chan and Nanda (2023): networks learn group operations with group representations, but <em>which</em> representation depends on the random seed. They called this "weak universality".</li>
+<li>Only 1–5% of GPT-2 neurons are universal across seeds (below).</li>
+</ul></div>
+</div>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2401.12181">Universal Neurons in GPT2 Language Models</a></div><div class="a">Wes Gurnee, Theo Horsley, Zifan Carl Guo, Tara Rezaei Kheirkhah, Qinyi Sun, Will Hathaway, Neel Nanda, Dimitris Bertsimas</div><div class="s">Compares neurons across five GPT-2 models that differ only in their random seed.</div></div></div>
+
+<p>Gurnee and colleagues trained <b>five GPT-2 models</b> that were identical except for the random seed. They ran 100 million tokens through all five and compared every neuron's activations. A neuron is "universal" if a neuron in every other model fires on the same inputs.</p>
+
+<figure class="panel">
+<svg id="univSvg" viewBox="0 0 720 230" role="img" aria-label="Five model columns of neurons; most are grey; a few coloured neurons are connected across all five columns as universal neurons."></svg>
+<figcaption><b>Figure 6.10.</b> Universal neurons (schematic). Five models differ only in their seed. Most neurons have no clear partner in the other models (grey). A small fraction — about 1 to 5% — match across all five (coloured lines).</figcaption>
+</figure>
+
+<p>Only <b>1–5% of neurons were universal</b>. But those neurons were special. They were usually interpretable, and they fell into families: neurons for single tokens, for letters of the alphabet, for position, for syntax and for meaning. Some had clear jobs:</p>
+<ul>
+<li><b>Attention deactivation neurons</b> switch off certain attention heads.</li>
+<li><b>Entropy neurons</b> change how confident the next-token distribution is.</li>
+<li><b>Prediction and suppression neurons</b> push up, or push down, a whole set of tokens.</li>
+</ul>
+
+<div class="callout key">
+<span class="label">How to read this</span>
+<p>Low neuron universality does not prove that <em>features</em> are not universal. Because of <span class="term" data-term="superposition">superposition</span>, the same feature can be spread across different neurons in different models. Later work compared features from sparse autoencoders instead of neurons (<a href="08-dictionary-learning.html">Chapter 8</a>). Still, the safe summary is: universality is <b>partial</b>.</p>
+</div>
+
+<div class="quiz" data-answer="0">
+  <div class="q">In the IOI study, removing the main name mover heads did not destroy performance. Why?</div>
+  <div class="opts">
+    <button>Backup name mover heads took over their job (self-repair).</button>
+    <button>The name mover heads were not part of the circuit.</button>
+    <button>Mean ablation does not change the model at all.</button>
+    <button>The MLPs compute the answer by themselves.</button>
+  </div>
+  <div class="why">Backup heads do little in a normal run but start to copy names when the main name movers are gone. Copy suppression in head 10.7 also eases off. This self-repair is why "ablate and see nothing change" does not prove a part is unimportant.</div>
+</div>
+
+<!-- ======================================================= Lessons -->
+<h2 id="lessons" data-short="What they teach us">What the case studies teach us</h2>
+
+<p>The case studies from 2022 to 2024 changed how people think about neural networks. Here are the main lessons.</p>
+
+<h3>1 · Circuits are real</h3>
+<p>Before these studies, many people thought that large networks were hopeless to read. The case studies showed real, testable algorithms: name copying, clock arithmetic, board tracking, copy suppression. Each claim names specific components, and each claim survived causal tests. Neural networks are not random soup.</p>
+
+<h3>2 · But circuits are messy</h3>
+<p>The clean stories have rough edges. IOI was 87% faithful and not fully complete. Greater-than explained 89.5%. The MLPs in fact recall looked like lookup tables. LLM arithmetic was a bag of heuristics, not one algorithm. Models seem to like many parallel, partly redundant paths.</p>
+
+<h3>3 · Ablation can mislead</h3>
+<p>Backup heads and self-repair mean that switching off one part often changes little. The model compensates. So a small effect after ablation does not prove a part is unimportant. Researchers now prefer careful patching, and they compare several kinds of ablation (<a href="05-causal-methods.html">Chapter 5</a>).</p>
+
+<h3>4 · Universality is partial</h3>
+<p>Some mechanisms, like induction heads and successor heads, appear everywhere. Others depend on the seed and the settings. We cannot assume that a circuit from one model exists in another. We must check.</p>
+
+<h3>5 · Manual work does not scale</h3>
+<p>Each study took a team weeks or months, for one narrow behaviour, usually in a small model. A frontier model does thousands of behaviours. This scale problem drove the next phase of the field:</p>
+<ul>
+<li><b>Automated circuit discovery</b>, such as ACDC and attribution patching (<a href="05-causal-methods.html">Chapter 5</a>).</li>
+<li><b>Better units of analysis</b> than neurons and heads: sparse autoencoder features (<a href="08-dictionary-learning.html">Chapter 8</a>).</li>
+<li><b>Attribution graphs</b> that trace circuits through those features for any prompt (<a href="09-circuit-tracing.html">Chapter 9</a>).</li>
+</ul>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Study</th><th>Model</th><th>Main method</th><th>Headline result</th></tr></thead>
+<tbody>
+<tr><td>IOI (2022)</td><td>GPT-2 small</td><td>Path patching, mean ablation</td><td>26 heads in 7 classes; 87% faithful</td></tr>
+<tr><td>Copy suppression (2023)</td><td>GPT-2 small</td><td>Weight analysis, ablation</td><td>Head 10.7 suppresses copies; 76.9% explained</td></tr>
+<tr><td>Greater-than (2023)</td><td>GPT-2 small</td><td>Path patching, logit lens</td><td>Heads in layers 5–9 + MLPs 8–11; 89.5% recovered</td></tr>
+<tr><td>Grokking (2023)</td><td>1-layer transformer</td><td>Fourier analysis of weights</td><td>Addition by rotation; 3 training phases</td></tr>
+<tr><td>Clock &amp; Pizza (2023)</td><td>Small transformers</td><td>Weight and output analysis</td><td>Different algorithms for one task</td></tr>
+<tr><td>Othello-GPT (2022–23)</td><td>8-layer GPT</td><td>Probes, interventions</td><td>World model, linear in mine/theirs basis</td></tr>
+<tr><td>ROME (2022)</td><td>GPT-2 XL</td><td>Causal tracing, weight editing</td><td>Mid-layer MLPs at last subject token</td></tr>
+<tr><td>Fact Finding (2023)</td><td>Pythia 2.8B</td><td>Patching, neuron analysis</td><td>MLPs 2–6 act like a lookup table</td></tr>
+<tr><td>Successor heads (2023)</td><td>GPT-2, Pythia, Llama-2</td><td>Head analysis, vector arithmetic</td><td>Mod-10 features; universal 31M–12B</td></tr>
+<tr><td>Function vectors (2023)</td><td>Several LLMs</td><td>Causal mediation</td><td>A few heads carry the task as one vector</td></tr>
+<tr><td>Binding IDs (2023)</td><td>Pythia, LLaMA</td><td>Activation swaps</td><td>Matching tags bind entity to attribute</td></tr>
+<tr><td>Chinchilla MC (2023)</td><td>Chinchilla 70B</td><td>Logit attribution, patching</td><td>Correct-letter heads; partial explanation</td></tr>
+<tr><td>Arithmetic (2024)</td><td>Llama3-8B and others</td><td>Neuron analysis</td><td>Bag of heuristics</td></tr>
+<tr><td>Universal neurons (2024)</td><td>5 × GPT-2</td><td>Activation correlation</td><td>1–5% of neurons universal</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="quiz" data-answer="2">
+  <div class="q">In the grokking study, test accuracy jumps late in training. What did the mechanistic analysis show was happening before the jump?</div>
+  <div class="opts">
+    <button>Nothing: the network learned the algorithm in one sudden step.</button>
+    <button>The network forgot the training data.</button>
+    <button>The clock circuit was slowly forming; the jump came when weight decay cleaned up the memorized solution.</button>
+    <button>The learning rate was increased.</button>
+  </div>
+  <div class="why">Progress measures such as the restricted and excluded loss showed the Fourier circuit growing during the "flat" phase. The visible jump in test accuracy is the cleanup phase, when memorization parts are removed.</div>
+</div>
+
+<div class="callout key" id="takeaways">
+<span class="label">Key takeaways</span>
+<ul>
+<li>Circuits are real. IOI, greater-than, modular addition and copy suppression are testable algorithms with named parts.</li>
+<li>But circuits are messy. Explanations are partial (IOI is 87% faithful), and MLPs often act like lookup tables.</li>
+<li>Ablation can mislead, because backup heads and self-repair hide the importance of a part.</li>
+<li>Models build world models (Othello-GPT) and reusable parts (successor heads, function vectors, binding IDs). Universality is only partial.</li>
+<li>Manual circuit work does not scale. This drove automation (<a href="05-causal-methods.html#acdc">Chapter 5</a>) and better units than neurons (<a href="08-dictionary-learning.html">Chapter 8</a> and <a href="09-circuit-tracing.html">Chapter 9</a>).</li>
+</ul>
+<p><b>Where this leads:</b> <a href="07-probing-steering.html">Chapter 7</a> looks at a simpler unit than a circuit: one direction that you can read with a probe or write with a steering vector.</p>
+</div>
+
+<h2 id="references">References</h2>
+<ol class="refs">
+<li>Wang, Variengien, Conmy, Shlegeris, Steinhardt (2022). <a href="https://arxiv.org/abs/2211.00593">Interpretability in the Wild: a Circuit for Indirect Object Identification in GPT-2 small</a>. ICLR 2023.</li>
+<li>McDougall, Conmy, Rushing, McGrath, Nanda (2023). <a href="https://arxiv.org/abs/2310.04625">Copy Suppression: Comprehensively Understanding an Attention Head</a>. BlackboxNLP 2024 (published as "Copy Suppression: Comprehensively Understanding a Motif in Language Model Attention Heads").</li>
+<li>Hanna, Liu, Variengien (2023). <a href="https://arxiv.org/abs/2305.00586">How does GPT-2 compute greater-than?</a> NeurIPS 2023.</li>
+<li>Power, Burda, Edwards, Babuschkin, Misra (2022). <a href="https://arxiv.org/abs/2201.02177">Grokking: Generalization Beyond Overfitting on Small Algorithmic Datasets</a>.</li>
+<li>Nanda, Chan, Lieberum, Smith, Steinhardt (2023). <a href="https://arxiv.org/abs/2301.05217">Progress measures for grokking via mechanistic interpretability</a>. ICLR 2023.</li>
+<li>Zhong, Liu, Tegmark, Andreas (2023). <a href="https://arxiv.org/abs/2306.17844">The Clock and the Pizza: Two Stories in Mechanistic Explanation of Neural Networks</a>. NeurIPS 2023.</li>
+<li>Chughtai, Chan, Nanda (2023). <a href="https://arxiv.org/abs/2302.03025">A Toy Model of Universality: Reverse Engineering How Networks Learn Group Operations</a>.</li>
+<li>Li, Hopkins, Bau, Viégas, Pfister, Wattenberg (2022). <a href="https://arxiv.org/abs/2210.13382">Emergent World Representations: Exploring a Sequence Model Trained on a Synthetic Task</a>. ICLR 2023.</li>
+<li>Nanda, Lee, Wattenberg (2023). <a href="https://arxiv.org/abs/2309.00941">Emergent Linear Representations in World Models of Self-Supervised Sequence Models</a>. BlackboxNLP 2023.</li>
+<li>Geva, Schuster, Berant, Levy (2021). <a href="https://arxiv.org/abs/2012.14913">Transformer Feed-Forward Layers Are Key-Value Memories</a>. EMNLP 2021.</li>
+<li>Meng, Bau, Andonian, Belinkov (2022). <a href="https://arxiv.org/abs/2202.05262">Locating and Editing Factual Associations in GPT</a>. NeurIPS 2022. Site: <a href="https://rome.baulab.info">rome.baulab.info</a>.</li>
+<li>Geva, Bastings, Filippova, Globerson (2023). <a href="https://arxiv.org/abs/2304.14767">Dissecting Recall of Factual Associations in Auto-Regressive Language Models</a>. EMNLP 2023.</li>
+<li>Nanda, Rajamanoharan, Kramár, Shah (2023). <a href="https://www.alignmentforum.org/posts/iGuwZTHWb6DFY3sKB/fact-finding-attempting-to-reverse-engineer-factual-recall">Fact Finding: Attempting to Reverse-Engineer Factual Recall on the Neuron Level</a>. Alignment Forum.</li>
+<li>Hase, Bansal, Kim, Ghandeharioun (2023). <a href="https://arxiv.org/abs/2301.04213">Does Localization Inform Editing?</a> NeurIPS 2023.</li>
+<li>Gould, Ong, Ogden, Conmy (2023). <a href="https://arxiv.org/abs/2312.09230">Successor Heads: Recurring, Interpretable Attention Heads In The Wild</a>. ICLR 2024.</li>
+<li>Todd, Li, Sen Sharma, Mueller, Wallace, Bau (2023). <a href="https://arxiv.org/abs/2310.15213">Function Vectors in Large Language Models</a>. ICLR 2024.</li>
+<li>Feng, Steinhardt (2023). <a href="https://arxiv.org/abs/2310.17191">How do Language Models Bind Entities in Context?</a> ICLR 2024.</li>
+<li>Nikankin, Reusch, Mueller, Belinkov (2024). <a href="https://arxiv.org/abs/2410.21272">Arithmetic Without Algorithms: Language Models Solve Math With a Bag of Heuristics</a>. ICLR 2025.</li>
+<li>Lieberum, Rahtz, Kramár, Nanda, Irving, Shah, Mikulik (2023). <a href="https://arxiv.org/abs/2307.09458">Does Circuit Analysis Interpretability Scale? Evidence from Multiple Choice Capabilities in Chinchilla</a>.</li>
+<li>Gurnee, Horsley, Guo, Kheirkhah, Sun, Hathaway, Nanda, Bertsimas (2024). <a href="https://arxiv.org/abs/2401.12181">Universal Neurons in GPT2 Language Models</a>.</li>
+<li>Miller, Chughtai, Saunders (2024). <a href="https://arxiv.org/abs/2407.08734">Transformer Circuit Faithfulness Metrics are not Robust</a>. COLM 2024.</li>
+</ol>
+
+</article>
+</main>
+
+<script src="assets/glossary.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/search-index.js"></script>
+<script src="assets/search.js"></script>
+<script>
+/* =============== IOI circuit stepper =============== */
+(function () {
+  const svg = document.getElementById("ioiSvg");
+  const toks = ["When", "Mary", "and", "John", "went", "to", "the", "store", ",", "John", "gave", "a", "drink", "to"];
+  const X = i => 60 + i * 54, Y = L => 420 - L * 30;
+  const S = (t, a, p) => MI.svg(t, a, p || svg);
+  // defs
+  const defs = S("defs");
+  [["aG", "var(--green)"], ["aB", "var(--blue)"], ["aP", "var(--purple)"], ["aY", "var(--yellow)"], ["aO", "var(--accent)"], ["aR", "var(--red)"]].forEach(([id, c]) => {
+    const m = S("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 6, markerHeight: 6, orient: "auto" }, defs);
+    S("path", { d: "M0,0 L10,5 L0,10 z", fill: c }, m);
+  });
+  // grid
+  for (let L = 0; L < 12; L++) {
+    S("line", { x1: 36, y1: Y(L), x2: 800, y2: Y(L), stroke: "var(--rule)", "stroke-width": 1 });
+    S("text", { x: 6, y: Y(L) + 4, "font-size": 10, class: "muted" }).textContent = "L" + L;
+  }
+  [1, 3, 4, 9, 13].forEach(i => S("line", { x1: X(i), y1: 70, x2: X(i), y2: 432, stroke: "var(--rule)", "stroke-dasharray": "3 4" }));
+  // tokens
+  toks.forEach((t, i) => {
+    const col = i === 1 ? "var(--blue)" : (i === 3 || i === 9) ? "var(--accent)" : "var(--ink)";
+    S("text", { x: X(i), y: 450, "text-anchor": "middle", "font-size": 13, "font-weight": (i === 1 || i === 3 || i === 9 || i === 13) ? 700 : 400, fill: col, "font-family": "var(--mono)" }).textContent = t;
+  });
+  [[1, "IO"], [3, "S1"], [4, "S1+1"], [9, "S2"], [13, "END"]].forEach(([i, l]) =>
+    S("text", { x: X(i), y: 470, "text-anchor": "middle", "font-size": 10.5, class: "muted" }).textContent = l);
+
+  function box(cx, L, label, fill, stroke, show, w = 48, h = 22) {
+    const g = S("g", show ? { "data-show": show } : {});
+    S("rect", { x: cx - w / 2, y: Y(L) - h / 2, width: w, height: h, rx: 6, fill, stroke, "stroke-width": 1.5 }, g);
+    S("text", { x: cx, y: Y(L) + 4, "text-anchor": "middle", "font-size": 11, "font-weight": 600 }, g).textContent = label;
+    return g;
+  }
+  function attn(x1, y1, tx, color, marker, show, dash = "5 4") {
+    return S("path", { d: `M${x1},${y1} Q${tx},${y1} ${tx},434`, fill: "none", stroke: color, "stroke-width": 2, "stroke-dasharray": dash, "marker-end": `url(#${marker})`, "data-show": show });
+  }
+  const g = "2 3 4 5";
+  // step 2
+  box(X(4), 2, "2.2", "var(--green-soft)", "var(--green)", g);
+  box(X(4), 4, "4.11", "var(--green-soft)", "var(--green)", g);
+  attn(X(4) - 24, Y(2), X(3) + 4, "var(--green)", "aG", g);
+  box(X(9), 0, "0.1", "var(--blue-soft)", "var(--blue)", g);
+  box(X(9), 3, "3.0", "var(--blue-soft)", "var(--blue)", g);
+  attn(X(9) - 24, Y(0), X(3) - 8, "var(--blue)", "aB", g);
+  box(X(9), 5, "5.5", "var(--purple-soft)", "var(--purple)", g);
+  box(X(9), 6, "6.9", "var(--purple-soft)", "var(--purple)", g);
+  attn(X(9) - 24, Y(5), X(4) + 30, "var(--purple)", "aP", g);
+  const t2 = S("text", { x: X(9) + 30, y: Y(4) + 4, "font-size": 11.5, fill: "var(--blue)", "data-show": "2" });
+  t2.textContent = "← “John is a repeat”";
+  // step 3
+  const g3 = "3 4 5";
+  box(X(13), 7, "7.3 · 7.9", "var(--yellow-soft)", "var(--yellow)", g3, 76);
+  box(X(13), 8, "8.6 · 8.10", "var(--yellow-soft)", "var(--yellow)", g3, 76);
+  attn(X(13) - 38, Y(7), X(9) + 30, "var(--yellow)", "aY", g3);
+  const t3 = S("text", { x: X(11) - 10, y: Y(7) - 8, "font-size": 11.5, fill: "var(--yellow)", "text-anchor": "middle", "data-show": "3" });
+  t3.textContent = "read S2: “don't look at John”";
+  // step 4
+  const g4 = "4 5";
+  box(X(13), 9, "9.9 · 9.6", "var(--accent-soft)", "var(--accent)", g4, 76);
+  box(X(13), 10, "10.0", "var(--accent-soft)", "var(--accent)", g4, 76);
+  attn(X(13) - 38, Y(9), X(1), "var(--accent)", "aO", g4, "0");
+  const t4 = S("text", { x: X(6), y: Y(9) - 8, "font-size": 11.5, fill: "var(--accent)", "text-anchor": "middle", "data-show": "4" });
+  t4.textContent = "attend to Mary, copy “Mary”";
+  const out = S("g", { "data-show": g4 });
+  S("rect", { x: X(13) - 44, y: 26, width: 88, height: 28, rx: 8, fill: "var(--accent)" }, out);
+  S("text", { x: X(13), y: 45, "text-anchor": "middle", "font-size": 13, "font-weight": 700, fill: "#fff" }, out).textContent = "→ Mary";
+  S("line", { x1: X(13), y1: Y(10) - 11, x2: X(13), y2: 58, stroke: "var(--accent)", "stroke-width": 2, "marker-end": "url(#aO)", "data-show": g4 });
+  // step 5
+  const neg = S("g", { "data-show": "5" });
+  S("rect", { x: 815, y: Y(11) - 11, width: 60, height: 52, rx: 6, fill: "var(--red-soft)", stroke: "var(--red)", "stroke-width": 1.5 }, neg);
+  [["negative", 10, 600], ["10.7", 11, 600], ["11.10", 11, 600]].forEach(([t, fs, fw], k) =>
+    S("text", { x: 845, y: Y(11) + 4 + k * 14, "text-anchor": "middle", "font-size": fs, "font-weight": fw }, neg).textContent = t);
+  S("path", { d: `M815,${Y(11) - 4} Q${X(1) + 14},${Y(11) - 4} ${X(1) + 14},434`, fill: "none", stroke: "var(--red)", "stroke-width": 1.6, "stroke-dasharray": "2 4", "marker-end": "url(#aR)", "data-show": "5" });
+  const bk = S("g", { "data-show": "5" });
+  S("rect", { x: 882, y: Y(11) - 11, width: 76, height: 84, rx: 6, fill: "var(--bg-2)", stroke: "var(--ink-3)", "stroke-dasharray": "4 3" }, bk);
+  ["backup", "9.0 9.7 10.1", "10.2 10.6", "10.10 11.2", "11.9"].forEach((t, k) =>
+    S("text", { x: 920, y: Y(11) + 4 + k * 15, "text-anchor": "middle", "font-size": k ? 10 : 10.5, "font-weight": k ? 400 : 700 }, bk).textContent = t);
+  ["take over if", "name movers", "are removed"].forEach((t, k) =>
+    S("text", { x: 920, y: Y(8) + 4 + k * 14, "text-anchor": "middle", "font-size": 10.5, class: "muted", "data-show": "5" }).textContent = t);
+  // re-apply step visibility now that elements exist
+  const first = document.querySelector('.steps[data-target="ioiSvg"] .stepper button');
+  if (first) first.click();
+})();
+
+/* =============== Greater-than widget + heatmap =============== */
+(function () {
+  function dist(YY) {
+    const w = [];
+    for (let y = 0; y < 100; y++) w.push(y > YY ? Math.exp(-(y - YY - 1) / 22) + 0.03 : 0.05 + 0.08 * Math.exp(-(YY - y) / 3));
+    const s = w.reduce((a, b) => a + b, 0);
+    return w.map(v => v / s);
+  }
+  const svg = document.getElementById("gtSvg"), inp = document.getElementById("gtYY");
+  const o = document.getElementById("gtYYo"), sent = document.getElementById("gtSentence"), out = document.getElementById("gtOut");
+  function draw() {
+    const YY = +inp.value, p = dist(YY), mx = Math.max(...p);
+    o.textContent = String(YY).padStart(2, "0");
+    sent.innerHTML = `The war lasted from the year 17<b>${String(YY).padStart(2, "0")}</b> to the year 17__`;
+    svg.innerHTML = "";
+    const x0 = 30, bw = 6, base = 170;
+    p.forEach((v, y) => {
+      const h = (v / mx) * 140;
+      MI.svg("rect", { x: x0 + y * bw, y: base - h, width: bw - 1, height: h, fill: y > YY ? "var(--accent)" : "var(--blue)", opacity: y > YY ? 0.9 : 0.6 }, svg);
+    });
+    MI.svg("line", { x1: x0, y1: base, x2: x0 + 100 * bw, y2: base, stroke: "var(--ink-3)" }, svg);
+    MI.svg("line", { x1: x0 + (YY + 1) * bw - 0.5, y1: 20, x2: x0 + (YY + 1) * bw - 0.5, y2: base, stroke: "var(--ink)", "stroke-dasharray": "3 3" }, svg);
+    MI.svg("text", { x: x0 + (YY + 1) * bw + 4, y: 30, "font-size": 11.5 }, svg).textContent = "> " + String(YY).padStart(2, "0");
+    [0, 20, 40, 60, 80, 99].forEach(t => MI.svg("text", { x: x0 + t * bw + 3, y: base + 16, "font-size": 11, "text-anchor": "middle", class: "muted" }, svg).textContent = String(t).padStart(2, "0"));
+    MI.svg("text", { x: x0 + 300, y: base + 34, "font-size": 11.5, "text-anchor": "middle", class: "muted" }, svg).textContent = "predicted end year (two digits)";
+    const above = p.slice(YY + 1).reduce((a, b) => a + b, 0), below = 1 - above;
+    out.textContent = `P(year > ${String(YY).padStart(2, "0")}) = ${(above * 100).toFixed(1)}%   P(year ≤ ${String(YY).padStart(2, "0")}) = ${(below * 100).toFixed(1)}%   probability difference = ${((above - below) * 100).toFixed(1)}%  (illustrative)`;
+  }
+  inp.oninput = draw; draw(); MI.onTheme(draw);
+
+  // heatmap figure
+  const hs = document.getElementById("gtHeat");
+  function heat() {
+    hs.innerHTML = "";
+    const n = 25, cell = 9.2, x0 = 60, y0 = 24;
+    for (let r = 0; r < n; r++) {
+      const YY = r * 4, p = dist(YY), mx = Math.max(...p);
+      for (let c = 0; c < n; c++) {
+        let v = 0; for (let k = 0; k < 4; k++) v = Math.max(v, p[c * 4 + k]);
+        MI.svg("rect", { x: x0 + c * cell, y: y0 + r * cell, width: cell, height: cell, fill: MI.diverge(v / mx) }, hs);
+      }
+    }
+    MI.svg("line", { x1: x0, y1: y0, x2: x0 + n * cell, y2: y0 + n * cell, stroke: "var(--ink)", "stroke-dasharray": "3 3" }, hs);
+    MI.svg("text", { x: x0 + n * cell / 2, y: y0 + n * cell + 20, "text-anchor": "middle", "font-size": 12, class: "muted" }, hs).textContent = "predicted year 00 → 99";
+    const t = MI.svg("text", { x: 30, y: y0 + n * cell / 2, "text-anchor": "middle", "font-size": 12, class: "muted", transform: `rotate(-90 30 ${y0 + n * cell / 2})` }, hs);
+    t.textContent = "start year YY 00 → 99";
+    // circuit on right
+    const bx = 380;
+    const items = [["heads a5.h1 a5.h5 a6.h9", 50], ["a7.h10 a8.h8 a8.h11 a9.h1", 70], ["MLP 8", 120], ["MLP 9", 160], ["MLP 10", 200], ["MLP 11", 240]];
+    MI.svg("rect", { x: bx, y: 34, width: 220, height: 48, rx: 8, fill: "var(--purple-soft)", stroke: "var(--purple)" }, hs);
+    MI.svg("text", { x: bx + 110, y: 54, "text-anchor": "middle", "font-size": 11.5 }, hs).textContent = items[0][0];
+    MI.svg("text", { x: bx + 110, y: 72, "text-anchor": "middle", "font-size": 11.5 }, hs).textContent = items[1][0];
+    MI.svg("text", { x: bx + 240, y: 54, "font-size": 11.5, class: "muted" }, hs).textContent = "attend to YY,";
+    MI.svg("text", { x: bx + 240, y: 70, "font-size": 11.5, class: "muted" }, hs).textContent = "move it to the end";
+    items.slice(2).forEach(([l, y], k) => {
+      MI.svg("rect", { x: bx + 60, y: y - 8, width: 100, height: 28, rx: 6, fill: "var(--accent-soft)", stroke: "var(--accent)" }, hs);
+      MI.svg("text", { x: bx + 110, y: y + 10, "text-anchor": "middle", "font-size": 12 }, hs).textContent = l;
+      MI.svg("line", { x1: bx + 110, y1: y - 8, x2: bx + 110, y2: k === 0 ? 82 : y - 20, stroke: "var(--ink-3)", "stroke-width": 1.5 }, hs);
+    });
+    MI.svg("text", { x: bx + 175, y: 180, "font-size": 11.5, class: "muted" }, hs).textContent = "compare: push up";
+    MI.svg("text", { x: bx + 175, y: 196, "font-size": 11.5, class: "muted" }, hs).textContent = "years > YY, push";
+    MI.svg("text", { x: bx + 175, y: 212, "font-size": 11.5, class: "muted" }, hs).textContent = "down years ≤ YY";
+    MI.svg("text", { x: bx + 110, y: 288, "text-anchor": "middle", "font-size": 12.5, "font-weight": 700, fill: "var(--accent)" }, hs).textContent = "→ logits for 17__";
+    MI.svg("line", { x1: bx + 110, y1: 260, x2: bx + 110, y2: 274, stroke: "var(--ink-3)", "stroke-width": 1.5 }, hs);
+  }
+  heat(); MI.onTheme(heat);
+})();
+
+/* =============== Modular addition clock =============== */
+(function () {
+  const svg = document.getElementById("clockSvg");
+  const A = document.getElementById("clkA"), B = document.getElementById("clkB"), K = document.getElementById("clkK");
+  const Ao = document.getElementById("clkAo"), Bo = document.getElementById("clkBo"), Ko = document.getElementById("clkKo");
+  const out = document.getElementById("clkOut");
+  let p = 13, nf = 1;
+  const FREQ = { 13: [1, 3, 4, 5, 6], 113: [14, 35, 41, 42, 52] };
+  function setP(np) {
+    p = np;
+    A.max = B.max = p - 1; K.max = (p - 1) / 2;
+    if (+A.value > p - 1) A.value = p - 1;
+    if (+B.value > p - 1) B.value = p - 1;
+    if (+K.value > (p - 1) / 2) K.value = 1;
+    if (p === 113) { A.value = 97; B.value = 40; K.value = 14; } else { A.value = 9; B.value = 7; K.value = 1; }
+  }
+  document.querySelectorAll("#clkP button").forEach(b => b.onclick = () => {
+    document.querySelectorAll("#clkP button").forEach(x => x.classList.remove("on")); b.classList.add("on");
+    setP(+b.dataset.p); draw();
+  });
+  document.querySelectorAll("#clkF button").forEach(b => b.onclick = () => {
+    document.querySelectorAll("#clkF button").forEach(x => x.classList.remove("on")); b.classList.add("on");
+    nf = +b.dataset.f; draw();
+  });
+  [A, B, K].forEach(i => i.oninput = draw);
+  function arrow(cx, cy, r, ang, color, w, label) {
+    const x = cx + r * Math.cos(ang), y = cy - r * Math.sin(ang);
+    MI.svg("line", { x1: cx, y1: cy, x2: x, y2: y, stroke: color, "stroke-width": w, "stroke-linecap": "round" }, svg);
+    MI.svg("circle", { cx: x, cy: y, r: 5, fill: color }, svg);
+    if (label) MI.svg("text", { x: cx + (r + 20) * Math.cos(ang), y: cy - (r + 20) * Math.sin(ang) + 4, "text-anchor": "middle", "font-size": 12, "font-weight": 700, fill: color }, svg).textContent = label;
+  }
+  function draw() {
+    const a = +A.value, b = +B.value, k = +K.value;
+    Ao.textContent = a; Bo.textContent = b; Ko.textContent = k;
+    K.disabled = nf === 5;
+    svg.innerHTML = "";
+    const kd = nf === 5 ? FREQ[p][0] : k;
+    const cx = 140, cy = 150, R = 105, w = 2 * Math.PI * kd / p;
+    MI.svg("circle", { cx, cy, r: R, fill: "none", stroke: "var(--rule)", "stroke-width": 2 }, svg);
+    for (let n = 0; n < p; n++) {
+      const ang = Math.PI / 2 - w * n;
+      const x = cx + R * Math.cos(ang), y = cy - R * Math.sin(ang);
+      MI.svg("circle", { cx: x, cy: y, r: p === 13 ? 3 : 1.5, fill: "var(--ink-3)" }, svg);
+      if (p === 13) MI.svg("text", { x: cx + (R - 16) * Math.cos(ang), y: cy - (R - 16) * Math.sin(ang) + 4, "text-anchor": "middle", "font-size": 10.5, class: "muted" }, svg).textContent = n;
+    }
+    const c = (a + b) % p;
+    arrow(cx, cy, R, Math.PI / 2 - w * a, "var(--blue)", 2.5, "a");
+    arrow(cx, cy, R * 0.82, Math.PI / 2 - w * b, "var(--purple)", 2.5, "b");
+    arrow(cx, cy, R, Math.PI / 2 - w * (a + b), "var(--accent)", 3.5, "a+b");
+    MI.svg("text", { x: cx, y: 290, "text-anchor": "middle", "font-size": 11.5, class: "muted" }, svg).textContent = nf === 5 ? `circle drawn for k = ${FREQ[p][0]}` : `number n sits at angle 2π·${k}·n/${p}`;
+    // logits
+    const ks = nf === 5 ? FREQ[p] : [k];
+    const L = []; for (let cc = 0; cc < p; cc++) L.push(ks.reduce((s, kk) => s + Math.cos(2 * Math.PI * kk * (a + b - cc) / p), 0));
+    const x0 = 300, x1 = 670, mid = 150, H = 110, bw = (x1 - x0) / p;
+    MI.svg("line", { x1: x0, y1: mid, x2: x1, y2: mid, stroke: "var(--ink-3)" }, svg);
+    L.forEach((v, cc) => {
+      const h = (v / ks.length) * H;
+      MI.svg("rect", { x: x0 + cc * bw + (p === 13 ? 3 : 0.2), y: h >= 0 ? mid - h : mid, width: Math.max(1, bw - (p === 13 ? 6 : 0.6)), height: Math.abs(h), fill: cc === c ? "var(--accent)" : "var(--ink-3)", opacity: cc === c ? 1 : 0.45 }, svg);
+      if (p === 13) MI.svg("text", { x: x0 + cc * bw + bw / 2, y: 282, "text-anchor": "middle", "font-size": 10.5, class: cc === c ? "" : "muted", "font-weight": cc === c ? 700 : 400 }, svg).textContent = cc;
+    });
+    if (p === 113) { MI.svg("text", { x: x0, y: 282, "font-size": 10.5, class: "muted" }, svg).textContent = "c = 0"; MI.svg("text", { x: x1, y: 282, "font-size": 10.5, class: "muted", "text-anchor": "end" }, svg).textContent = "c = 112"; }
+    MI.svg("text", { x: (x0 + x1) / 2, y: 22, "text-anchor": "middle", "font-size": 12, class: "muted" }, svg).textContent = "logit for each answer c (scaled)";
+    let arg = 0; L.forEach((v, i) => { if (v > L[arg]) arg = i; });
+    const second = Math.max(...L.filter((_, i) => i !== arg));
+    out.textContent = `(${a} + ${b}) mod ${p} = ${c}   ·   top logit at c = ${arg}   ·   frequencies used: ${ks.join(", ")}   ·   gap to runner-up: ${((L[arg] - second) / ks.length).toFixed(3)}`;
+  }
+  setP(13); draw(); MI.onTheme(draw);
+})();
+
+/* =============== Othello: absolute vs relative view =============== */
+(function () {
+  const svg = document.getElementById("othelloSvg"), info = document.getElementById("othInfo"), expl = document.getElementById("othExplain");
+  const bars = document.getElementById("othBars");
+  const DIRS = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
+  let board, player, view = "abs", moveNo, rng, last;
+  const opp = p => 3 - p;
+  function flips(b, r, c, pl) {
+    if (b[r][c]) return [];
+    let all = [];
+    DIRS.forEach(([dr, dc]) => {
+      let rr = r + dr, cc = c + dc, line = [];
+      while (rr >= 0 && rr < 8 && cc >= 0 && cc < 8 && b[rr][cc] === opp(pl)) { line.push([rr, cc]); rr += dr; cc += dc; }
+      if (line.length && rr >= 0 && rr < 8 && cc >= 0 && cc < 8 && b[rr][cc] === pl) all = all.concat(line);
+    });
+    return all;
+  }
+  function legal(b, pl) { const m = []; for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (flips(b, r, c, pl).length) m.push([r, c]); return m; }
+  function play() {
+    let m = legal(board, player);
+    if (!m.length) { player = opp(player); m = legal(board, player); if (!m.length) return false; }
+    const [r, c] = m[Math.floor(rng() * m.length)];
+    flips(board, r, c, player).forEach(([rr, cc]) => board[rr][cc] = player);
+    board[r][c] = player; last = [r, c];
+    player = opp(player); moveNo++;
+    return true;
+  }
+  function reset() {
+    board = Array.from({ length: 8 }, () => Array(8).fill(0));
+    board[3][3] = board[4][4] = 2; board[3][4] = board[4][3] = 1;
+    player = 1; moveNo = 0; rng = MI.rng(7); last = null;
+    for (let i = 0; i < 16; i++) play();
+  }
+  function colourFor(v) {
+    if (!v) return null;
+    if (view === "abs") return v === 1 ? ["var(--ink)", "var(--ink)"] : ["#f4f4f0", "var(--ink-3)"];
+    return v === player ? ["var(--accent)", "var(--accent)"] : ["var(--blue)", "var(--blue)"];
+  }
+  function draw() {
+    svg.innerHTML = "";
+    const s = 40, o = 10;
+    MI.svg("rect", { x: o, y: o, width: 320, height: 320, fill: "var(--green-soft)", stroke: "var(--green)" }, svg);
+    for (let i = 1; i < 8; i++) {
+      MI.svg("line", { x1: o + i * s, y1: o, x2: o + i * s, y2: o + 320, stroke: "var(--green)", opacity: 0.4 }, svg);
+      MI.svg("line", { x1: o, y1: o + i * s, x2: o + 320, y2: o + i * s, stroke: "var(--green)", opacity: 0.4 }, svg);
+    }
+    const lm = legal(board, player).map(([r, c]) => r * 8 + c);
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+      const cx = o + c * s + s / 2, cy = o + r * s + s / 2, col = colourFor(board[r][c]);
+      if (col) MI.svg("circle", { cx, cy, r: 15, fill: col[0], stroke: col[1], "stroke-width": 1.5 }, svg);
+      else if (lm.includes(r * 8 + c)) MI.svg("circle", { cx, cy, r: 4, fill: "var(--ink-3)", opacity: 0.6 }, svg);
+      if (last && last[0] === r && last[1] === c) MI.svg("rect", { x: cx - 18, y: cy - 18, width: 36, height: 36, fill: "none", stroke: "var(--yellow)", "stroke-width": 2, rx: 4 }, svg);
+    }
+    const who = player === 1 ? "Black" : "White";
+    info.innerHTML = `Move ${moveNo} played · <b>${who}</b> to move<br>` + (view === "abs"
+      ? "View: absolute colours (black / white)"
+      : `View: relative to ${who}. <span style="color:var(--accent)">●</span> mine  <span style="color:var(--blue)">●</span> theirs`);
+    expl.innerHTML = view === "abs"
+      ? "In this view, a piece keeps its colour from move to move (unless flipped). But for the model, what matters is \"can <em>I</em> play here?\" — and \"I\" alternates. A single linear direction for \"black\" would need to mean \"mine\" on one move and \"theirs\" on the next. So a linear black/white probe does badly."
+      : "In this view, press \"Next move\": almost every piece changes colour, because the player to move changed. Yet this is the frame the model uses. In it, one fixed linear direction per square means \"mine\", and a linear probe reads the board with very high accuracy.";
+    drawBars();
+  }
+  function drawBars() {
+    bars.innerHTML = "";
+    const rows = [["linear, black/white", 20.4, "var(--blue)"], ["nonlinear, black/white", 1.7, "var(--purple)"], ["linear, mine/theirs", 1.5, "var(--accent)"]];
+    MI.svg("text", { x: 0, y: 14, "font-size": 11.5, class: "muted" }, bars).textContent = "probe error rate (lower is better)";
+    rows.forEach(([l, v, c], i) => {
+      const y = 30 + i * 38;
+      MI.svg("text", { x: 0, y: y + 13, "font-size": 11.5 }, bars).textContent = l;
+      MI.svg("rect", { x: 140, y, width: Math.max(3, v / 25 * 130), height: 18, rx: 3, fill: c, opacity: i === 2 ? 0.55 : 0.9 }, bars);
+      MI.svg("text", { x: 146 + Math.max(3, v / 25 * 130), y: y + 13, "font-size": 11.5 }, bars).textContent = i === 2 ? "very low*" : v + "%";
+    });
+  }
+  document.querySelectorAll("#othView button").forEach(b => b.onclick = () => {
+    document.querySelectorAll("#othView button").forEach(x => x.classList.remove("on")); b.classList.add("on");
+    view = b.dataset.v; draw();
+  });
+  document.getElementById("othNext").onclick = () => { if (!play()) reset(); draw(); };
+  document.getElementById("othReset").onclick = () => { reset(); draw(); };
+  reset(); draw(); MI.onTheme(draw);
+
+  // static board in figure 6.6
+  const g = document.getElementById("othStatic");
+  const st = [
+    "........", "...m....", "..tmm...", "..mtm...", "..ttt...", ".m.t....", "........", "........"];
+  st.forEach((row, r) => [...row].forEach((ch, c) => {
+    const x = 480 + c * 22, y = 14 + r * 22;
+    MI.svg("rect", { x, y, width: 22, height: 22, fill: ch === "m" ? "var(--accent)" : ch === "t" ? "var(--blue)" : "var(--bg-2)", stroke: "var(--panel)", "stroke-width": 1.5, opacity: ch === "." ? 1 : 0.85 }, g);
+  }));
+})();
+
+/* =============== ROME causal tracing heatmap (schematic) =============== */
+(function () {
+  const svg = document.getElementById("romeHeat");
+  const toks = ["The", "Space", "Needle*", "is", "in", "the", "city", "of"];
+  function draw() {
+    svg.innerHTML = "";
+    const x0 = 110, y0 = 20, cw = 18, ch = 26, nL = 32;
+    toks.forEach((t, r) => {
+      MI.svg("text", { x: x0 - 10, y: y0 + r * ch + 17, "text-anchor": "end", "font-size": 12.5, "font-family": "var(--mono)", "font-weight": r === 2 || r === 7 ? 700 : 400 }, svg).textContent = t;
+      for (let L = 0; L < nL; L++) {
+        let v = 0.03;
+        if (r === 2) v = 0.15 + 0.85 * Math.exp(-Math.pow((L - 11) / 5, 2));
+        if (r === 1) v = 0.08 + 0.25 * Math.exp(-Math.pow((L - 8) / 5, 2));
+        if (r === 7) v = 0.1 + 0.85 / (1 + Math.exp(-(L - 20) / 2));
+        if (r > 2 && r < 7) v = 0.04;
+        MI.svg("rect", { x: x0 + L * cw, y: y0 + r * ch, width: cw - 1, height: ch - 1, fill: MI.diverge(v) }, svg);
+      }
+    });
+    MI.svg("text", { x: x0 + nL * cw / 2, y: y0 + 8 * ch + 22, "text-anchor": "middle", "font-size": 12, class: "muted" }, svg).textContent = "layer (early → late)";
+    MI.svg("text", { x: x0 - 10, y: y0 + 8 * ch + 22, "text-anchor": "end", "font-size": 11, class: "muted" }, svg).textContent = "* last subject token";
+    MI.svg("text", { x: x0 + 11 * cw, y: y0 + 2 * ch - 6, "text-anchor": "middle", "font-size": 11.5, fill: "var(--accent)", "font-weight": 700, stroke: "var(--panel)", "stroke-width": 4, "paint-order": "stroke" }, svg).textContent = "mid-layer MLPs";
+    MI.svg("text", { x: x0 + 27 * cw, y: y0 + 7 * ch - 6, "text-anchor": "middle", "font-size": 11.5, fill: "var(--accent)", "font-weight": 700, stroke: "var(--panel)", "stroke-width": 4, "paint-order": "stroke" }, svg).textContent = "late layers, final token";
+  }
+  draw(); MI.onTheme(draw);
+})();
+
+/* =============== Universal neurons (schematic) =============== */
+(function () {
+  const svg = document.getElementById("univSvg");
+  function draw() {
+    svg.innerHTML = "";
+    const cols = 5, rows = 12, r = MI.rng(11);
+    const X = c => 110 + c * 125, Y = k => 30 + k * 15;
+    const uni = [[2, "var(--accent)"], [6, "var(--blue)"], [9, "var(--purple)"]];
+    const pos = uni.map((_, u) => Array.from({ length: cols }, () => u * 4 + Math.floor(r() * 4)));
+    // lines first
+    uni.forEach(([_, col], u) => {
+      const pts = pos[u].map((k, c) => `${X(c)},${Y(k)}`).join(" ");
+      MI.svg("polyline", { points: pts, fill: "none", stroke: col, "stroke-width": 2, opacity: 0.8 }, svg);
+    });
+    for (let c = 0; c < cols; c++) {
+      MI.svg("text", { x: X(c), y: 18, "text-anchor": "middle", "font-size": 12, class: "muted" }, svg).textContent = "GPT-2 seed " + (c + 1);
+      for (let k = 0; k < rows; k++) {
+        const u = pos.findIndex(p => p[c] === k);
+        MI.svg("circle", { cx: X(c), cy: Y(k), r: 5.5, fill: u >= 0 ? uni[u][1] : "var(--bg-2)", stroke: u >= 0 ? uni[u][1] : "var(--ink-3)", "stroke-width": 1 }, svg);
+      }
+    }
+    MI.svg("text", { x: 360, y: 222, "text-anchor": "middle", "font-size": 12, class: "muted" }, svg).textContent = "coloured = a neuron with a matching partner in every model (≈1–5%)";
+  }
+  draw(); MI.onTheme(draw);
+})();
+</script>
+</body>
+</html>

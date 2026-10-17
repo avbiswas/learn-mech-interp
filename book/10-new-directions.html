@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-family: var(--sans); font-size: 0.8125rem; color: var(--ink-2); margin-top: 8px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .ps-table { width: 100%; border-collapse: collapse; font-family: var(--sans); font-size: 0.875rem; margin-top: 10px; }
+  .ps-table td { padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+  .ps-table td:first-child { color: var(--ink-3); width: 130px; font-size: 0.78125rem; text-transform: uppercase; letter-spacing: .05em; }
+  .ps-out { font-family: var(--mono); font-size: 0.84375rem; }
+  .bar { display: inline-block; height: 10px; border-radius: 3px; background: var(--accent); vertical-align: middle; margin-right: 8px; }
+  .stage-info { min-height: 72px; }
+  #mazeSvg rect.cell { cursor: pointer; }
+  .lineage { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-family: var(--sans); font-size: 0.8125rem; margin: 18px 0; }
+  .lineage span.n { background: var(--panel); border: 1px solid var(--rule); border-radius: 999px; padding: 4px 10px; }
+  .lineage span.n b { color: var(--accent); margin-right: 4px; }
+  .lineage span.a { color: var(--ink-3); }
+</style>
+</head>
+<body data-chapter="10">
+<main>
+<article class="article">
+
+<div class="kicker">Chapter 10</div>
+<h1>Beyond text circuits: new directions</h1>
+<p class="lede">The core of the field studies language models with features, circuits and patching. But many other threads now grow around that core. Models that explain their own activations. Theories of how circuits form. Chess engines that plan. DNA models that teach biologists something new. This chapter is a guided tour of those threads.</p>
+
+<div class="tldr">
+<h3>In short</h3>
+<ul>
+<li><b>Self-explanation.</b> We can feed a model's own activation back into a model and ask "what is this?" The methods go from Patchscopes (no training, 2024) to Natural Language Autoencoders (trained with RL, 2026). Anthropic now uses NLAs in pre-release audits of Claude. Critics show that these explainers can also fool us.</li>
+<li><b>A "workspace".</b> Anthropic's 2026 Jacobian-lens paper finds a small subspace (never more than 10% of activation variance) that holds what the model can report and reason with.</li>
+<li><b>Personas.</b> One direction inside chat models, the "Assistant Axis", measures how much the model acts as its usual Assistant character.</li>
+<li><b>How circuits form.</b> Developmental interpretability uses singular learning theory. A number called the <b>local learning coefficient</b> shows training stages that the loss curve hides. By 2026 the tools work on a 1.4-billion-parameter model, and they can also <em>steer</em> what a model learns.</li>
+<li><b>Agents and games.</b> AlphaZero learned human chess concepts, and some new ones that grandmasters could learn. Leela Chess Zero looks ahead inside one forward pass. A maze agent has a "cheese vector".</li>
+<li><b>Beyond language.</b> The same tools work on CLIP, image generators, and protein and DNA models. In biology, interpretability starts to give <em>discoveries</em>, not only explanations.</li>
+<li><b>Plumbing, reasoning, design.</b> Entropy neurons and attention sinks explain odd parts. Thought Anchors finds key sentences in long chains of thought. Bilinear MLPs and KANs try to make networks readable by design.</li>
+</ul>
+</div>
+
+<div class="callout example" id="learning-path">
+<span class="label">Learning path · Chapter 10 of 12 · about 55 min · 4 widgets · 4 quizzes</span>
+<p><b>Before you start:</b> <a href="07-probing-steering.html#steering">Chapter 7: steering</a> and <a href="07-probing-steering.html#lenses">lenses</a>; <a href="08-dictionary-learning.html#anatomy">Chapter 8: SAEs</a>; <a href="09-circuit-tracing.html#attribution-graphs">Chapter 9: attribution graphs</a>. Activation patching (<a href="05-causal-methods.html#activation-patching">Chapter 5</a>) also helps.</p>
+<p><b>You will learn:</b></p>
+<ul><li>how models can translate activations into words, from Patchscopes to Natural Language Autoencoders</li><li>the "global workspace" view, and the Assistant persona inside chat models</li><li>how developmental interpretability watches circuits form during training</li><li>what interpretability found in chess engines, RL agents, vision, image and biology models</li><li>attempts to build networks that are easy to read by design</li></ul>
+</div>
+
+
+<p>Chapters 2 to 9 told one main story. That story goes from neurons to features, from features to circuits, and from circuits to attribution graphs. This chapter collects the threads that do not fit neatly into that line. Some are new methods. Some apply old methods to new kinds of models. Some ask different questions, such as "how does a circuit form?" instead of "what does it do?"</p>
+
+<p>The list comes from a scan of what the main research groups published from 2021 to 2026. It is not complete. But each thread here has real results, and several will likely become central in the next years.</p>
+
+<!-- ============================================================ -->
+<h2 id="self-explanation" data-short="Models explain themselves">Models that explain their own activations</h2>
+
+<p>A language model is very good at one thing: describing things in words. So here is a simple idea. Take a hidden <span class="term" data-term="activation">activation</span> from the model. Put it <em>into</em> a model as if it were a word. Then ask: "What is this?" The answer is a plain-English reading of the activation.</p>
+
+<p>This idea is different from <span class="term" data-term="sparse autoencoder">sparse autoencoders</span> (<a href="08-dictionary-learning.html">Chapter 8</a>). An SAE gives a fixed <b>dictionary</b> of features. Each feature needs a label, which humans or another model must write. A self-explanation method gives a <b>translator</b>. It turns any activation into text directly.</p>
+
+<div class="lineage" aria-label="Lineage of self-explanation methods">
+  <span class="n"><b>2020</b>Compositional explanations</span><span class="a">→</span>
+  <span class="n"><b>2022</b>MILAN</span><span class="a">→</span>
+  <span class="n"><b>2023</b>Auto-interp (Bills)</span><span class="a">→</span>
+  <span class="n"><b>2024</b>Patchscopes · SelfIE</span><span class="a">→</span>
+  <span class="n"><b>2024</b>LatentQA</span><span class="a">→</span>
+  <span class="n"><b>2025</b>Self-explainers · Activation Oracles · PCDs</span><span class="a">→</span>
+  <span class="n"><b>2026</b>Natural Language Autoencoders · AOs at 1T scale</span>
+</div>
+
+<h3>Patchscopes: a general recipe</h3>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2401.06102">Patchscopes: A Unifying Framework for Inspecting Hidden Representations of Language Models</a></div><div class="a">Asma Ghandeharioun, Avi Caciularu, Adam Pearce, Lucas Dixon, Mor Geva (Google) · ICML 2024</div><div class="s">Patch a hidden state from a source prompt into a target prompt that is built to make the model describe it.</div></div></div>
+
+<p>Patchscopes uses <span class="term" data-term="activation patching">activation patching</span> (<a href="05-causal-methods.html">Chapter 5</a>) in a new way. Normally we patch to test a cause. Here we patch to <b>read</b>. The recipe has four parts:</p>
+<ol>
+<li>Run a <b>source prompt</b>. Take the hidden state <span class="math">h</span> at some layer and token.</li>
+<li>Write a <b>target prompt</b> that makes the model repeat or describe things. The paper's "identity" prompt is <code>cat → cat; 1135 → 1135; hello → hello; ?</code></li>
+<li>Run the target prompt. At the <code>?</code> position, replace the hidden state with <span class="math">h</span>.</li>
+<li>Let the model continue. Its words tell you what <span class="math">h</span> carries.</li>
+</ol>
+
+<figure class="panel">
+<svg viewBox="0 0 720 300" role="img" aria-label="Patchscopes: a vector from the source model at layer l is copied into the target model at the question-mark position of an identity prompt. The target model then writes a description.">
+  <defs><marker id="pa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+  <marker id="pg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <text x="130" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="var(--blue)">SOURCE RUN</text>
+  <text x="400" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="var(--purple)">TARGET RUN</text>
+  <!-- source column -->
+  <g>
+    <rect x="40" y="40" width="180" height="190" rx="10" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <line x1="40" y1="88" x2="220" y2="88" stroke="var(--blue)" stroke-opacity=".3"/>
+    <line x1="40" y1="136" x2="220" y2="136" stroke="var(--blue)" stroke-opacity=".3"/>
+    <line x1="40" y1="184" x2="220" y2="184" stroke="var(--blue)" stroke-opacity=".3"/>
+    <text x="50" y="114" font-size="11" class="muted">layer ℓ</text>
+    <circle cx="190" cy="112" r="11" fill="var(--accent)"/>
+    <text x="190" y="116" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">h</text>
+    <text x="130" y="254" text-anchor="middle" font-size="12.5">"Alexander the Great"</text>
+    <text x="130" y="272" text-anchor="middle" font-size="11" class="muted">source prompt (last token)</text>
+  </g>
+  <!-- target column -->
+  <g>
+    <rect x="330" y="40" width="360" height="190" rx="10" fill="var(--purple-soft)" stroke="var(--purple)"/>
+    <line x1="330" y1="88" x2="690" y2="88" stroke="var(--purple)" stroke-opacity=".3"/>
+    <line x1="330" y1="136" x2="690" y2="136" stroke="var(--purple)" stroke-opacity=".3"/>
+    <line x1="330" y1="184" x2="690" y2="184" stroke="var(--purple)" stroke-opacity=".3"/>
+    <text x="340" y="162" font-size="11" class="muted">layer ℓ*</text>
+    <circle cx="655" cy="160" r="11" fill="var(--accent)"/>
+    <text x="655" y="164" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">h</text>
+    <text x="510" y="254" text-anchor="middle" font-size="12.5" font-family="var(--mono)">cat → cat; 1135 → 1135; hello → hello; ?</text>
+    <text x="510" y="272" text-anchor="middle" font-size="11" class="muted">target "identity" prompt — h replaces the state at "?"</text>
+  </g>
+  <path d="M 202 112 C 300 100, 560 120, 643 156" fill="none" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#pa)"/>
+  <text x="275" y="96" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">patch</text>
+  <line x1="655" y1="40" x2="655" y2="10" stroke="var(--ink-3)" stroke-width="1.5" marker-end="url(#pg)"/>
+  <rect x="440" y="0" width="200" height="22" rx="11" fill="var(--panel)" stroke="var(--rule)"/>
+  <text x="540" y="15" text-anchor="middle" font-size="11.5">"Alexander the Great, king of…"</text>
+</svg>
+<figcaption><b>Figure 10.1.</b> Patchscopes. One vector moves from the source run into a target prompt that is built to "repeat" what it receives. The output text is a reading of the vector. The source and target can be the same model, or the target can be a larger model.</figcaption>
+</figure>
+
+<p>The paper showed three main results. First, the <span class="term" data-term="logit lens">logit lens</span>, the tuned lens and several older inspection methods are <b>special cases</b> of Patchscopes. Second, Patchscopes works better in early layers, where the logit lens fails. Third, a <b>larger</b> model can explain the hidden states of a smaller one. The authors also used it to repair multi-hop reasoning errors: they patched a resolved first-hop entity back to the right place.</p>
+
+<div class="widget" id="psWidget">
+  <div class="widget-title">Interactive · Patchscope reader</div>
+  <div class="widget-sub">Move the layer slider. Compare what the logit lens reads with what a Patchscope (identity prompt) reads from the same hidden state. <b>Illustrative:</b> these readouts are made up to show the pattern the paper reports (logit lens weak early, Patchscope readable early). They are not real model outputs.</div>
+  <div class="controls"><label>Source layer ℓ <input type="range" id="psLayer" min="0" max="11" step="1" value="3"> <output id="psLayerOut">3</output></label></div>
+  <table class="ps-table" id="psTable"></table>
+</div>
+
+<h3>SelfIE and LatentQA</h3>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2403.10949">SelfIE: Self-Interpretation of Large Language Model Embeddings</a></div><div class="a">Haozhe Chen, Carl Vondrick, Chengzhi Mao (Columbia) · ICML 2024</div><div class="s">Insert a hidden embedding in place of a placeholder and ask the model to describe it. No training.</div></div></div>
+
+<p>SelfIE uses the same trick with a prompt like "[X] Please repeat the message:". The model then talks about the inserted embedding. The authors used it to look at internal reasoning in ethical decisions, in prompt injection, and in the recall of harmful knowledge. They also added two control methods. One edits a concept with a gradient step on one layer. The other erases harmful knowledge without labelled targets.</p>
+
+<p><b>LatentQA</b> (Alexander Pan, Lijie Chen and Jacob Steinhardt, Berkeley, December 2024; ICLR 2026) changes one thing. It does not hope that an untrained model will describe an activation well. Instead, it <b>fine-tunes</b> a decoder model on triples of (activation, question, answer). The decoder learns to answer questions about activations. The first results were in narrow settings, for example "what persona does the model hold right now?"</p>
+
+<h3>Can a model explain itself better than another model can?</h3>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2511.08579">Training Language Models to Explain Their Own Computations</a></div><div class="a">Belinda Z. Li, Zifan Carl Guo, Vincent Huang, Jacob Steinhardt, Jacob Andreas (MIT / Transluce) · November 2025</div><div class="s">Fine-tune a model to describe its own features, its own causal structure and the effect of input tokens.</div></div></div>
+
+<p>This paper uses older interpretability methods as the "answer key". It trains explainer models on three tasks: describe what a feature encodes, predict what an activation patch will do, and predict which input tokens matter. With only tens of thousands of examples, the explainers generalize to new questions. The key result: a model that explains <b>itself</b> usually does better than a <b>different</b> model that explains it, even when the other model is more capable. The authors call this <b>privileged access</b> to one's own internals.</p>
+
+<h3>Activation Oracles and Predictive Concept Decoders</h3>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2512.15674">Activation Oracles: Training and Evaluating LLMs as General-Purpose Activation Explainers</a></div><div class="a">Adam Karvonen, James Chua, Clément Dumas, … Owain Evans, Samuel Marks (MATS, Truthful AI, Anthropic and others) · December 2025</div><div class="s">Train a general-purpose explainer that treats activations as an extra input type.</div></div></div>
+
+<p>Activation Oracles scale LatentQA up. The oracle model trains on a mix of tasks: questions about activations, classification tasks, and a self-supervised task ("predict the text around this activation"). The striking result is <b>out-of-distribution</b> generalization. An oracle can recover information that was fine-tuned into a model and never appears in the prompt. Examples are implanted biographical facts and malign tendencies. The oracles never trained on activations from fine-tuned models, but they still read this information. The best oracles matched or beat the white-box baselines on all four evaluation tasks, and beat the best baseline of any kind on three of the four. More training datasets gave steadily better oracles.</p>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2512.15712">Predictive Concept Decoders: Training Scalable End-to-End Interpretability Assistants</a></div><div class="a">Vincent Huang, Dami Choi, Daniel D. Johnson, Sarah Schwettmann, Jacob Steinhardt (Transluce) · December 2025</div><div class="s">Force explanations through a short, sparse list of concepts, then use only that list to predict behaviour.</div></div></div>
+
+<p>Predictive Concept Decoders add a <b>bottleneck</b>. An encoder compresses the activations into a sparse list of concepts. A decoder sees only that list. It must answer questions about the model's behaviour. Because the list is short, a human can read it, like a list of SAE features. But the whole system trains end-to-end to be useful. The authors report good scaling, and detection of jailbreaks, secret hints and implanted concepts.</p>
+
+<h3>Natural Language Autoencoders (2026)</h3>
+
+<div class="paper"><div class="yr">2026</div><div><div class="t"><a href="https://transformer-circuits.pub/2026/nla/index.html">Natural Language Autoencoders Produce Unsupervised Explanations of LLM Activations</a></div><div class="a">Kit Fraser-Taliente, Subhash Kantamneni, Euan Ong (equal first authors), et al. (Anthropic) · May 2026</div><div class="s">An autoencoder whose bottleneck is English text, trained with reinforcement learning.</div></div></div>
+
+<p>A normal autoencoder squeezes data through a small vector and rebuilds it. A Natural Language Autoencoder (NLA) squeezes an activation through <b>text</b>. It has two parts, and both are copies of the model:</p>
+<ul>
+<li>The <b>activation verbalizer</b> reads an activation and writes a text description.</li>
+<li>The <b>activation reconstructor</b> reads that text and tries to rebuild the activation.</li>
+</ul>
+<p>Both parts train together with reinforcement learning. The reward is low reconstruction error. A supervised warm start comes first: both parts learn from summaries of the text that led up to each activation. No human labels say what an activation "means". The description is good only if it carries enough information to rebuild the activation.</p>
+
+<p>The paper reports that explanations get more informative over training, for three Claude models (Haiku 3.5, Haiku 4.5 and Opus 4.6). NLAs found <b>unverbalized evaluation awareness</b>: the model internally suspected it was being tested, but did not say so. In another case study, an early version of Opus 4.6 sometimes answered English prompts in Russian or other languages. The NLA explanations showed that the model had guessed that the user's "real" first language was Russian. This led the team to bad training data: English prompts paired with untranslated foreign-language answers. The authors released training code and NLAs for four open models (Qwen-2.5-7B, Gemma-3-12B, Gemma-3-27B and Llama-3.3-70B).</p>
+
+<div class="callout update">
+<span class="label">Update · October 2026</span>
+<p><b>NLAs in real audits.</b> Anthropic used NLAs in its pre-release audits of Claude Opus 4.6 and Claude Mythos Preview. In Mythos Preview, the NLA showed unspoken reasoning about how the model would be graded. The Claude Opus 5 system card (July 2026) goes further. A Claude-based <b>investigator agent</b> with an NLA read flagged transcripts at scale. It found recurring hidden themes. Examples: the model treated a task as a graded test when no grader was mentioned, and it knew that it was fabricating. <a href="11-frontier.html">Chapter 11</a> covers these audits.</p>
+</div>
+
+<div class="callout warn">
+<span class="label">Two things called "activation oracle"</span>
+<p>Do not mix up two methods. <b>Activation Oracles</b> (Karvonen et al., above) are <b>supervised</b>: they train on questions with known answers. The Claude Opus 4.6 system card (February 2026) also used the words "activation oracle", but for a different, <b>unsupervised</b> explainer. In the Mythos Preview card (April 2026), Anthropic renamed its method the <b>activation verbalizer</b> "to distinguish our unsupervised training technique from the supervised approach introduced in Karvonen et al." The activation verbalizer is the first half of the NLA.</p>
+</div>
+
+<div class="callout limit">
+<span class="label">Limits of learned explainers</span>
+<p>All these methods are <b>learned</b> explainers. They can be right for the wrong reasons, or they can make things up. The NLA paper lists confabulation (descriptions that are false about the context), no mechanistic grounding (you cannot say which part of the activation gave which phrase), too much expressive power (the verbalizer can add its own inferences), high cost, and a risk that the explainer only restates the input text. They complement SAEs and circuits. They do not replace them.</p>
+</div>
+
+<h3>Do learned explainers really read the activation?</h3>
+
+<p>In 2026 this question became a live debate. Two confounds make it hard to answer. <b>Text inversion</b> means that the explainer just recovers the nearby input words from the activation. <b>Self-sufficiency</b> means that the explainer answers from its own general knowledge and ignores the activation. In both cases the answer can look right, but it tells us nothing new about the model.</p>
+
+<ul>
+<li><b>The critique (March 2026).</b> Senthooran Rajamanoharan, Neel Nanda and a co-author tested the released Activation Oracles for Qwen3 models ("Current activation oracles are hard to use", LessWrong). 49.4% of the answers were too generic to check. The oracles also made confident wrong claims. On tasks where text inversion could not help, results were weak, for example 0.55 AUC (chance is 0.5) for sycophancy detection. There was some real signal: the oracles could detect weak steering vectors before the steering showed in the output text.</li>
+<li><b>The scale-up (August 2026).</b> Transluce (Dami Choi, Vincent Huang, Anish Mudide, William Zhou, Jacob Steinhardt) trained oracles for six models, up to <b>Kimi-K2.6 with 1.1 trillion parameters</b>. The oracles read every layer, not only the middle one. They also trained on a new task: predict properties of the model's <b>future continuation</b>. This task is harder to solve by text inversion, and it improved results. On Qwen3-8B, the oracle beat every baseline on average, including asking the model to introspect and giving a strong model the full context. Weak spots remained, such as reward-hacking detection.</li>
+</ul>
+
+<div class="paper"><div class="yr">2026</div><div><div class="t"><a href="https://transluce.org/scaling-activation-oracles">Scaling Activation Oracles to Trillion-Parameter Models</a></div><div class="a">Dami Choi, Vincent Huang, Anish Mudide, William Zhou, Jacob Steinhardt (Transluce) · August 2026</div><div class="s">Oracles for models up to 1.1T parameters, trained partly to predict the model's future behaviour.</div></div></div>
+
+<p>The lesson for learners: always compare a learned explainer with simple baselines. Ask whether the same answer could come from the input text alone.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th>Free-text output</th><th>Sparse-concept output</th></tr></thead>
+<tbody>
+<tr><td><b>No training</b></td><td>Patchscopes, SelfIE</td><td>SAE features + auto-interp labels (Ch. 8)</td></tr>
+<tr><td><b>Trained explainer</b></td><td>LatentQA, Activation Oracles, NLAs</td><td>Predictive Concept Decoders</td></tr>
+</tbody>
+</table>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="workspace" data-short="A global workspace?">A "global workspace" inside the model?</h2>
+
+<div class="paper"><div class="yr">2026</div><div><div class="t"><a href="https://transformer-circuits.pub/2026/workspace/index.html">Verbalizable Representations Form a Global Workspace in Language Models</a></div><div class="a">Wes Gurnee, Nicholas Sofroniew, Jack Lindsey (core contributors), Adam Pearce, et al. (Anthropic) · July 2026</div><div class="s">A small subspace of directions that the model can "say" behaves like a limited-capacity workspace.</div></div></div>
+
+<p>In cognitive science, <b>global workspace theory</b> says this: the brain does much processing automatically. But a small set of representations is "broadcast". Those representations are available for report, for reasoning and for deliberate control. This paper asks whether language models have a similar special subset.</p>
+
+<p>The tool is the <b>Jacobian lens</b> (J-lens). For an activation direction, it measures the average linear effect on the probability of <em>saying</em> each token. It averages this effect across many contexts. (A <b>Jacobian</b> is the matrix of first-order effects: how much each output changes when you nudge each input a little.) A direction that reliably pushes the model to say a word, now or later, is "verbalizable". The span of all such directions is called <b>J-space</b>. The main model in the paper is Claude Sonnet 4.5. The authors checked key results on Claude Haiku 4.5 and Opus 4.5.</p>
+
+<p>The paper reports five workspace-like properties of J-space:</p>
+<ol>
+<li><b>Verbal report.</b> If you swap J-space vectors, the model changes what it says it is thinking about.</li>
+<li><b>Directed modulation.</b> If you tell the model to focus on a concept, that concept becomes active in J-space.</li>
+<li><b>Internal reasoning.</b> Middle steps of multi-step reasoning live in J-space and causally affect answers.</li>
+<li><b>Flexible use.</b> One representation in J-space serves many later uses.</li>
+<li><b>Selectivity.</b> J-space holds only a small part of the activation. Its share of activation variance changes by layer, but it is <b>never more than 10%</b>. It works mostly in the middle layers and has limited capacity.</li>
+</ol>
+<p>The key test is an ablation. If you remove J-space, multi-step reasoning breaks. With heavy ablation, two-hop accuracy falls to near zero. But ordinary next-word prediction and one-step fact recall mostly still work.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 260" role="img" aria-label="Left: a large grey cloud of automatic processing (90 percent or more of variance) with a small bright J-space circle (at most 10 percent) connected to report, reasoning and focus. Right: after ablating J-space, simple recall still works but two-hop reasoning fails.">
+  <ellipse cx="200" cy="130" rx="180" ry="105" fill="var(--bg-2)" stroke="var(--rule)"/>
+  <text x="200" y="52" text-anchor="middle" font-size="12" class="muted">automatic processing</text>
+  <text x="200" y="68" text-anchor="middle" font-size="12" class="muted">(≥90% of activation variance)</text>
+  <circle cx="200" cy="140" r="42" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="200" y="137" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent)">J-space</text>
+  <text x="200" y="154" text-anchor="middle" font-size="11" fill="var(--accent)">≤10%</text>
+  <g font-size="12" stroke="var(--accent)" stroke-width="1.5" fill="none">
+    <path d="M 238 122 L 300 96"/><path d="M 242 142 L 310 142"/><path d="M 236 160 L 300 190"/>
+  </g>
+  <text x="304" y="94" font-size="12">report</text>
+  <text x="314" y="146" font-size="12">reasoning</text>
+  <text x="304" y="200" font-size="12">focus on request</text>
+  <line x1="420" y1="20" x2="420" y2="240" stroke="var(--rule)"/>
+  <text x="570" y="40" text-anchor="middle" font-size="13" font-weight="700">Ablate J-space</text>
+  <rect x="450" y="66" width="240" height="56" rx="8" fill="var(--green-soft)" stroke="var(--green)"/>
+  <text x="466" y="90" font-size="12.5">Simple recall</text>
+  <text x="466" y="108" font-size="11.5" class="muted">"capital of France?" → Paris</text>
+  <text x="672" y="100" text-anchor="end" font-size="18" font-weight="700" fill="var(--green)">✓</text>
+  <rect x="450" y="140" width="240" height="56" rx="8" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="466" y="164" font-size="12.5">Two-step reasoning</text>
+  <text x="466" y="182" font-size="11.5" class="muted">needs a held middle step</text>
+  <text x="672" y="174" text-anchor="end" font-size="18" font-weight="700" fill="var(--red)">✗</text>
+  <text x="570" y="226" text-anchor="middle" font-size="11" class="muted">schematic of the reported pattern</text>
+</svg>
+<figcaption><b>Figure 10.2.</b> The workspace picture (schematic). Most of the activation space does automatic work. A small "verbalizable" subspace (never more than 10% of variance, by layer) holds what the model can report and reason with. Removing it hurts multi-step reasoning but not basic processing.</figcaption>
+</figure>
+
+<p>The paper also tests a training idea based on this picture, called <b>counterfactual reflection training</b>. At points in agent transcripts, the team added a question that asked the model to stop and reflect, plus an answer based on ethical principles. They trained the model only on these reflection turns. Afterwards the model behaved better at those points even when nobody asked it to reflect, and the J-space there held concepts such as "ethical" and "honest". If you removed those concepts from J-space, most of the improvement went away. So what a model is ready to <em>say</em> seems to shape how it silently reasons.</p>
+
+<p>This result connects several chapters. It may explain why the logit lens works for some states (<a href="04-transformers.html">Chapter 4</a>). It may explain why models can report some internal states in introspection tests but not others (<a href="07-probing-steering.html">Chapter 7</a>). And it gives self-explanation methods a target: the part of the activation that the model can already put into words.</p>
+
+<div class="callout warn">
+<span class="label">Careful with the word "workspace"</span>
+<p>"Global workspace" is a <b>functional analogy</b>. It says that J-space behaves like the workspace in the theory. It is not a claim that the model is conscious.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="personas" data-short="Personas inside models">Personas and characters inside models</h2>
+
+<p>A chat model can play many characters: a pirate, a poet, a villain in a story. But by default it plays one character, the helpful <b>Assistant</b>. <a href="07-probing-steering.html">Chapter 7</a> showed <b>persona vectors</b>, directions for single traits such as "evil" or "sycophantic". Two 2026 works look at the whole space of characters at once.</p>
+
+<div class="paper"><div class="yr">2026</div><div><div class="t"><a href="https://arxiv.org/abs/2601.10387">The Assistant Axis: Situating and Stabilizing the Default Persona of Language Models</a></div><div class="a">Christina Lu, Jack Gallagher, Jonathan Michala, Kyle Fish, Jack Lindsey (MATS / Anthropic) · January 2026</div><div class="s">The main direction in "persona space" measures how much the model acts as its default Assistant.</div></div></div>
+
+<p>The authors extracted activation directions for 275 character roles in three open chat models (Gemma 2 27B, Qwen 3 32B and Llama 3.3 70B). Then they ran principal component analysis on these directions. (PCA finds the directions along which the data varies most.) The first component is the <b>Assistant Axis</b>. One end means "acting as the usual Assistant". Steering toward it makes the model more helpful and harmless. Steering away makes the model claim to be other entities. Far away, it often speaks in a mystical, theatrical style.</p>
+
+<p>The axis also predicts <b>persona drift</b>: the model slips into odd or harmful behaviour during a long chat. Drift was common in conversations that asked the model to reflect on its own processes, and with emotionally vulnerable users. A simple fix, <b>activation capping</b>, stops the activation from moving too far down the axis. It cut harmful answers to persona-based jailbreaks by nearly 60%, without hurting benchmark scores. The axis exists in base models too, before chat training.</p>
+
+<div class="paper"><div class="yr">2026</div><div><div class="t"><a href="https://alignment.anthropic.com/2026/psm">The Persona Selection Model: Why AI Assistants might Behave like Humans</a></div><div class="a">Sam Marks, Jack Lindsey, Chris Olah (Anthropic) · February 2026</div><div class="s">Pretraining teaches many characters; post-training selects and refines one of them, the Assistant.</div></div></div>
+
+<p>This essay gives a theory that ties these results together. During pretraining, a model learns to <b>simulate many personas</b>, because its data was written by many people and describes many characters. Post-training then <b>selects</b> one persona, the Assistant, and refines it. So talking to a chat model is a bit like talking to a character in a story that the model writes. The essay cites interpretability evidence. SAEs trained on a base model often still work on the chat model. The model uses the same internal features for the Assistant as for other characters. And the Assistant Axis already exists before post-training. The authors add caveats: not every representation is reused, and we may see reused features more easily only because they are easier to interpret.</p>
+
+<div class="callout warn">
+<span class="label">Careful with "character"</span>
+<p>The persona picture is a <b>useful model</b>, not a proven law. It explains why safety work can target a persona, for example the "toxic persona" feature in <a href="11-frontier.html">Chapter 11</a>. It does not say that the model has a real self.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="devinterp" data-short="How circuits form">How circuits form: developmental interpretability</h2>
+
+<p>Most of mech interp studies a <b>finished</b> model. Developmental interpretability ("devinterp") asks a different question: <b>how does structure form during training?</b> The main group is Timaeus (Jesse Hoogland, Daniel Murfet and colleagues). Their tools come from a mathematical theory called <b>singular learning theory</b> (SLT), developed by Sumio Watanabe.</p>
+
+<h3>Why neural networks are "singular"</h3>
+
+<p>Classical statistics assumes that each good setting of the parameters is a sharp, single point at the bottom of a loss valley. Neural networks are different. Many different weight settings give exactly the same function. For example, you can swap two hidden neurons and nothing changes. So the bottom of the loss landscape is flat in some directions. Mathematicians call such a model <b>singular</b>, and the flatness <b>degeneracy</b>.</p>
+
+<p>SLT says that the right measure of a model's effective complexity is not the number of parameters. It is the <b>learning coefficient</b>, written λ. Roughly, λ counts how many effective directions the loss curves upward in, near a solution. A lower λ means a more degenerate, "simpler" solution.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 240" role="img" aria-label="Two loss landscapes. Left: a sharp bowl with high learning coefficient; small weight jiggles raise the loss a lot. Right: a flat-bottomed valley with low learning coefficient; jiggles barely change the loss.">
+  <text x="180" y="22" text-anchor="middle" font-size="13" font-weight="700">Sharp basin · high λ</text>
+  <text x="540" y="22" text-anchor="middle" font-size="13" font-weight="700">Degenerate valley · low λ</text>
+  <path d="M 40 50 Q 180 360 320 50" fill="none" stroke="var(--blue)" stroke-width="3"/>
+  <path d="M 400 50 C 450 200, 480 205, 540 205 C 600 205, 630 200, 680 50" fill="none" stroke="var(--green)" stroke-width="3"/>
+  <circle cx="180" cy="203" r="7" fill="var(--accent)"/>
+  <circle cx="540" cy="203" r="7" fill="var(--accent)"/>
+  <g stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3 3">
+    <line x1="150" y1="170" x2="150" y2="200"/><line x1="210" y1="170" x2="210" y2="200"/>
+    <line x1="500" y1="197" x2="500" y2="205"/><line x1="580" y1="197" x2="580" y2="205"/>
+  </g>
+  <text x="180" y="230" text-anchor="middle" font-size="12" class="muted">a small jiggle raises the loss a lot</text>
+  <text x="540" y="230" text-anchor="middle" font-size="12" class="muted">the same jiggle barely changes the loss</text>
+</svg>
+<figcaption><b>Figure 10.3.</b> The local learning coefficient measures how fast the loss rises when you jiggle the weights around a trained solution. Flat, degenerate valleys have a low value. In the theory, such solutions are "simpler".</figcaption>
+</figure>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2308.12108">The Local Learning Coefficient: A Singularity-Aware Complexity Measure</a></div><div class="a">Edmund Lau, Zach Furman, George Wang, Daniel Murfet, Susan Wei · AISTATS 2025</div><div class="s">A version of λ measured at one trained network, estimated with noisy gradient sampling.</div></div></div>
+
+<p>The <b>local learning coefficient</b> (LLC) is λ measured at one trained network. You estimate it with SGLD, a method that adds noise to gradient steps. In plain words: jiggle the weights around the trained point at a fixed "temperature", and see how much the loss rises. The authors checked the estimator on small models where the true λ is known.</p>
+
+<h3>Stages in training</h3>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2402.02364">Loss Landscape Degeneracy and Stagewise Development in Transformers</a></div><div class="a">Jesse Hoogland, George Wang, Matthew Farrugia-Roberts, Liam Carroll, Susan Wei, Daniel Murfet · TMLR 2025</div><div class="s">The LLC splits training into stages that match real changes inside the model.</div></div></div>
+
+<p>The authors tracked the LLC during training of two models: a small two-layer attention-only language model, and a transformer that does in-context linear regression. Training split into distinct <b>stages</b>. At each boundary, the LLC changed. The boundaries lined up with real changes in internal structure and behaviour. For the language model, the stages include learning bigram statistics and, later, forming <span class="term" data-term="induction heads">induction heads</span> (<a href="04-transformers.html">Chapter 4</a>). Some stage boundaries were <b>invisible in the loss curve</b>.</p>
+
+<div class="widget" id="devWidget">
+  <div class="widget-title">Interactive · Loss vs. learning coefficient</div>
+  <div class="widget-sub">Click a shaded band. The loss curve (blue) falls smoothly. The LLC curve (orange) changes at stage boundaries. <b>Schematic:</b> curve shapes and stage labels are a sketch of the kind of result reported, not the paper's data.</div>
+  <svg id="devSvg" viewBox="0 0 680 280"></svg>
+  <div class="readout stage-info" id="devInfo">Click a band to read about that stage.</div>
+</div>
+
+<h3>Heads, data and susceptibilities</h3>
+
+<p>Later work refined the tool. A <b>refined LLC</b> restricts the measure to one attention head's weights, or to one type of data (for example code versus prose). With it, Wang, Hoogland and colleagues watched heads <b>differentiate</b> over training into previous-token heads, induction heads and multigram heads (2024; ICLR 2025).</p>
+
+<p>In 2025, Timaeus (Garrett Baker, George Wang, Jesse Hoogland, Daniel Murfet) introduced <b>susceptibilities</b>. The idea comes from physics: push a system a little and measure its response. Here, you slightly reweight the training data and measure how each model component responds. The result is a matrix that pairs components with data patterns. In a 3-million-parameter transformer, the low-rank structure of this matrix separated functional modules, such as multigram heads and induction heads. The same math also gives a Bayesian version of <b>influence functions</b> ("which training data drove this behaviour?").</p>
+
+<div class="callout update">
+<span class="label">Update · October 2026</span>
+<p><b>From reading to writing.</b> "Patterning: The Dual of Interpretability" (George Wang and Daniel Murfet, January 2026) turns susceptibilities around. It asks: which change to the training data gives the internal structure we want? In a small language model, reweighting the data could speed up or delay the formation of the induction circuit. In a toy bracket-matching task with several correct algorithms, patterning chose which algorithm the model learned.</p>
+<p><b>Scale.</b> "Spectroscopy at Scale" (Murfet, Gordon, Adam, Wang, Hoogland and colleagues, April 2026) estimated 4.25 million susceptibilities in <b>Pythia-1.4B</b>, with 4,800 H200 GPU-hours. It found 57,236 "susceptibility clusters" (groups of tokens that respond alike to data changes), against 510 in the tiny Pythia-14M. For example, pronouns such as "she" and "her" group by surface form in the small model, but by grammatical role in the large one. Timaeus now uses the name <b>Resolution</b>.</p>
+</div>
+
+<div class="paper"><div class="yr">2026</div><div><div class="t"><a href="https://arxiv.org/abs/2601.13548">Patterning: The Dual of Interpretability</a></div><div class="a">George Wang, Daniel Murfet (Timaeus) · January 2026</div><div class="s">Invert the susceptibility map to choose training data that writes a desired structure into the model.</div></div></div>
+
+<div class="callout limit">
+<span class="label">Open questions</span>
+<p>LLC estimates depend on the settings of the sampler. Most results are on small models, although susceptibilities now reach 1.4 billion parameters. And the link from "a number changed" to "this circuit formed" still needs classic mech interp to confirm it. Devinterp is best seen as a <b>map of where to look</b>. Phase changes, like the induction-head bump and grokking (<a href="06-circuit-case-studies.html">Chapter 6</a>), are exactly where circuits form.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="agents" data-short="Games and agents">Inside game players and agents</h2>
+
+<p>Agents act in the world. They have goals and they plan. So it matters a lot to know <em>how</em> they choose actions. Game-playing networks are a good test bed, because the rules are clear and experts can check the results.</p>
+
+<h3>AlphaZero learned human chess concepts</h3>
+
+<div class="paper"><div class="yr">2022</div><div><div class="t"><a href="https://arxiv.org/abs/2111.09259">Acquisition of Chess Knowledge in AlphaZero</a></div><div class="a">Thomas McGrath, Andrei Kapishnikov, Nenad Tomašev, Adam Pearce, Martin Wattenberg, Demis Hassabis, Been Kim, Ulrich Paquet, Vladimir Kramnik · PNAS 2022</div><div class="s">Linear probes for hundreds of human chess concepts, across layers and training time.</div></div></div>
+
+<p>AlphaZero learned chess only by playing against itself. It never saw a human game. The authors trained <span class="term" data-term="linear probe">linear probes</span> for hundreds of human chess concepts: material balance, king safety, mobility, threats, and more. They probed every layer at many checkpoints during training.</p>
+
+<p>Many human concepts became linearly readable during training. Each concept appeared at a typical time and depth. The authors called these "what-when-where" plots. AlphaZero's opening preferences also changed over training in a different order than in human chess history. The former world champion Vladimir Kramnik gave expert analysis.</p>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2310.16410">Bridging the Human–AI Knowledge Gap: Concept Discovery and Transfer in AlphaZero</a></div><div class="a">Lisa Schut, Nenad Tomašev, Tom McGrath, Demis Hassabis, Ulrich Paquet, Been Kim · PNAS 2025</div><div class="s">Find concepts that only the machine knows, then teach them to grandmasters.</div></div></div>
+
+<p>The follow-up went the other way. It searched for <b>machine-unique</b> concepts: directions in AlphaZero's activations that do not appear in human games. It kept only concepts that were <b>teachable</b>, meaning a weaker AlphaZero could learn them from examples. Then the authors taught the concepts to <b>four grandmasters</b> with puzzles. The grandmasters improved on puzzles that used the concepts. This is one of the first cases where interpretability taught top human experts something new.</p>
+
+<h3>Leela Chess Zero looks ahead</h3>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2406.00877">Evidence of Learned Look-Ahead in a Chess-Playing Neural Network</a></div><div class="a">Erik Jenner, Shreyas Kapur, Vasil Georgiev, Cameron Allen, Scott Emmons, Stuart Russell (UC Berkeley) · NeurIPS 2024</div><div class="s">One forward pass of Leela's policy network represents future moves.</div></div></div>
+
+<p>Leela Chess Zero has a <b>policy network</b>. It picks a move in a single forward pass, with no search. Does it plan ahead anyway? The authors found three lines of evidence that it does:</p>
+<ol>
+<li><b>Patching.</b> Activations on the square of a <em>future</em> move (the move after the opponent's reply, the "third ply") are unusually important. <span class="term" data-term="activation patching">Activation patching</span> there changes the output a lot.</li>
+<li><b>Attention.</b> Some attention heads move information between the squares of future moves and the squares of the current move, "forward and backward in time".</li>
+<li><b>Probing.</b> A simple bilinear probe predicts the best move <b>two turns ahead</b> with <b>92% accuracy</b>, on positions where Leela finds one clear best line.</li>
+</ol>
+
+<figure class="panel">
+<svg viewBox="0 0 720 330" role="img" aria-label="Chessboard with three arrows: my move, their reply, my follow-up. The follow-up target square glows. An attention arc goes from that square back to the first move's square.">
+  <defs><marker id="ca" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--blue)"/></marker>
+  <marker id="cb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
+  <marker id="cc" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+  <marker id="cd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--purple)"/></marker></defs>
+  <g id="chessBoard"></g>
+  <g font-size="12.5">
+    <rect x="370" y="40" width="14" height="14" rx="3" fill="var(--blue)"/><text x="392" y="52">1. my move (output of the policy)</text>
+    <rect x="370" y="70" width="14" height="14" rx="3" fill="var(--ink-3)"/><text x="392" y="82">2. opponent's reply</text>
+    <rect x="370" y="100" width="14" height="14" rx="3" fill="var(--accent)"/><text x="392" y="112">3. my follow-up (the "third ply")</text>
+    <rect x="370" y="130" width="14" height="14" rx="3" fill="var(--purple)"/><text x="392" y="142">attention moves info back to move 1</text>
+    <text x="370" y="190" font-size="12" class="muted">Glowing square: patching the activations</text>
+    <text x="370" y="206" font-size="12" class="muted">there changes the chosen move a lot.</text>
+    <text x="370" y="240" font-size="12" class="muted">A bilinear probe predicts move 3 with</text>
+    <text x="370" y="256" font-size="12" class="muted">92% accuracy on clear-best-line positions.</text>
+    <text x="370" y="300" font-size="11" class="muted">Board and moves are schematic.</text>
+  </g>
+</svg>
+<figcaption><b>Figure 10.4.</b> Learned look-ahead in Leela. The network represents a future move (orange square) inside one forward pass, and attention links it back to the move it outputs now.</figcaption>
+</figure>
+
+<p>This is an existence proof of planning inside one forward pass. It fits well with Anthropic's finding that Claude plans rhymes before it writes them (<a href="09-circuit-tracing.html">Chapter 9</a>).</p>
+
+<h3>The maze agent and the cheese vector</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2310.08043">Understanding and Controlling a Maze-Solving Policy Network</a></div><div class="a">Ulisse Mini, Peli Grietzer, Mrinank Sharma, Austin Meek, Monte MacDiarmid, Alexander Matt Turner · 2023</div><div class="s">A maze agent pursues several goals; one activation difference removes its interest in cheese.</div></div></div>
+
+<p>A reinforcement-learning agent learned to find cheese in mazes. In training, the cheese was usually in the top-right corner. So the agent partly learned a different goal: "go to the top-right". The network holds <b>several goals that depend on context</b>.</p>
+
+<p>The authors computed a <b>cheese vector</b>. It is the activation difference at one layer between a maze with cheese and the same maze without cheese. When they <em>subtracted</em> this vector during a run, the agent ignored the cheese and went toward the top-right. The authors report that the vector also worked in other mazes. They also found <b>eleven channels</b> that track the location of the goal. Editing them partly retargeted the agent to a chosen square. This work directly inspired activation steering in language models (<a href="07-probing-steering.html">Chapter 7</a>).</p>
+
+<div class="widget" id="mazeWidget">
+  <div class="widget-title">Interactive · Subtract the cheese vector</div>
+  <div class="widget-sub">Click any open cell to move the cheese. Then move the slider. The agent follows a toy policy that mixes "go to cheese" and "go to the top-right corner". Subtracting the cheese vector weakens the first goal. <b>Toy recreation</b> of the reported effect, not the real network.</div>
+  <svg id="mazeSvg" viewBox="0 0 400 400" style="max-width:420px;display:block;margin:0 auto"></svg>
+  <div class="controls"><label>Cheese vector subtracted <input type="range" id="mazeAlpha" min="0" max="1" step="0.05" value="0"> <output id="mazeAlphaOut">0%</output></label></div>
+  <div class="readout" id="mazeOut"></div>
+</div>
+
+<div class="quiz" data-answer="1">
+  <div class="q">Why is the Leela look-ahead result important?</div>
+  <div class="opts">
+    <button>It shows that Leela uses a search tree, like a classic chess engine.</button>
+    <button>It shows a network can represent and use future moves inside one forward pass, with no explicit search.</button>
+    <button>It shows that linear probes always find the best move.</button>
+    <button>It shows that chess networks have no attention heads.</button>
+  </div>
+  <div class="why">The policy network does no search. Still, patching, attention analysis and a probe all show that it represents a move two plies ahead and uses it. This is learned planning inside the network.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="vision" data-short="Vision transformers & CLIP">Modern vision models: CLIP and ViTs</h2>
+
+<p><a href="02-vision-era.html">Chapter 2</a> covered the early vision work on CNNs such as InceptionV1. Today most vision models are <b>vision transformers</b> (ViTs). The transformer tools from Chapter 4 now apply to images too.</p>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2310.05916">Interpreting CLIP's Image Representation via Text-Based Decomposition</a></div><div class="a">Yossi Gandelsman, Alexei A. Efros, Jacob Steinhardt (Berkeley) · ICLR 2024 (oral)</div><div class="s">Split CLIP's image embedding into a sum over heads, and describe each head with text.</div></div></div>
+
+<p>CLIP's image encoder is a ViT with a <span class="term" data-term="residual stream">residual stream</span>. So the final image embedding is a <b>sum</b> of contributions: one from each layer, each attention head and each image patch. This is the image version of direct logit attribution. And because CLIP puts images and text in the same space, you can <b>describe each head's contribution with text</b>. The authors' algorithm, TextSpan, finds a small set of text directions that span each head's output.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 250" role="img" aria-label="An image of a bird on water feeds a ViT. The final embedding equals the sum of head contributions, each labelled with words such as colour, location, shape, counting.">
+  <rect x="20" y="70" width="110" height="110" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <path d="M 20 150 Q 75 135 130 150 L 130 180 L 20 180 Z" fill="var(--blue)" opacity=".35"/>
+  <ellipse cx="78" cy="118" rx="22" ry="13" fill="var(--yellow)"/>
+  <circle cx="98" cy="108" r="8" fill="var(--yellow)"/>
+  <text x="75" y="200" text-anchor="middle" font-size="12" class="muted">image</text>
+  <text x="165" y="130" text-anchor="middle" font-size="22" class="muted">→</text>
+  <text x="290" y="40" text-anchor="middle" font-size="12.5" font-weight="700">image embedding =</text>
+  <g font-size="12">
+    <rect x="200" y="58" width="200" height="28" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="210" y="77">head L.a</text><text x="392" y="77" text-anchor="end" fill="var(--accent)">"yellow", "red"</text>
+    <text x="290" y="100" text-anchor="middle" class="muted">+</text>
+    <rect x="200" y="106" width="200" height="28" rx="6" fill="var(--green-soft)" stroke="var(--green)"/><text x="210" y="125">head L.b</text><text x="392" y="125" text-anchor="end" fill="var(--green)">"on water"</text>
+    <text x="290" y="148" text-anchor="middle" class="muted">+</text>
+    <rect x="200" y="154" width="200" height="28" rx="6" fill="var(--purple-soft)" stroke="var(--purple)"/><text x="210" y="173">head L.c</text><text x="392" y="173" text-anchor="end" fill="var(--purple)">"two objects"</text>
+    <text x="290" y="200" text-anchor="middle" class="muted">+ … (other heads, MLPs, patches)</text>
+  </g>
+  <g font-size="12.5">
+    <text x="430" y="70" font-weight="700">What this gives you</text>
+    <text x="430" y="96">• heads with roles: colour, location,</text>
+    <text x="442" y="114">shape, counting…</text>
+    <text x="430" y="140">• remove a "background" head →</text>
+    <text x="442" y="158">less reliance on a spurious cue</text>
+    <text x="430" y="184">• split over patches →</text>
+    <text x="442" y="202">zero-shot segmentation map</text>
+  </g>
+  <text x="290" y="235" text-anchor="middle" font-size="11" class="muted">head names and labels are schematic</text>
+</svg>
+<figcaption><b>Figure 10.5.</b> CLIP head decomposition. The image embedding is a sum of parts. Each part lives in the same space as text, so words can describe it.</figcaption>
+</figure>
+
+<p>Many late heads had <b>property-specific roles</b>: one head for colour, one for location, one for shape, one for counting. The authors removed heads that encoded a spurious feature (such as background or location) on the Waterbirds dataset. This improved worst-group accuracy. When they split the embedding over image patches instead of heads, they got a <b>zero-shot segmentation</b> map for free.</p>
+
+<p><b>Prisma</b> (Sonia Joseph and colleagues, 2025) is an open toolkit for vision and video interpretability. You can think of it as "TransformerLens for vision". It supports more than 75 vision transformer models, and includes more than 80 pretrained SAEs for CLIP and DINO models. One finding: good vision SAEs can be much <b>less sparse</b> than language SAEs.</p>
+
+<!-- ============================================================ -->
+<h2 id="diffusion" data-short="Image generators">Image generators: erasing, sliding and SAEs</h2>
+
+<p>Diffusion models make images from text. Interpretability tools help here in two ways: to find concepts, and to remove or control them.</p>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://erasing.baulab.info/">Erasing Concepts from Diffusion Models (ESD)</a></div><div class="a">Rohit Gandikota, Joanna Materzyńska, Jaden Fiotto-Kaufman, David Bau · ICCV 2023</div><div class="s">Fine-tune the weights, using only a text description of a concept, so the model cannot make it any more.</div></div></div>
+
+<p>ESD removes a concept, such as an artist's style or nudity, by fine-tuning the weights. It needs only a text description of the concept. Because ESD changes the weights instead of filtering the output, a user with the weights cannot simply switch the filter off. (Later work found that some erased concepts can be partly recovered.)</p>
+
+<p><b>Concept Sliders</b> (Gandikota and colleagues, ECCV 2024) find a <b>low-rank direction in parameter space</b> for one concept, such as age, smiling or "more realistic hands". You find it from a few prompt pairs or images. Sliders can combine, and you can turn each one up or down continuously. They are the image-model version of <span class="term" data-term="steering vector">steering vectors</span>.</p>
+
+<p>SAEs work on image generators too. <b>"Unpacking SDXL Turbo"</b> (Viacheslav Surkov, Chris Wendler and colleagues at EPFL, 2024; later retitled "One-Step is Enough") trained SAEs on the updates of transformer blocks inside SDXL Turbo's U-Net. The features were interpretable and causal: you could switch them on or off to edit images. They also <b>transferred</b> to 4-step SDXL Turbo and even to the multi-step SDXL base model without retraining. Different blocks specialized in different kinds of edit.</p>
+
+<!-- ============================================================ -->
+<h2 id="science" data-short="Interpretability for science">Interpretability for science: proteins, DNA and disease</h2>
+
+<p>Most of this survey treats interpretability as a safety and debugging tool. But there is a second goal: <b>discovery</b>. Some models learn patterns in nature that humans do not know yet. If we can read the model, we may learn those patterns too. Biology is where this idea has gone furthest.</p>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2412.12101">InterPLM: Discovering Interpretable Features in Protein Language Models via Sparse Autoencoders</a></div><div class="a">Elana Simon, James Zou (Stanford) · 2024</div><div class="s">SAEs on the protein model ESM-2 find thousands of features that match known biology.</div></div></div>
+
+<p>A <b>protein language model</b> reads protein sequences (strings of amino-acid letters) the way a text model reads words. InterPLM trained SAEs on every layer of ESM-2. It found up to <b>2,548 interpretable features per layer</b>. These matched up to <b>143 known biological concepts</b>: binding sites, zinc fingers, disulfide bonds, catalytic sites, signal peptides and more. Some features fired on places that the protein databases had not annotated. These could be missing labels in the databases.</p>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://www.goodfire.com/blog/interpreting-evo-2">Interpreting Evo 2</a></div><div class="a">Goodfire with Arc Institute (Liv Gorton, Nicholas Wang, Nam Nguyen, Myra Deng, Eric Ho, Daniel Balsam, Tom McGrath) · February 2025</div><div class="s">SAE features in a DNA model match exons, protein structure and viral DNA.</div></div></div>
+
+<p>Evo 2 is a large DNA foundation model. It reads only the four DNA letters. Goodfire trained BatchTopK SAEs on its layer 26. They found features for coding sequences, exon–intron boundaries, tRNA and rRNA, prophage (viral) elements, and even <b>protein secondary structure</b> such as α-helices and β-sheets. Evo 2 never saw a protein structure. It learned these patterns from DNA alone.</p>
+
+<div class="callout good">
+<span class="label">A discovery, not only an explanation</span>
+<p>In January 2026, Goodfire and Prima Mente studied <b>Pleiades</b>, a 7-billion-parameter model that detects Alzheimer's disease from cell-free DNA in blood. Interpretability showed that the model relied mostly on <b>DNA fragment length</b> patterns, not on DNA methylation as expected. This points to a new class of biomarker for Alzheimer's. A simple proxy model that used only fragment-length features reached an AUROC of 0.78 (a wide 95% interval, 0.56–0.95, from a small sample). With methylation and cell-type features added, it reached about 0.84, and it generalized to an independent group of patients. Here, reading the model gave new medical knowledge.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="plumbing" data-short="The plumbing">The plumbing: entropy neurons, sinks and massive activations</h2>
+
+<p>Some parts of a model do not represent concepts at all. They regulate the model itself, like plumbing in a house. Beginners often meet these parts and get confused. A head that "looks at nothing useful", or one huge activation, is often plumbing.</p>
+
+<h3>Entropy neurons and token frequency neurons</h3>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2406.16254">Confidence Regulation Neurons in Language Models</a></div><div class="a">Alessandro Stolfo, Ben Wu, Wes Gurnee, Yonatan Belinkov, Xingyi Song, Mrinmaya Sachan, Neel Nanda · NeurIPS 2024</div><div class="s">Neurons that make the output more or less confident, without changing which token wins.</div></div></div>
+
+<p><b>Entropy neurons</b> have large weights. They write into a direction that the <span class="term" data-term="unembedding">unembedding</span> almost ignores, an "effective null space". So they do not change which token is favoured. Instead, they make the residual stream longer. The final LayerNorm then divides by this bigger length. That scales <em>all</em> logits down, and the output distribution becomes flatter, or less confident. The ranking stays the same. The authors found these neurons in GPT-2, Pythia, Phi-2, Gemma 2B and LLaMA2 7B.</p>
+
+<p><b>Token frequency neurons</b> raise or lower each token's logit in proportion to the log of how common that token is. This pushes the output toward or away from the base-rate (unigram) distribution.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 220" role="img" aria-label="Entropy neuron: bars of output probabilities before and after. After the neuron fires, the bars keep the same order but are flatter. Side sketch: the residual vector grows along a null direction, then LayerNorm shrinks everything.">
+  <text x="160" y="22" text-anchor="middle" font-size="13" font-weight="700">Before</text>
+  <text x="420" y="22" text-anchor="middle" font-size="13" font-weight="700">Entropy neuron fires</text>
+  <g id="entBars"></g>
+  <line x1="560" y1="20" x2="560" y2="200" stroke="var(--rule)"/>
+  <defs><marker id="ea" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-2)"/></marker></defs>
+  <line x1="590" y1="170" x2="650" y2="120" stroke="var(--blue)" stroke-width="2.5" marker-end="url(#ea)"/>
+  <line x1="590" y1="170" x2="590" y2="60" stroke="var(--accent)" stroke-width="2.5" stroke-dasharray="4 3" marker-end="url(#ea)"/>
+  <text x="596" y="56" font-size="11" fill="var(--accent)">null direction</text>
+  <text x="640" y="140" font-size="11" fill="var(--blue)">content</text>
+  <text x="640" y="196" text-anchor="middle" font-size="11" class="muted">bigger norm → LayerNorm</text>
+  <text x="640" y="210" text-anchor="middle" font-size="11" class="muted">shrinks all logits</text>
+</svg>
+<figcaption><b>Figure 10.6.</b> An entropy neuron. It adds length along a direction that does not change token preferences. LayerNorm then shrinks all logits, so the model becomes less confident but keeps the same ranking.</figcaption>
+</figure>
+
+<h3>Attention sinks</h3>
+
+<p>Many attention heads put most of their attention on the <b>first token</b>, whatever the text says. This is an <b>attention sink</b>. Xiao and colleagues described it in "Efficient Streaming Language Models with Attention Sinks" (2023). The usual explanation is simple. Softmax forces attention weights to add up to 1. So a head that wants to "do nothing" must still put its attention somewhere. It parks it on a harmless token. The practical result: if you keep the first few tokens in the cache, a model can stream text for a very long time.</p>
+
+<div class="widget" id="sinkWidget">
+  <div class="widget-title">Interactive · An attention sink</div>
+  <div class="widget-sub">Rows are query tokens and columns are key tokens (a causal model only looks left). Choose a head type. Then remove the sink token to see where a "do nothing" head must send its attention. <b>Illustrative</b> patterns.</div>
+  <div class="controls">
+    <div class="seg" id="sinkHead"><button data-v="content" class="on">Content head (previous token)</button><button data-v="dormant">Dormant head</button></div>
+    <label><input type="checkbox" id="sinkRemove"> remove the sink token</label>
+  </div>
+  <svg id="sinkSvg" viewBox="0 0 560 330"></svg>
+  <div class="readout" id="sinkOut"></div>
+</div>
+
+<h4>Why the first token? Avoiding over-mixing</h4>
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2504.02732">Why do LLMs attend to the first token?</a></div><div class="a">Federico Barbero, Álvaro Arroyo, Xiangming Gu, Christos Perivolaropoulos, Michael Bronstein, Petar Veličković, Razvan Pascanu · Google DeepMind, Oxford, NUS</div><div class="s">Sinks are not a bug. They let a deep model stop mixing information between tokens when mixing would hurt.</div></div></div>
+
+<p>"Softmax must put attention somewhere" explains how a head can do nothing. It does not explain why a model <em>wants</em> so many heads to do nothing. Barbero and colleagues give a reason. Every attention layer blends information across tokens. Stack enough layers and every token's vector starts to look like every other token's: the model <b>over-mixes</b>, and small changes in the input spread everywhere. A head that sends its attention to the first token, and reads almost nothing from it, is a way to switch off mixing for that head on that input. In their experiments, sinks grow stronger in deeper models and with longer training contexts, which is what this explanation predicts.</p>
+
+<div class="callout key">
+<span class="label">Takeaway</span>
+<p>When you look at attention patterns, expect most heads to be "parked" on the first token most of the time. That is the default. A head that looks somewhere else is telling you something, and that is why patterns like the <a href="04-transformers.html#induction">induction stripe</a> stand out.</p>
+</div>
+
+<h3>Massive activations</h3>
+
+<p>Mingjie Sun, Xinlei Chen, Zico Kolter and Zhuang Liu found <b>massive activations</b> in 2024. A handful of activations are up to about <b>100,000 times larger</b> than typical ones. They sit on specific dimensions and specific tokens, such as the start token or the first period. They are almost <b>constant across inputs</b>, so they act like bias terms. They also help create attention sinks. If you set them to zero, the model breaks.</p>
+
+<div class="callout warn">
+<span class="label">Practical tip</span>
+<p>When you patch or train SAEs, sink tokens and outlier dimensions often dominate the numbers. Many researchers exclude the first token from their analysis for this reason.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="reasoning" data-short="Reading reasoning traces">Reading long reasoning: Thought Anchors</h2>
+
+<p>Reasoning models think for thousands of tokens before they answer. Most tools in this survey study one forward pass. They do not fit a long chain of thought well. A new set of methods works at the level of <b>sentences</b>.</p>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://arxiv.org/abs/2506.19143">Thought Anchors: Which LLM Reasoning Steps Matter?</a></div><div class="a">Paul C. Bogdan, Uzay Macar, Neel Nanda, Arthur Conmy · 2025</div><div class="s">Measure how much each sentence of a chain of thought changes the final answer.</div></div></div>
+
+<p>The main black-box method is <b>resampling</b>. For each sentence in a chain of thought, generate many alternative sentences from that point. Keep the ones that mean something different. Continue the reasoning from each one. Then measure how much the distribution of final answers changes. This gives each sentence a <b>counterfactual importance</b>. The paper also uses white-box methods based on attention between sentences.</p>
+
+<p>The result: a few sentences, the <b>thought anchors</b>, have very large influence. Most of them are <b>planning</b> sentences or <b>backtracking</b> sentences, like "Wait, let me check that again". Ordinary calculation sentences matter less.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 260" role="img" aria-label="A chain of thought as a list of sentences with bars for counterfactual importance. A planning sentence and a 'wait' sentence have much longer bars.">
+  <g id="anchorBars"></g>
+</svg>
+<figcaption><b>Figure 10.7.</b> Thought anchors (schematic). Each bar is one sentence's counterfactual importance. Planning and backtracking sentences tower over ordinary computation steps.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="features-relations" data-short="Feature circuits & relations">Feature circuits, relations and multi-hop facts</h2>
+
+<h3>Sparse Feature Circuits and SHIFT</h3>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2403.19647">Sparse Feature Circuits: Discovering and Editing Interpretable Causal Graphs in Language Models</a></div><div class="a">Samuel Marks, Can Rager, Eric J. Michaud, Yonatan Belinkov, David Bau, Aaron Mueller · ICLR 2025 (oral)</div><div class="s">Build circuits out of SAE features instead of neurons and heads, then use them to remove a hidden bias.</div></div></div>
+
+<p>Classic circuits, like IOI, use heads and neurons as units. But these units are often <span class="term" data-term="polysemantic">polysemantic</span>. Sparse Feature Circuits use <b>SAE features</b> as units instead, plus SAE error terms. The authors find the important features and the feature-to-feature edges with <span class="term" data-term="attribution patching">attribution patching</span> and integrated gradients. The result is a small causal graph of readable features. It is the direct ancestor of Anthropic's attribution graphs (<a href="09-circuit-tracing.html">Chapter 9</a>).</p>
+
+<p>The paper's most famous test is <b>SHIFT</b> (Sparse Human-Interpretable Feature Trimming). The authors trained a classifier to predict profession (professor or nurse) from short biographies. In the training data, gender perfectly predicted profession. So the classifier secretly used gender. The authors built the feature circuit. A human marked the features that were clearly about gender, such as "he/she" and female names. They ablated those features. The classifier then generalized on profession, <b>without any data</b> in which gender and profession were separated.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 240" role="img" aria-label="SHIFT: feature nodes such as medical terms, academic terms, he/she and female names feed a classifier. The gender nodes are crossed out.">
+  <defs><marker id="sa" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <g font-size="12.5">
+    <rect x="30" y="30" width="170" height="34" rx="17" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="115" y="52" text-anchor="middle">"medical terms"</text>
+    <rect x="30" y="80" width="170" height="34" rx="17" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="115" y="102" text-anchor="middle">"academic terms"</text>
+    <rect x="30" y="130" width="170" height="34" rx="17" fill="var(--red-soft)" stroke="var(--red)"/><text x="115" y="152" text-anchor="middle">"he / she"</text>
+    <rect x="30" y="180" width="170" height="34" rx="17" fill="var(--red-soft)" stroke="var(--red)"/><text x="115" y="202" text-anchor="middle">"female names"</text>
+    <line x1="40" y1="134" x2="190" y2="160" stroke="var(--red)" stroke-width="2.5"/><line x1="40" y1="160" x2="190" y2="134" stroke="var(--red)" stroke-width="2.5"/>
+    <line x1="40" y1="184" x2="190" y2="210" stroke="var(--red)" stroke-width="2.5"/><line x1="40" y1="210" x2="190" y2="184" stroke="var(--red)" stroke-width="2.5"/>
+    <rect x="330" y="100" width="150" height="44" rx="10" fill="var(--panel)" stroke="var(--ink-3)"/><text x="405" y="127" text-anchor="middle" font-weight="700">classifier</text>
+  </g>
+  <g stroke="var(--ink-3)" stroke-width="1.5" fill="none" marker-end="url(#sa)">
+    <path d="M200 47 C 270 47, 270 112, 328 116"/><path d="M200 97 C 260 97, 270 118, 328 120"/>
+    <path d="M200 147 C 260 147, 270 128, 328 126" stroke-dasharray="4 4" opacity=".5"/><path d="M200 197 C 270 197, 270 134, 328 132" stroke-dasharray="4 4" opacity=".5"/>
+  </g>
+  <g font-size="12.5">
+    <text x="530" y="60" font-weight="700">Balanced test set</text>
+    <text x="530" y="90" class="muted">before SHIFT: uses gender</text>
+    <rect x="530" y="98" width="70" height="12" rx="3" fill="var(--ink-3)"/>
+    <text x="530" y="140" class="muted">after ablating gender features:</text>
+    <rect x="530" y="148" width="150" height="12" rx="3" fill="var(--green)"/>
+    <text x="530" y="182" font-size="11" class="muted">bar lengths schematic</text>
+  </g>
+</svg>
+<figcaption><b>Figure 10.8.</b> SHIFT. A human reads the feature circuit, marks the features that are about gender, and removes them. The classifier then predicts profession from the right signal.</figcaption>
+</figure>
+
+<div class="callout limit">
+<span class="label">A later critique</span>
+<p>A March 2025 Alignment Forum post by Tim Hua argued that SHIFT's success came mostly from features tied to gendered <em>tokens</em>. Ablating only 10 SAE features right after the embedding layer did almost as well as the full method. Simply removing gendered tokens from the training data also worked. This does not make the result wrong. But it shows how hard it is to prove that an interpretability method gives a unique advantage.</p>
+</div>
+
+<h3>Relations are often linear</h3>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2308.09124">Linearity of Relation Decoding in Transformer Language Models</a></div><div class="a">Evan Hernandez, Arnab Sen Sharma, Tal Haklay, Kevin Meng, Martin Wattenberg, Jacob Andreas, Yonatan Belinkov, David Bau · ICLR 2024</div><div class="s">For many relations, one affine map takes the subject's representation to the object's.</div></div></div>
+
+<p>Consider the relation "plays the instrument". It maps "Miles Davis" to "trumpet" and "Yo-Yo Ma" to "cello". This paper found that for many relations, the map from the subject's hidden state <span class="math">s</span> to the object's representation <span class="math">o</span> is close to <b>one affine transformation</b>: <span class="math">o ≈ W·s + b</span>. You can estimate <span class="math">W</span> from a single prompt, using the Jacobian (a first-order approximation). This worked well for some factual, commonsense and linguistic relations, and badly for others.</p>
+
+<h3>Multi-hop facts: hopping too late</h3>
+
+<p>Take the prompt "The mother of the singer of 'Superstition' is". To answer, the model must first find the singer (Stevie Wonder), then his mother. Does it do the first hop internally? Sohee Yang, Mor Geva and colleagues (ACL 2024) found strong evidence for the <b>first hop</b>, and it gets better with scale. Evidence for the <b>second hop</b> was only moderate, and it did not clearly improve with scale.</p>
+
+<p>"Hopping Too Late" (Eden Biran, Daniela Gottesman, Sohee Yang, Mor Geva, Amir Globerson, EMNLP 2024) gave a reason. The model resolves the bridge entity in <b>early</b> layers. But the second hop starts only in <b>late</b> layers, which may no longer hold the needed knowledge. The model runs out of layers. The authors' test, <b>back-patching</b>, copies a later-layer hidden state back into an earlier layer. In up to <b>66%</b> of previously wrong cases, some back-patch gave the right answer. (This is an analysis that shows the gap, not yet a practical fix, because you must search for the right patch.)</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 170" role="img" aria-label="A layer axis from 0 to final. Hop 1 is resolved early. Hop 2 starts late and runs out of layers. A curved back-patching arrow copies a late state to an earlier layer.">
+  <defs><marker id="ha" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs>
+  <line x1="40" y1="110" x2="680" y2="110" stroke="var(--ink-3)" stroke-width="2"/>
+  <text x="40" y="132" font-size="12" class="muted">layer 0</text><text x="680" y="132" text-anchor="end" font-size="12" class="muted">last layer</text>
+  <rect x="120" y="80" width="170" height="26" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="205" y="98" text-anchor="middle" font-size="12">hop 1: "Stevie Wonder"</text>
+  <rect x="520" y="80" width="160" height="26" rx="6" fill="var(--red-soft)" stroke="var(--red)"/><text x="600" y="98" text-anchor="middle" font-size="12">hop 2 starts… too late</text>
+  <path d="M 560 76 C 520 10, 290 10, 250 76" fill="none" stroke="var(--accent)" stroke-width="2" marker-end="url(#ha)"/>
+  <text x="405" y="62" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">back-patching</text>
+  <text x="360" y="158" text-anchor="middle" font-size="11.5" class="muted">"The mother of the singer of 'Superstition' is …"</text>
+</svg>
+<figcaption><b>Figure 10.9.</b> Hopping too late. The second step of a two-step fact starts in late layers, where knowledge may be missing. Back-patching gives the second hop more layers to work with.</figcaption>
+</figure>
+
+<div class="quiz" data-answer="3">
+  <div class="q">What does SHIFT do?</div>
+  <div class="opts">
+    <button>It trains a new classifier on balanced data.</button>
+    <button>It finds the best layer for a linear probe.</button>
+    <button>It shrinks an SAE by removing dead features.</button>
+    <button>A human reads a feature circuit, marks the features for a spurious signal (gender), and ablates them, so the classifier stops using that signal.</button>
+  </div>
+  <div class="why">SHIFT needs no balanced data. It uses human judgement on readable features to cut a spurious signal out of the model.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="by-design" data-short="Interpretable by design">Can we build networks that are easy to read?</h2>
+
+<p>Most of this survey asks: "How do we read a trained network?" A different line of work asks: "Can we <b>train</b> networks that are easy to read from the start?" OpenAI's weight-sparse transformers (<a href="09-circuit-tracing.html">Chapter 9</a>) belong to this family. Here are four more members.</p>
+
+<h3>BIMT: networks with a wiring cost</h3>
+<p><b>Brain-Inspired Modular Training</b> (Ziming Liu, Eric Gan and Max Tegmark, 2023) gives every neuron a position in 2D or 3D space. Training adds a penalty for long connections, like the wiring cost in a brain. It also swaps neurons to shorten wires. The trained networks become visibly <b>modular</b>. You can see separate groups of neurons for separate sub-tasks. Normal training gives a tangled "hairball" for the same tasks.</p>
+
+<h3>KANs: learnable functions on the edges</h3>
+<p>In an MLP, each node has a fixed nonlinearity and each edge has one number (a weight). A <b>Kolmogorov–Arnold Network</b> (KAN; Ziming Liu and colleagues, 2024) flips this. <b>Each edge carries a learnable 1-D function</b> (a spline), and nodes just add. On small science tasks, small KANs matched or beat larger MLPs. You can also read off formulas: look at each learned curve and snap it to a known function such as sin, x² or exp. These advantages have not been shown at the scale of large language models.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 220" role="img" aria-label="MLP versus KAN. In the MLP, edges have numbers and nodes have fixed ReLU functions. In the KAN, each edge carries a small learned curve and nodes add.">
+  <text x="170" y="24" text-anchor="middle" font-size="13" font-weight="700">MLP</text>
+  <text x="530" y="24" text-anchor="middle" font-size="13" font-weight="700">KAN</text>
+  <g id="kanFig"></g>
+</svg>
+<figcaption><b>Figure 10.10.</b> MLP versus KAN. An MLP puts fixed nonlinearities on nodes and numbers on edges. A KAN puts a small learned curve on every edge. Each curve can be inspected and often matched to a known function.</figcaption>
+</figure>
+
+<h3>MIPS: from network to Python code</h3>
+<p><b>MIPS</b> (Eric Michaud, Max Tegmark and colleagues, 2024) goes all the way to code. It trains a small RNN on an algorithmic task and simplifies it. Then it turns the hidden states into a finite state machine and uses symbolic regression to write <b>Python code</b> for the learned algorithm. On 62 algorithmic tasks, MIPS solved 32, including 13 that GPT-4 did not solve. It shows that full "decompilation" is possible, at least for small networks.</p>
+
+<h3>Bilinear MLPs: read the weights, not the activations</h3>
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2410.08417">Bilinear MLPs Enable Weight-Based Mechanistic Interpretability</a></div><div class="a">Michael T. Pearce, Thomas Dooms, Alice Rigg, José M. Oramas, Lee Sharkey · ICLR 2025</div><div class="s">Remove the elementwise nonlinearity so each output is a quadratic form you can decompose.</div></div></div>
+<p>Most tools read <b>activations</b>, so they need data. Ideally we would read the <b>weights</b> directly, like reading source code. Elementwise nonlinearities (ReLU, GELU) make that hard. A <b>bilinear MLP</b> computes <span class="math">W_out[(W₁x) ⊙ (W₂x)]</span>, with no other nonlinearity. It still performs well. Each output is a <b>quadratic form</b> of the input. So you can take its eigenvectors and read interaction patterns straight from the weights, with no input data. On MNIST, the eigenvectors look like templates for parts of digits.</p>
+
+<div class="callout analogy">
+<span class="label">Related: interference weights</span>
+<p>Anthropic's 2025–2026 work on <b>interference weights</b> fits here. When features are in <span class="term" data-term="superposition">superposition</span> (<a href="03-superposition.html">Chapter 3</a>), some weights between them exist only because of the squeeze into fewer dimensions. They look important when you read the weights, but they do nothing on real data. A 2026 paper found such weights in a small language model. Removing them left a sparser model whose remaining weights formed the real circuit. A related 2025 toy study warned that transcoders can learn "datapoint features" that memorize common inputs instead of copying the model's real mechanism.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="more-threads" data-short="Scaling, Mamba, users">More threads: scaling theory, other architectures, users</h2>
+
+<h3>The quantization model of neural scaling</h3>
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2303.13506">The Quantization Model of Neural Scaling</a></div><div class="a">Eric J. Michaud, Ziming Liu, Uzay Girit, Max Tegmark · NeurIPS 2023</div><div class="s">Skills come in discrete chunks; their power-law frequencies give smooth scaling laws.</div></div></div>
+<p>Why does loss fall smoothly as models grow, while single skills appear suddenly? This paper proposes that knowledge comes in discrete chunks called <b>quanta</b>. A quantum is a small skill, such as "close a parenthesis". Models learn quanta in order of how often they are useful. If the usage frequencies follow a <b>power law</b>, then each step in model size adds the next most useful quantum. The average loss then falls as a smooth power law, even though each skill appears suddenly. The idea links mech interp's discrete units (features and circuits) to scaling laws. A toy task reproduced the effect. Evidence from real language models was more tentative.</p>
+
+<h3>The shape of features (2025–2026)</h3>
+<p>The field is moving from <b>lists</b> of features to the <b>shapes</b> of features. Chapter 3 showed circular features for days of the week, and curved manifolds for counting characters. In 2026, Goodfire published a series of posts on "neural geometry". They include the geometry of stories over time and block-sparse featurizers for vision models. Other reported titles ask whether SAEs can capture manifolds, and describe a "geometric calculator" that adds numbers by rotating circular representations. A key worry: a flat dictionary of directions may cut a curved manifold into many meaningless pieces.</p>
+
+<h3>Mamba and other architectures</h3>
+<p>Almost all of this survey assumes transformers. Do the tools transfer? For the state-space model <b>Mamba</b>, partly yes. Arnab Sen Sharma, David Atkinson and David Bau (2024) ran causal tracing on Mamba. They found the same pattern as in transformers: middle layers at the last subject token matter for fact recall, and ROME-style editing works. But methods that knock out attention do not transfer, because Mamba has no attention. Danielle Ensign and Adrià Garriga-Alonso (2024) studied IOI in Mamba-370M. The model solves it differently: it shifts names one position forward with its convolution, and does key steps linearly in the hidden state of layer 39.</p>
+
+<h3>Interpretability for end users: TalkTuner</h3>
+<p>Most tools serve researchers. <b>TalkTuner</b> (Yida Chen, Fernanda Viégas, Martin Wattenberg and colleagues, Harvard and Google, 2024) serves ordinary users. Probes show that LLaMA2-Chat keeps an internal <b>model of the user</b>: estimates of their age, gender, education and socioeconomic status. TalkTuner shows these estimates live next to the chat, and lets the user edit them with steering. In a user study, people valued seeing this state. It helped them notice biased answers, for example different advice when the model thought they had a lower income.</p>
+
+<div class="quiz" data-answer="0">
+  <div class="q">What is the main idea of the quantization model of neural scaling?</div>
+  <div class="opts">
+    <button>Skills are discrete chunks used with power-law frequencies, so the average loss falls smoothly while single skills appear suddenly.</button>
+    <button>Models store weights with fewer bits as they grow.</button>
+    <button>Every neuron learns one skill at the same time.</button>
+    <button>Scaling laws are caused by attention sinks.</button>
+  </div>
+  <div class="why">The theory explains two facts together: smooth average scaling and sudden emergence of individual skills.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="summary" data-short="Summary table">Summary: the threads at a glance</h2>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Thread</th><th>Main question</th><th>Key works</th><th>Status (2026)</th></tr></thead>
+<tbody>
+<tr><td>Self-explanation</td><td>Can a model describe its own activations in words?</td><td>Patchscopes, SelfIE, LatentQA, self-explainers, Activation Oracles, PCDs, NLAs</td><td>Fast-moving; NLAs used in Claude audits; debate on faithfulness</td></tr>
+<tr><td>Global workspace</td><td>Which representations can the model report and use?</td><td>J-lens / J-space (Anthropic 2026)</td><td>New; links lenses and introspection</td></tr>
+<tr><td>Personas</td><td>Which character is the model playing?</td><td>Assistant Axis, persona selection model</td><td>New; used to stabilize behaviour</td></tr>
+<tr><td>Developmental interp</td><td>How and when does structure form?</td><td>LLC, stagewise development, susceptibilities, patterning</td><td>Strong theory; now up to 1.4B parameters</td></tr>
+<tr><td>Games &amp; agents</td><td>Do agents plan? What goals do they hold?</td><td>AlphaZero concepts, Leela look-ahead, cheese vector</td><td>Vivid results; key for safety</td></tr>
+<tr><td>Vision &amp; images</td><td>Do the tools work beyond text?</td><td>CLIP TextSpan, Prisma, ESD, Concept Sliders, SDXL SAEs</td><td>Yes, with differences in sparsity</td></tr>
+<tr><td>Science</td><td>Can reading a model teach us about nature?</td><td>InterPLM, Evo 2, Alzheimer's fragment-length biomarker</td><td>First real discoveries</td></tr>
+<tr><td>Plumbing</td><td>What do odd components do?</td><td>Entropy neurons, attention sinks, massive activations</td><td>Well understood; important for tooling</td></tr>
+<tr><td>Reasoning traces</td><td>Which steps in a long chain of thought matter?</td><td>Thought Anchors</td><td>Early; growing with reasoning models</td></tr>
+<tr><td>Feature circuits</td><td>Can circuits use readable units?</td><td>Sparse Feature Circuits, SHIFT, LRE, multi-hop</td><td>Led to attribution graphs (Ch. 9)</td></tr>
+<tr><td>By design</td><td>Can we train readable networks?</td><td>BIMT, KANs, MIPS, bilinear MLPs, weight sparsity</td><td>Promising; not yet at frontier scale</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="quiz" data-answer="2">
+  <div class="q">How do self-explanation methods (like Activation Oracles) differ from sparse autoencoders?</div>
+  <div class="opts">
+    <button>They only work on vision models.</button>
+    <button>They are always faithful, because the model explains itself.</button>
+    <button>An SAE gives a fixed dictionary of features; a self-explanation method acts as a translator from any activation to text, but it can make things up.</button>
+    <button>They need no access to activations.</button>
+  </div>
+  <div class="why">SAEs decompose activations into a fixed set of directions. Self-explanation methods map activations to free text (or a short concept list). They are flexible, but because they are learned, they can confabulate.</div>
+</div>
+
+
+<div class="callout key" id="takeaways">
+<span class="label">Key takeaways</span>
+<ul>
+<li>Self-explanation methods translate activations into text. They are flexible and are now used in audits, but they can make things up. Always compare them with simple baselines.</li>
+<li>A small "verbalizable" subspace (J-space) seems to hold what a model can report and reason with.</li>
+<li>Chat models have a measurable Assistant persona (the Assistant Axis). The persona selection model says that post-training picks one character from many.</li>
+<li>Developmental interpretability (the LLC, susceptibilities) finds training stages that the loss curve hides, and can now steer what a model learns.</li>
+<li>The same tools work beyond text: chess engines, agents, CLIP, image generators, and protein and DNA models, where they gave real scientific findings.</li>
+</ul>
+<p><b>Where this leads:</b> <a href="11-frontier.html">Chapter 11</a> steps back. It asks what all these tools are <em>for</em>: auditing models, monitoring them, and the debates about whether the field is on the right track.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="references">References</h2>
+<ol class="refs">
+<li>Barbero, Arroyo, Gu, Perivolaropoulos, Bronstein, Veličković, Pascanu (2025). <a href="https://arxiv.org/abs/2504.02732">Why do LLMs attend to the first token?</a> arXiv:2504.02732.</li>
+<li>Ghandeharioun, Caciularu, Pearce, Dixon, Geva (2024). <a href="https://arxiv.org/abs/2401.06102">Patchscopes: A Unifying Framework for Inspecting Hidden Representations of Language Models</a>. ICML.</li>
+<li>Chen, Vondrick, Mao (2024). <a href="https://arxiv.org/abs/2403.10949">SelfIE: Self-Interpretation of Large Language Model Embeddings</a>. ICML.</li>
+<li>Pan, Chen, Steinhardt (2024). <a href="https://arxiv.org/abs/2412.08686">LatentQA: Teaching LLMs to Decode Activations Into Natural Language</a>. ICLR 2026.</li>
+<li>Li, Guo, Huang, Steinhardt, Andreas (2025). <a href="https://arxiv.org/abs/2511.08579">Training Language Models to Explain Their Own Computations</a>.</li>
+<li>Karvonen, Chua, Dumas, Fraser-Taliente, Kantamneni, Minder, Ong, Sen Sharma, Wen, Evans, Marks (2025). <a href="https://arxiv.org/abs/2512.15674">Activation Oracles: Training and Evaluating LLMs as General-Purpose Activation Explainers</a>. Blog: <a href="https://alignment.anthropic.com/2025/activation-oracles">alignment.anthropic.com</a>.</li>
+<li>Huang, Choi, Johnson, Schwettmann, Steinhardt (2025). <a href="https://arxiv.org/abs/2512.15712">Predictive Concept Decoders: Training Scalable End-to-End Interpretability Assistants</a>. Transluce.</li>
+<li>Fraser-Taliente, Kantamneni, Ong, et al. (2026). <a href="https://transformer-circuits.pub/2026/nla/index.html">Natural Language Autoencoders Produce Unsupervised Explanations of LLM Activations</a>. Anthropic.</li>
+<li>Anthropic (2026). <a href="https://www-cdn.anthropic.com/53566bf5440a10affd749724787c8913a2ae0841.pdf">Claude Mythos Preview System Card</a> (renaming of "activation oracle" to "activation verbalizer").</li>
+<li>aryaj, Rajamanoharan, Nanda (2026). <a href="https://www.greaterwrong.com/posts/LXQBcztrWKhtcgQfJ/current-activation-oracles-are-hard-to-use">Current Activation Oracles Are Hard to Use</a>. LessWrong.</li>
+<li>Choi, Huang, Mudide, Zhou, Steinhardt (2026). <a href="https://transluce.org/scaling-activation-oracles">Scaling Activation Oracles to Trillion-Parameter Models</a>. Transluce.</li>
+<li>Gurnee, Sofroniew, Pearce, …, Batson, Lindsey (2026). <a href="https://transformer-circuits.pub/2026/workspace/index.html">Verbalizable Representations Form a Global Workspace in Language Models</a>. Anthropic.</li>
+<li>Lu, Gallagher, Michala, Fish, Lindsey (2026). <a href="https://arxiv.org/abs/2601.10387">The Assistant Axis: Situating and Stabilizing the Default Persona of Language Models</a>.</li>
+<li>Marks, Lindsey, Olah (2026). <a href="https://alignment.anthropic.com/2026/psm">The Persona Selection Model: Why AI Assistants might Behave like Humans</a>. Anthropic Alignment Science blog.</li>
+<li>Lau, Furman, Wang, Murfet, Wei (2023). <a href="https://arxiv.org/abs/2308.12108">The Local Learning Coefficient: A Singularity-Aware Complexity Measure</a>. AISTATS 2025.</li>
+<li>Hoogland, Wang, Farrugia-Roberts, Carroll, Wei, Murfet (2024). <a href="https://arxiv.org/abs/2402.02364">Loss Landscape Degeneracy and Stagewise Development in Transformers</a>. TMLR 2025.</li>
+<li>Wang, Hoogland, van Wingerden, Furman, Murfet (2024). <a href="https://arxiv.org/abs/2410.02984">Differentiation and Specialization of Attention Heads via the Refined Local Learning Coefficient</a>. ICLR 2025.</li>
+<li>Baker, Wang, Hoogland, Murfet (2025). <a href="https://arxiv.org/abs/2504.18274">Structural Inference: Interpreting Small Language Models with Susceptibilities</a>.</li>
+<li>Wang, Murfet (2026). <a href="https://arxiv.org/abs/2601.13548">Patterning: The Dual of Interpretability</a>.</li>
+<li>Murfet, Gordon, Adam, Wang, Hoogland, et al. (2026). <a href="https://timaeus.co/research/2026-04-21-spectroscopy-main">Spectroscopy at Scale: Finding Interpretable Structure in Pythia-1.4B</a>. Timaeus / Resolution.</li>
+<li>McGrath, Kapishnikov, Tomašev, Pearce, Wattenberg, Hassabis, Kim, Paquet, Kramnik (2022). <a href="https://arxiv.org/abs/2111.09259">Acquisition of Chess Knowledge in AlphaZero</a>. PNAS.</li>
+<li>Schut, Tomašev, McGrath, Hassabis, Paquet, Kim (2025). <a href="https://arxiv.org/abs/2310.16410">Bridging the Human–AI Knowledge Gap: Concept Discovery and Transfer in AlphaZero</a>. PNAS.</li>
+<li>Jenner, Kapur, Georgiev, Allen, Emmons, Russell (2024). <a href="https://arxiv.org/abs/2406.00877">Evidence of Learned Look-Ahead in a Chess-Playing Neural Network</a>. NeurIPS.</li>
+<li>Mini, Grietzer, Sharma, Meek, MacDiarmid, Turner (2023). <a href="https://arxiv.org/abs/2310.08043">Understanding and Controlling a Maze-Solving Policy Network</a>.</li>
+<li>Gandelsman, Efros, Steinhardt (2024). <a href="https://arxiv.org/abs/2310.05916">Interpreting CLIP's Image Representation via Text-Based Decomposition</a>. ICLR.</li>
+<li>Joseph et al. (2025). <a href="https://arxiv.org/abs/2504.19475">Prisma: An Open Source Toolkit for Mechanistic Interpretability in Vision and Video</a>.</li>
+<li>Gandikota, Materzyńska, Fiotto-Kaufman, Bau (2023). <a href="https://erasing.baulab.info/">Erasing Concepts from Diffusion Models</a>. ICCV.</li>
+<li>Gandikota et al. (2024). <a href="https://arxiv.org/abs/2311.12092">Concept Sliders: LoRA Adaptors for Precise Control in Diffusion Models</a>. ECCV.</li>
+<li>Surkov, Wendler, Mari, Terekhov, Deschenaux, West, Gulcehre, Bau (2024). <a href="https://arxiv.org/abs/2410.22366">Unpacking SDXL Turbo: Interpreting Text-to-Image Models with Sparse Autoencoders</a> (current arXiv title: "One-Step is Enough: Sparse Autoencoders for Text-to-Image Diffusion Models").</li>
+<li>Simon, Zou (2024). <a href="https://arxiv.org/abs/2412.12101">InterPLM: Discovering Interpretable Features in Protein Language Models via Sparse Autoencoders</a>.</li>
+<li>Gorton, Wang, Nguyen, Deng, Ho, Balsam, McGrath (2025). <a href="https://www.goodfire.com/blog/interpreting-evo-2">Interpreting Evo 2</a>. Goodfire &amp; Arc Institute.</li>
+<li>Wang, Fang, Bissell, et al. (2026). <a href="https://www.goodfire.com/research/interpretability-for-alzheimers-detection">Using Interpretability to Identify a Novel Class of Alzheimer's Biomarkers</a>. Goodfire &amp; Prima Mente.</li>
+<li>Stolfo, Wu, Gurnee, Belinkov, Song, Sachan, Nanda (2024). <a href="https://arxiv.org/abs/2406.16254">Confidence Regulation Neurons in Language Models</a>. NeurIPS.</li>
+<li>Xiao et al. (2023). <a href="https://arxiv.org/abs/2309.17453">Efficient Streaming Language Models with Attention Sinks</a>. ICLR 2024.</li>
+<li>Sun, Chen, Kolter, Liu (2024). <a href="https://arxiv.org/abs/2402.17762">Massive Activations in Large Language Models</a>. COLM 2024.</li>
+<li>Bogdan, Macar, Nanda, Conmy (2025). <a href="https://arxiv.org/abs/2506.19143">Thought Anchors: Which LLM Reasoning Steps Matter?</a></li>
+<li>Marks, Rager, Michaud, Belinkov, Bau, Mueller (2024). <a href="https://arxiv.org/abs/2403.19647">Sparse Feature Circuits: Discovering and Editing Interpretable Causal Graphs in Language Models</a>. ICLR 2025.</li>
+<li>Hua (2025). <a href="https://www.alignmentforum.org/posts/QdxwGz9AeDu5du4Rk">SHIFT relies on token-level features to de-bias Bias in Bios probes</a>. Alignment Forum.</li>
+<li>Hernandez, Sharma, Haklay, Meng, Wattenberg, Andreas, Belinkov, Bau (2023). <a href="https://arxiv.org/abs/2308.09124">Linearity of Relation Decoding in Transformer Language Models</a>. ICLR 2024.</li>
+<li>Yang, Gribovskaya, Kassner, Geva, Riedel (2024). <a href="https://arxiv.org/abs/2402.16837">Do Large Language Models Latently Perform Multi-Hop Reasoning?</a> ACL.</li>
+<li>Biran, Gottesman, Yang, Geva, Globerson (2024). <a href="https://arxiv.org/abs/2406.12775">Hopping Too Late: Exploring the Limitations of Large Language Models on Multi-Hop Queries</a>. EMNLP.</li>
+<li>Liu, Gan, Tegmark (2023). <a href="https://arxiv.org/abs/2305.08746">Seeing is Believing: Brain-Inspired Modular Training for Mechanistic Interpretability</a>.</li>
+<li>Liu et al. (2024). <a href="https://arxiv.org/abs/2404.19756">KAN: Kolmogorov–Arnold Networks</a>. ICLR 2025.</li>
+<li>Michaud et al. (2024). <a href="https://arxiv.org/abs/2402.05110">Opening the AI Black Box: Program Synthesis via Mechanistic Interpretability</a>.</li>
+<li>Pearce, Dooms, Rigg, Oramas, Sharkey (2024). <a href="https://arxiv.org/abs/2410.08417">Bilinear MLPs Enable Weight-Based Mechanistic Interpretability</a>. ICLR 2025.</li>
+<li>Michaud, Liu, Girit, Tegmark (2023). <a href="https://arxiv.org/abs/2303.13506">The Quantization Model of Neural Scaling</a>. NeurIPS.</li>
+<li>Sen Sharma, Atkinson, Bau (2024). <a href="https://arxiv.org/abs/2404.03646">Locating and Editing Factual Associations in Mamba</a>. COLM 2024.</li>
+<li>Ensign, Garriga-Alonso (2024). <a href="https://arxiv.org/abs/2407.14008">Investigating the Indirect Object Identification Circuit in Mamba</a>.</li>
+<li>Chen, Wu, DePodesta, Yeh, Li, Castillo Marin, Patel, Riecke, Raval, Seow, Wattenberg, Viégas (2024). <a href="https://arxiv.org/abs/2406.07882">Designing a Dashboard for Transparency and Control of Conversational AI</a> (TalkTuner).</li>
+</ol>
+
+</article>
+</main>
+
+<script src="assets/glossary.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/search-index.js"></script>
+<script src="assets/search.js"></script>
+<script src="assets/ch10.js"></script>
+</body>
+</html>

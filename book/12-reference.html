@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mech Interp Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  /* the shared ".widget { max-width: 100% }" rule would cap wide widgets at the text measure */
+  @media (min-width: 961px) { .widget.wide { max-width: 1000px; } }
+  /* concept map */
+  .cmap-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #cmap { display: block; min-width: 900px; width: 100%; height: auto; }
+  .cm-node { cursor: pointer; transition: opacity .2s; }
+  .cm-node rect { fill: var(--panel); stroke: var(--ink-3); stroke-width: 1.2; transition: fill .2s, stroke .2s; }
+  .cm-node:hover rect, .cm-node:focus rect { stroke: var(--accent); stroke-width: 2; outline: none; }
+  .cm-node:focus { outline: none; }
+  .cm-node.sel rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2.2; }
+  .cm-node.dim, .cm-edge.dim { opacity: .18; }
+  .cm-edge { transition: opacity .2s; }
+  .cmap-legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 0.8125rem; color: var(--ink-2); margin: 10px 0 0; }
+  .cmap-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .cmap-legend i { display: inline-block; width: 26px; height: 0; border-top: 2px solid; }
+  #cmapInfo { border: 1px solid var(--rule); border-radius: 10px; padding: 12px 16px; margin-top: 14px; background: var(--bg); min-height: 92px; }
+  #cmapInfo h4 { margin: 0 0 4px; font-size: 1rem; }
+  #cmapInfo p { margin: 0 0 6px; font-size: 0.90625rem; color: var(--ink-2); line-height: 1.5; }
+  #cmapInfo .rel { font-size: 0.84375rem; }
+  #cmapInfo .hint { color: var(--ink-3); }
+
+  /* timeline */
+  .band-wrap { overflow-x: auto; }
+  #eraBand { display: block; min-width: 760px; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--rule); }
+  .tl-dot { cursor: pointer; transition: r .1s; }
+  .tl-dot:hover { r: 6; }
+  #eraTip { min-height: 44px; font-size: 0.875rem; color: var(--ink-2); margin: 8px 2px 14px; line-height: 1.45; }
+  .tl-controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 4px 0 10px; }
+  .tl-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tl-tags button { font: inherit; font-size: 0.78125rem; border: 1px solid var(--rule); background: var(--panel); color: var(--ink-2); border-radius: 999px; padding: 4px 11px 4px 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .tl-tags button::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--dot, var(--ink-3)); }
+  .tl-tags button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  select, input[type=search] { font: inherit; font-size: 0.875rem; color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 6px 10px; max-width: 100%; }
+  input[type=search] { min-width: 200px; }
+  #tlCount, #gCount { font-size: 0.8125rem; color: var(--ink-3); }
+  .tl-list { position: relative; padding: 0 6px 0 64px; max-height: 760px; overflow-y: auto; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+    background: linear-gradient(var(--rule), var(--rule)) no-repeat 62px 0 / 2px 100%; background-attachment: local; }
+  .tl-year { position: sticky; top: 0; z-index: 2; font-weight: 800; color: var(--accent); font-size: 0.875rem; margin: 10px 0 4px -64px; padding: 4px 0; width: 54px; text-align: right; background: var(--panel); }
+  .tl-item { position: relative; padding: 6px 0 9px 18px; font-size: 0.90625rem; line-height: 1.45; border-radius: 6px; transition: background .4s; }
+  .tl-item::before { content: ""; position: absolute; left: -7px; top: 12px; width: 12px; height: 12px; border-radius: 50%; background: var(--panel); border: 2px solid var(--accent); }
+  .tl-item.flash { background: var(--accent-soft); }
+  .tl-item .d { color: var(--ink-2); }
+  .tl-item a.ch { font-size: 0.75rem; margin-left: 4px; white-space: nowrap; }
+  .tl-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 0.71875rem; color: var(--ink-3); margin-right: 8px; text-transform: uppercase; letter-spacing: .05em; }
+  .tl-tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--dot); }
+
+  /* glossary */
+  .g-alpha { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0 6px; }
+  .g-alpha a { font-family: var(--sans); font-size: 0.8125rem; font-weight: 700; text-decoration: none; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--rule); border-radius: 6px; color: var(--ink-2); background: var(--panel); }
+  .g-alpha a:hover { border-color: var(--accent); color: var(--accent); }
+  #gList { margin-top: 8px; max-height: 720px; overflow-y: auto; padding-right: 8px; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .g-letter { position: sticky; top: 0; background: var(--panel); font-family: var(--sans); font-weight: 800; font-size: 1.25rem; color: var(--accent); margin: 14px 0 6px; padding: 4px 0; border-bottom: 1px solid var(--rule); }
+  .g-item { display: grid; grid-template-columns: 220px 1fr; gap: 14px; padding: 8px 0; border-bottom: 1px dashed var(--rule); font-family: var(--sans); font-size: 0.90625rem; line-height: 1.5; }
+  .g-item dt { font-weight: 700; color: var(--ink); }
+  .g-item dd { margin: 0; color: var(--ink-2); }
+  mark { background: var(--yellow-soft); color: inherit; border-radius: 3px; padding: 0 1px; }
+  .muted-p { color: var(--ink-3); font-family: var(--sans); font-size: 0.875rem; }
+
+  /* reading list */
+  .stage { margin: 26px 0 8px; display: flex; align-items: baseline; gap: 10px; }
+  .stage .num { font-family: var(--sans); font-weight: 800; font-size: 0.8125rem; color: #fff; background: var(--accent); border-radius: 999px; padding: 2px 10px; }
+  .stage h3 { margin: 0; }
+  .reads { list-style: none; padding: 0; margin: 0 0 12px; font-family: var(--sans); font-size: 0.90625rem; }
+  .reads li { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--rule); align-items: baseline; margin: 0; }
+  .reads .y { font-weight: 800; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .reads .w { color: var(--ink-2); display: block; font-size: 0.84375rem; margin-top: 2px; }
+  .reads .c { font-size: 0.75rem; white-space: nowrap; }
+  .reads a.t { font-weight: 650; color: var(--ink); text-decoration: none; }
+  .reads a.t:hover { color: var(--accent); text-decoration: underline; }
+
+  @media (max-width: 640px) {
+    .g-item { grid-template-columns: 1fr; gap: 2px; }
+    .reads li { grid-template-columns: 44px 1fr; }
+    .reads .c { grid-column: 2; }
+    .tl-list { padding-left: 52px; background-position: 50px 0; }
+    .tl-year { margin-left: -52px; width: 44px; }
+  }
+</style>
+</head>
+<body data-chapter="12">
+<main>
+<article class="article">
+
+<div class="kicker">Chapter 12 · Reference</div>
+<h1>Timeline, glossary, reading list</h1>
+<p class="lede">This chapter is a toolbox for the whole survey. Use it to see how the ideas connect, to find a date, to look up a word, or to choose what to read next.</p>
+
+<div class="tldr">
+<h3>On this page</h3>
+<ul>
+<li><b>Concept map.</b> Click an idea to see what it builds on and what it led to.</li>
+<li><b>Full timeline.</b> About 130 dated events from 1984 to September 2026. Filter by topic or chapter, or search.</li>
+<li><b>Glossary.</b> About 185 terms in simple English. Type to search.</li>
+<li><b>Reading list.</b> A staged path (beginner → core → advanced → newest) with a chapter link for every item, plus courses and tools.</li>
+<li><b>Notation</b>, <b>about this survey</b>, and a final <b>test yourself</b> quiz.</li>
+</ul>
+</div>
+
+<h2 id="concept-map" data-short="Concept map">How the ideas connect</h2>
+
+<p>The field did not grow in a straight line. Some ideas <b>motivated</b> others: polysemantic neurons motivated the study of superposition, and superposition motivated sparse autoencoders. Some ideas <b>built on</b> others: transcoders built on SAEs, and attribution graphs built on transcoders. Some methods <b>test</b> the claims of others: patching tests circuit hypotheses.</p>
+
+<p>The map below shows these links. Columns go roughly from older ideas (left) to newer ideas (right). The last column holds what became important in 2026: white-box audits in system cards, natural language autoencoders, probes in production, and personas. Click a box to highlight its links and read a short summary.</p>
+
+<div class="widget wide" id="cmapWidget">
+  <div class="widget-title">Interactive · Concept map of mechanistic interpretability</div>
+  <div class="widget-sub">Click any box. Click "Show all" to clear the highlight. On a small screen, scroll the map sideways.</div>
+  <div class="cmap-wrap"><svg id="cmap" viewBox="0 0 1210 600" role="img" aria-label="Concept map of mechanistic interpretability, arranged from older ideas on the left to newer ideas on the right."></svg></div>
+  <div class="cmap-legend">
+    <span><i style="border-color: var(--ink-3)"></i> builds on</span>
+    <span><i style="border-color: var(--accent); border-top-style: dashed"></i> motivates</span>
+    <span><i style="border-color: var(--blue)"></i> tests</span>
+    <button class="btn" id="cmapReset" style="margin-left:auto">Show all</button>
+  </div>
+  <div id="cmapInfo"></div>
+</div>
+
+<div class="callout key">
+<span class="label">Four threads to follow</span>
+<p><b>The "what" thread</b> (top of the map) asks what a model represents: feature visualization → polysemanticity → superposition → sparse autoencoders → self-explaining models → natural language autoencoders.</p>
+<p><b>The "how" thread</b> (bottom) asks how parts compute: residual stream → attention heads → induction heads → hand-found circuits → attribution graphs.</p>
+<p><b>The "use" thread</b> (right) asks what the tools are good for: directions and probes → probes in production; auditing games → white-box audits of real models before release.</p>
+<p><b>The "prove it" thread</b> (bottom left) asks which parts cause behaviour: ablation → activation patching → path patching → causal scrubbing, ACDC and DAS. The strongest results use several threads at once.</p>
+</div>
+
+<h2 id="timeline" data-short="Full timeline">Full timeline</h2>
+
+<p>The band shows each event as a dot, coloured by topic. Hover a dot to read it. Click a dot to jump to it in the list. Use the buttons, the chapter menu or the search box to filter both views.</p>
+
+<div class="widget wide" id="tlWidget">
+  <div class="widget-title">Interactive · The field, 1984–2026 (to September 2026)</div>
+  <div class="band-wrap"><svg id="eraBand" viewBox="0 0 960 196" role="img" aria-label="Timeline band with one dot per event, grouped into eras."></svg></div>
+  <div id="eraTip">Hover a dot to read the event.</div>
+  <div class="tl-controls">
+    <div class="tl-tags" id="tlTags"></div>
+  </div>
+  <div class="tl-controls">
+    <select id="tlCh" aria-label="Filter by chapter"><option value="0">All chapters</option></select>
+    <input type="search" id="tlQ" placeholder="Search events…" aria-label="Search timeline">
+    <span id="tlCount"></span>
+  </div>
+  <div class="tl-list" id="tlList"></div>
+</div>
+
+<p>Five eras stand out:</p>
+<ol>
+<li><b>Roots (before 2013).</b> Mathematics that later explained superposition (the Johnson–Lindenstrauss lemma, compressed sensing) and sparse coding of images.</li>
+<li><b>Seeing inside vision models (2013–2019).</b> Saliency maps, feature visualization, Network Dissection and TCAV. People asked "what does this unit detect?"</li>
+<li><b>Circuits (2020–2021).</b> The Distill Circuits thread and the first mathematical framework for transformers. People asked "how do units connect?"</li>
+<li><b>LM circuits and superposition (2022–2023).</b> Induction heads, IOI, grokking, toy models of superposition, patching methods and the first SAEs.</li>
+<li><b>Scale, replacement models and use (2024–2026).</b> SAEs on frontier models, attribution graphs, self-explaining models (up to natural language autoencoders), probes in production, and white-box audits of real models before release.</li>
+</ol>
+
+<h2 id="glossary" data-short="Glossary">Glossary</h2>
+
+<p>Each term has a short definition in simple English. Many of these words also appear underlined in the chapters. Hover them there to see the same definition.</p>
+
+<div class="widget" id="gWidget">
+  <div class="widget-title">Interactive · Searchable glossary</div>
+  <div class="tl-controls">
+    <input type="search" id="gQ" placeholder="Search terms and definitions…" aria-label="Search glossary">
+    <span id="gCount"></span>
+  </div>
+  <nav class="g-alpha" id="gAlpha" aria-label="Jump to letter"></nav>
+  <dl id="gList"></dl>
+</div>
+
+<h2 id="reading-list" data-short="Reading list">Reading list</h2>
+
+<p>This path goes from easy to hard, in four stages. You do not need to read everything. Read the beginner stage first, then pick the papers that match your interest. In stages 2 and 3, items follow the order of the chapters; stage 4 is in date order. Each entry links to the chapter of this survey that explains it.</p>
+
+<div class="stage"><span class="num">1</span><h3>Beginner: start here</h3></div>
+<p class="muted-p">Short, friendly pieces. A weekend of reading.</p>
+<ul class="reads">
+  <li><span class="y">2020</span><span><a class="t" href="https://distill.pub/2020/circuits/zoom-in/">Zoom In: An Introduction to Circuits</a><span class="w">The three speculative claims (features, circuits, universality) in one short, beautiful article.</span></span><a class="c" href="02-vision-era.html">Ch. 2</a></li>
+  <li><span class="y">2017</span><span><a class="t" href="https://distill.pub/2017/feature-visualization/">Feature Visualization</a><span class="w">How to make a picture of what a neuron wants to see, and why it is harder than it looks.</span></span><a class="c" href="02-vision-era.html">Ch. 2</a></li>
+  <li><span class="y">2022</span><span><a class="t" href="https://transformer-circuits.pub/2022/mech-interp-essay/index.html">Mechanistic Interpretability, Variables, and the Importance of Interpretable Bases</a><span class="w">Chris Olah's short essay: a network as a compiled program, and why the basis matters.</span></span><a class="c" href="02-vision-era.html">Ch. 2</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://www.anthropic.com/research/tracing-thoughts-language-model">Tracing the thoughts of a large language model</a><span class="w">A friendly blog post about attribution graphs in Claude: planning rhymes, mental math, refusals.</span></span><a class="c" href="09-circuit-tracing.html">Ch. 9</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://www.darioamodei.com/post/the-urgency-of-interpretability">The Urgency of Interpretability</a><span class="w">Dario Amodei's case for why this research matters now (April 2025).</span></span><a class="c" href="11-frontier.html">Ch. 11</a></li>
+  <li><span class="y">—</span><span><a class="t" href="https://www.neelnanda.io/mechanistic-interpretability/getting-started">Neel Nanda: Getting Started in Mechanistic Interpretability</a><span class="w">A practical guide: what to learn, what to code, which papers to read first.</span></span><a class="c" href="11-frontier.html">Ch. 11</a></li>
+</ul>
+
+<div class="stage"><span class="num">2</span><h3>Core papers</h3></div>
+<p class="muted-p">The classic results that every later paper builds on. Read with Chapters 2–8.</p>
+<ul class="reads">
+  <li><span class="y">2020</span><span><a class="t" href="https://distill.pub/2020/circuits/curve-detectors/">Curve Detectors</a><span class="w">The most careful study of one feature family. A model for how to make a claim about a neuron.</span></span><a class="c" href="02-vision-era.html">Ch. 2</a></li>
+  <li><span class="y">2021</span><span><a class="t" href="https://distill.pub/2021/multimodal-neurons/">Multimodal Neurons in Artificial Neural Networks</a><span class="w">CLIP neurons for concepts like Spider-Man, and the typographic attack.</span></span><a class="c" href="02-vision-era.html">Ch. 2</a></li>
+  <li><span class="y">2022</span><span><a class="t" href="https://transformer-circuits.pub/2022/toy_model/index.html">Toy Models of Superposition</a><span class="w">Why neurons are polysemantic, shown in models small enough to draw.</span></span><a class="c" href="03-superposition.html">Ch. 3</a></li>
+  <li><span class="y">2021</span><span><a class="t" href="https://transformer-circuits.pub/2021/framework/index.html">A Mathematical Framework for Transformer Circuits</a><span class="w">The residual stream, QK and OV circuits, and composition. The base of transformer interpretability.</span></span><a class="c" href="04-transformers.html">Ch. 4</a></li>
+  <li><span class="y">2022</span><span><a class="t" href="https://transformer-circuits.pub/2022/in-context-learning-and-induction-heads/index.html">In-context Learning and Induction Heads</a><span class="w">A small circuit that explains a big behaviour, with six lines of evidence.</span></span><a class="c" href="04-transformers.html">Ch. 4</a></li>
+  <li><span class="y">2024</span><span><a class="t" href="https://arxiv.org/abs/2404.15255">How to Use and Interpret Activation Patching</a><span class="w">Practical advice on corruptions, metrics and traps (denoising vs noising).</span></span><a class="c" href="05-causal-methods.html">Ch. 5</a></li>
+  <li><span class="y">2022</span><span><a class="t" href="https://arxiv.org/abs/2211.00593">Interpretability in the Wild (IOI)</a><span class="w">The 26-head circuit in GPT-2 small, found with path patching. Chapter 5 reproduces its patching maps on real data.</span></span><a class="c" href="06-circuit-case-studies.html">Ch. 6</a></li>
+  <li><span class="y">2022</span><span><a class="t" href="https://arxiv.org/abs/2202.05262">Locating and Editing Factual Associations in GPT (ROME)</a><span class="w">Causal tracing and model editing for facts.</span></span><a class="c" href="06-circuit-case-studies.html">Ch. 6</a></li>
+  <li><span class="y">2022</span><span><a class="t" href="https://arxiv.org/abs/2210.13382">Emergent World Representations (Othello-GPT)</a><span class="w">A model trained only on moves builds a model of the board.</span></span><a class="c" href="06-circuit-case-studies.html">Ch. 6</a></li>
+  <li><span class="y">2023</span><span><a class="t" href="https://arxiv.org/abs/2301.05217">Progress Measures for Grokking via Mechanistic Interpretability</a><span class="w">A fully reverse-engineered algorithm: modular addition with Fourier features.</span></span><a class="c" href="06-circuit-case-studies.html">Ch. 6</a></li>
+  <li><span class="y">2019</span><span><a class="t" href="https://arxiv.org/abs/1909.03368">Designing and Interpreting Probes with Control Tasks</a><span class="w">Why a high probe accuracy can mean the probe is too clever. Introduces selectivity.</span></span><a class="c" href="07-probing-steering.html">Ch. 7</a></li>
+  <li><span class="y">2021</span><span><a class="t" href="https://arxiv.org/abs/2102.12452">Probing Classifiers: Promises, Shortcomings, and Advances</a><span class="w">Belinkov's survey: what probes can and cannot tell you.</span></span><a class="c" href="07-probing-steering.html">Ch. 7</a></li>
+  <li><span class="y">2023</span><span><a class="t" href="https://transformer-circuits.pub/2023/monosemantic-features/index.html">Towards Monosemanticity</a><span class="w">Sparse autoencoders turn polysemantic neurons of a one-layer model into thousands of mostly clean features.</span></span><a class="c" href="08-dictionary-learning.html">Ch. 8</a></li>
+</ul>
+
+<div class="stage"><span class="num">3</span><h3>Advanced methods</h3></div>
+<p class="muted-p">Rigorous causal tools, SAEs at scale, transcoders and other threads.</p>
+<ul class="reads">
+  <li><span class="y">2022</span><span><a class="t" href="https://www.alignmentforum.org/posts/JvZhhzycHu2Yd57RN/causal-scrubbing-a-method-for-rigorously-testing">Causal Scrubbing</a><span class="w">A strict standard for testing a circuit hypothesis.</span></span><a class="c" href="05-causal-methods.html">Ch. 5</a></li>
+  <li><span class="y">2023</span><span><a class="t" href="https://www.neelnanda.io/mechanistic-interpretability/attribution-patching">Attribution Patching</a><span class="w">A gradient trick that estimates every patch in one backward pass.</span></span><a class="c" href="05-causal-methods.html">Ch. 5</a></li>
+  <li><span class="y">2023</span><span><a class="t" href="https://arxiv.org/abs/2303.02536">Finding Alignments Between Interpretable Causal Variables and Distributed Neural Representations (DAS)</a><span class="w">Learn the subspace that holds a variable of a high-level algorithm.</span></span><a class="c" href="05-causal-methods.html">Ch. 5</a></li>
+  <li><span class="y">2023</span><span><a class="t" href="https://arxiv.org/abs/2304.14997">Towards Automated Circuit Discovery (ACDC)</a><span class="w">Find circuits by pruning edges automatically.</span></span><a class="c" href="05-causal-methods.html">Ch. 5</a></li>
+  <li><span class="y">2023</span><span><a class="t" href="https://arxiv.org/abs/2311.17030">Is This the Subspace You Are Looking For? (interpretability illusion)</a><span class="w">How subspace patching can show an effect that is not really there.</span></span><a class="c" href="05-causal-methods.html">Ch. 5</a></li>
+  <li><span class="y">2023</span><span><a class="t" href="https://arxiv.org/abs/2310.01405">Representation Engineering</a><span class="w">Read and control concepts like honesty with directions.</span></span><a class="c" href="07-probing-steering.html">Ch. 7</a></li>
+  <li><span class="y">2024</span><span><a class="t" href="https://arxiv.org/abs/2406.11717">Refusal in Language Models Is Mediated by a Single Direction</a><span class="w">One direction controls refusal in many open chat models.</span></span><a class="c" href="07-probing-steering.html">Ch. 7</a></li>
+  <li><span class="y">2024</span><span><a class="t" href="https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html">Scaling Monosemanticity</a><span class="w">Millions of features in Claude 3 Sonnet, including the Golden Gate Bridge feature.</span></span><a class="c" href="08-dictionary-learning.html">Ch. 8</a></li>
+  <li><span class="y">2024</span><span><a class="t" href="https://arxiv.org/abs/2406.04093">Scaling and Evaluating Sparse Autoencoders</a><span class="w">TopK SAEs, scaling laws, and a 16M-latent SAE on GPT-4.</span></span><a class="c" href="08-dictionary-learning.html">Ch. 8</a></li>
+  <li><span class="y">2024</span><span><a class="t" href="https://arxiv.org/abs/2408.05147">Gemma Scope</a><span class="w">Open JumpReLU SAEs for every layer of Gemma 2. Good for your own experiments.</span></span><a class="c" href="08-dictionary-learning.html">Ch. 8</a></li>
+  <li><span class="y">2024</span><span><a class="t" href="https://arxiv.org/abs/2406.11944">Transcoders Find Interpretable LLM Feature Circuits</a><span class="w">Replace MLPs with sparse transcoders so features connect through weights.</span></span><a class="c" href="09-circuit-tracing.html">Ch. 9</a></li>
+  <li><span class="y">2024</span><span><a class="t" href="https://transformer-circuits.pub/2024/crosscoders/index.html">Sparse Crosscoders for Cross-Layer Features and Model Diffing</a><span class="w">One dictionary across layers or across models.</span></span><a class="c" href="09-circuit-tracing.html">Ch. 9</a></li>
+  <li><span class="y">2024</span><span><a class="t" href="https://arxiv.org/abs/2403.19647">Sparse Feature Circuits</a><span class="w">Circuits made of SAE features, and a debiasing demo (SHIFT).</span></span><a class="c" href="10-new-directions.html">Ch. 10</a></li>
+  <li><span class="y">2024</span><span><a class="t" href="https://arxiv.org/abs/2402.02364">Loss Landscape Degeneracy and Stagewise Development in Transformers</a><span class="w">Developmental interpretability: find training stages with the local learning coefficient.</span></span><a class="c" href="10-new-directions.html">Ch. 10</a></li>
+  <li><span class="y">2024</span><span><a class="t" href="https://arxiv.org/abs/2406.00877">Evidence of Learned Look-Ahead in a Chess-Playing Neural Network</a><span class="w">Planning inside a single forward pass of Leela Chess Zero.</span></span><a class="c" href="10-new-directions.html">Ch. 10</a></li>
+</ul>
+
+<div class="stage"><span class="num">4</span><h3>Newest work (2025–2026)</h3></div>
+<p class="muted-p">In date order. These change fast; check for newer versions.</p>
+<ul class="reads">
+  <li><span class="y">2025</span><span><a class="t" href="https://arxiv.org/abs/2501.16496">Open Problems in Mechanistic Interpretability</a><span class="w">A map of what the field still cannot do, written by many groups together (January 2025).</span></span><a class="c" href="11-frontier.html">Ch. 11</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://transformer-circuits.pub/2025/attribution-graphs/methods.html">Circuit Tracing: Revealing Computational Graphs in Language Models</a><span class="w">How cross-layer transcoders, local replacement models and attribution graphs work.</span></span><a class="c" href="09-circuit-tracing.html">Ch. 9</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://transformer-circuits.pub/2025/attribution-graphs/biology.html">On the Biology of a Large Language Model</a><span class="w">Ten case studies inside Claude 3.5 Haiku: two-hop facts (Dallas → Texas → Austin), rhyme planning, mental math, refusals.</span></span><a class="c" href="09-circuit-tracing.html">Ch. 9</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://arxiv.org/abs/2503.10965">Auditing Language Models for Hidden Objectives</a><span class="w">Blue teams use interpretability to find a goal that a red team hid in a model.</span></span><a class="c" href="11-frontier.html">Ch. 11</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://www.alignmentforum.org/posts/4uXCAJNuPKtKBsi28/">Negative Results for SAEs on Downstream Tasks</a><span class="w">Why Google DeepMind's team moved away from SAEs as the main tool.</span></span><a class="c" href="08-dictionary-learning.html">Ch. 8</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://www.anthropic.com/research/persona-vectors">Persona Vectors</a><span class="w">Directions for traits like sycophancy, used to monitor and steer.</span></span><a class="c" href="07-probing-steering.html">Ch. 7</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://www.neuronpedia.org/graph/info">The Circuits Research Landscape: Results and Perspectives</a><span class="w">Five groups replicate attribution graphs on open models and list their limits (August 2025).</span></span><a class="c" href="09-circuit-tracing.html">Ch. 9</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://transformer-circuits.pub/2025/introspection/index.html">Emergent Introspective Awareness in Large Language Models</a><span class="w">Inject a concept and ask the model if it notices. It does in a minority of trials.</span></span><a class="c" href="07-probing-steering.html">Ch. 7</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://transformer-circuits.pub/2025/linebreaks/index.html">When Models Manipulate Manifolds</a><span class="w">Curved features for counting characters and breaking lines.</span></span><a class="c" href="03-superposition.html">Ch. 3</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://www.lesswrong.com/posts/StENzDcD3kpfGJssR/a-pragmatic-vision-for-interpretability">A Pragmatic Vision for Interpretability</a><span class="w">Google DeepMind's team: pick concrete safety tasks, and try the simplest method first (December 2025).</span></span><a class="c" href="11-frontier.html">Ch. 11</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://arxiv.org/abs/2512.15674">Activation Oracles</a><span class="w">Karvonen et al.: models trained, with supervised question–answer data, to answer questions about activations.</span></span><a class="c" href="10-new-directions.html">Ch. 10</a></li>
+  <li><span class="y">2025</span><span><a class="t" href="https://deepmind.google/blog/gemma-scope-2-helping-the-ai-safety-community-deepen-understanding-of-complex-language-model-behavior">Gemma Scope 2</a><span class="w">Open SAEs, transcoders and cross-layer transcoders for every layer of the Gemma 3 models (December 2025).</span></span><a class="c" href="08-dictionary-learning.html">Ch. 8</a></li>
+  <li><span class="y">2026</span><span><a class="t" href="https://arxiv.org/abs/2601.11516">Building Production-Ready Probes for Gemini</a><span class="w">How simple probes were made robust enough for live traffic (January 2026).</span></span><a class="c" href="07-probing-steering.html">Ch. 7</a></li>
+  <li><span class="y">2026</span><span><a class="t" href="https://arxiv.org/abs/2601.10387">The Assistant Axis</a><span class="w">One direction measures how much a chat model acts as its default Assistant; capping it reduces persona drift.</span></span><a class="c" href="10-new-directions.html">Ch. 10</a></li>
+  <li><span class="y">2026</span><span><a class="t" href="https://alignment.anthropic.com/2026/psm">The Persona Selection Model</a><span class="w">Marks, Lindsey and Olah: pretraining learns many characters, post-training selects the Assistant.</span></span><a class="c" href="10-new-directions.html">Ch. 10</a></li>
+  <li><span class="y">2026</span><span><a class="t" href="https://transformer-circuits.pub/2026/nla/index.html">Natural Language Autoencoders</a><span class="w">Fraser-Taliente, Kantamneni and Ong (equal first authors), et al.: an autoencoder whose bottleneck is plain text, used in Claude audits.</span></span><a class="c" href="10-new-directions.html">Ch. 10</a></li>
+  <li><span class="y">2026</span><span><a class="t" href="https://transformer-circuits.pub/2026/workspace/index.html">Verbalizable Representations Form a Global Workspace in Language Models</a><span class="w">The Jacobian lens finds a small subspace (never more than 10% of variance) that carries what the model can report and reason with.</span></span><a class="c" href="10-new-directions.html">Ch. 10</a></li>
+  <li><span class="y">2026</span><span><a class="t" href="https://www-cdn.anthropic.com/c5fbac3f0b1280a933ebd26d3cb8bb9f5bdeaf48/Claude%20Opus%205%20System%20Card.pdf">Claude Opus 5 System Card (white-box section)</a><span class="w">An NLA-equipped investigator agent finds unspoken grader awareness. Interpretability as a routine audit tool (July 2026).</span></span><a class="c" href="11-frontier.html">Ch. 11</a></li>
+</ul>
+
+<h3 id="courses">Courses, tools and places to read</h3>
+<div class="cards">
+  <a class="card" href="https://www.arena.education"><h4>ARENA</h4><p>Free hands-on notebooks: TransformerLens, induction heads, IOI, superposition, SAEs, Othello-GPT.</p></a>
+  <a class="card" href="https://www.neelnanda.io/mechanistic-interpretability/getting-started"><h4>Neel Nanda's guides</h4><p>Getting started, an explainer and glossary, open problems, and an annotated paper list.</p></a>
+  <a class="card" href="https://github.com/TransformerLensOrg/TransformerLens"><h4>TransformerLens</h4><p>A library to load open models, cache every activation, and add hooks for patching.</p></a>
+  <a class="card" href="https://nnsight.net"><h4>nnsight / NDIF</h4><p>Write interventions on any PyTorch model, and run them on very large models remotely.</p></a>
+  <a class="card" href="https://github.com/jbloomAus/SAELens"><h4>SAELens</h4><p>Train, load and analyse sparse autoencoders. Many pretrained SAEs are available.</p></a>
+  <a class="card" href="https://www.neuronpedia.org"><h4>Neuronpedia</h4><p>Browse SAE and transcoder features (including Gemma Scope 2), try steering, and explore attribution graphs in your browser.</p></a>
+  <a class="card" href="https://github.com/safety-research/circuit-tracer"><h4>circuit-tracer</h4><p>Open-source code to build attribution graphs for open models such as Gemma 2, Llama 3.2 and Qwen3.</p></a>
+  <a class="card" href="https://transformer-circuits.pub"><h4>Transformer Circuits Thread</h4><p>Anthropic's papers, essays and circuits updates, from the 2021 framework to NLAs and the global workspace.</p></a>
+  <a class="card" href="https://distill.pub"><h4>Distill (archive)</h4><p>The vision-era classics: feature visualization, building blocks, the Circuits thread.</p></a>
+  <a class="card" href="https://www.alignmentforum.org"><h4>Alignment Forum</h4><p>Where many results first appear: Google DeepMind updates, MATS projects, critiques and replications.</p></a>
+  <a class="card" href="https://www.matsprogram.org"><h4>MATS</h4><p>A mentorship program that has trained many mech-interp researchers.</p></a>
+</div>
+
+<div class="callout warn">
+<span class="label">Links change</span>
+<p>Blog posts and project pages sometimes move. If a link breaks, search for the exact title. The arXiv links are the most stable.</p>
+</div>
+
+<h2 id="notation" data-short="Notation">Notation cheat sheet</h2>
+
+<p>The chapters use the symbols below. They follow the conventions of "A Mathematical Framework for Transformer Circuits" and the main SAE papers.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Symbol</th><th>Meaning</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td><code>x</code></td><td>An activation vector (for example, the residual stream at one token).</td><td>everywhere</td></tr>
+<tr><td><code>d</code>, <code>d_model</code></td><td>The number of dimensions of the residual stream (768 in GPT-2 small).</td><td>Ch. 3, 4</td></tr>
+<tr><td><code>W_E</code></td><td>Embedding matrix: token → vector.</td><td>Ch. 4</td></tr>
+<tr><td><code>W_U</code></td><td>Unembedding matrix: vector → logits over the vocabulary.</td><td>Ch. 4</td></tr>
+<tr><td><code>W_Q</code>, <code>W_K</code>, <code>W_V</code></td><td>Query, key and value matrices of one attention head.</td><td>Ch. 4</td></tr>
+<tr><td><code>W_O</code></td><td>Output matrix of a head: writes its result back to the residual stream.</td><td>Ch. 4</td></tr>
+<tr><td><code>W_QK = W_Qᵀ W_K</code></td><td>The QK circuit: decides where the head attends.</td><td>Ch. 4</td></tr>
+<tr><td><code>W_OV = W_O W_V</code></td><td>The OV circuit: decides what the head copies.</td><td>Ch. 4</td></tr>
+<tr><td><code>A</code>, <code>A^h</code></td><td>Attention pattern (who attends to whom) of head <code>h</code>.</td><td>Ch. 4</td></tr>
+<tr><td><code>L.H</code> (e.g. 9.9)</td><td>Head H in layer L, both counted from 0.</td><td>Ch. 5, 6</td></tr>
+<tr><td><code>n</code>, <code>m</code></td><td>Toy models: number of features <code>n</code>, number of hidden dimensions <code>m</code> (<code>m &lt; n</code>).</td><td>Ch. 3</td></tr>
+<tr><td><code>S</code></td><td>Sparsity: the chance that a feature is zero on an input.</td><td>Ch. 3</td></tr>
+<tr><td><code>Iᵢ</code></td><td>Importance of feature <code>i</code> in the toy-model loss.</td><td>Ch. 3</td></tr>
+<tr><td><code>W, b</code></td><td>Toy model: <code>x' = ReLU(WᵀW x + b)</code>.</td><td>Ch. 3</td></tr>
+<tr><td><code>f</code></td><td>SAE feature activations (a long, mostly-zero vector).</td><td>Ch. 8</td></tr>
+<tr><td><code>W_enc</code>, <code>b_enc</code></td><td>SAE encoder weights and bias: <code>f = ReLU(W_enc(x − b_dec) + b_enc)</code>.</td><td>Ch. 8</td></tr>
+<tr><td><code>W_dec</code>, <code>b_dec</code></td><td>SAE decoder: <code>x̂ = W_dec f + b_dec</code>. Each column is one feature direction.</td><td>Ch. 8</td></tr>
+<tr><td><code>x̂</code></td><td>The reconstruction of <code>x</code>.</td><td>Ch. 8, 9</td></tr>
+<tr><td><code>λ</code></td><td>Sparsity coefficient: the weight of the L1 penalty. (In Ch. 10, <code>λ</code> is the learning coefficient.)</td><td>Ch. 8, 10</td></tr>
+<tr><td><code>L0</code></td><td>Average number of active SAE features per token.</td><td>Ch. 8</td></tr>
+<tr><td><code>k</code></td><td>TopK SAE: the number of features kept per input.</td><td>Ch. 8</td></tr>
+<tr><td><code>LD</code></td><td>Logit difference: logit(correct) − logit(wrong).</td><td>Ch. 5</td></tr>
+<tr><td><code>α</code></td><td>Steering coefficient: how much of a direction to add.</td><td>Ch. 7</td></tr>
+<tr><td><code>v</code>, <code>r̂</code></td><td>A steering or concept direction; <code>r̂</code> is the unit refusal direction.</td><td>Ch. 7</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="test-yourself" data-short="Test yourself">Test yourself</h2>
+
+<p>These questions cover the whole survey. If you get one wrong, the explanation points to the chapter to reread.</p>
+
+<div class="quiz" data-answer="1">
+  <div class="q">Why do many neurons respond to several unrelated concepts?</div>
+  <div class="opts">
+    <button>Training is noisy, so neurons are random.</button>
+    <button>The model stores more features than it has neurons, using almost-orthogonal directions (superposition).</button>
+    <button>Each neuron is a small classifier for one class.</button>
+    <button>Because of the softmax at the output.</button>
+  </div>
+  <div class="why">Superposition lets a model pack many sparse features into fewer dimensions. Neurons then mix features. See <a href="03-superposition.html">Chapter 3</a>.</div>
+</div>
+
+<div class="quiz" data-answer="2">
+  <div class="q">An induction head predicts [B] after seeing [A][B] … [A]. Which earlier head does it need?</div>
+  <div class="opts">
+    <button>A head that attends to the first token.</button>
+    <button>A negative name mover head.</button>
+    <button>A previous-token head, so each token's key can say "the token before me was A".</button>
+    <button>No other head; it works alone.</button>
+  </div>
+  <div class="why">Induction heads use K-composition with a previous-token head. See <a href="04-transformers.html">Chapter 4</a>.</div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <div class="q">In activation patching, you run the corrupted prompt and copy in one clean activation. The output becomes almost clean. What does that show?</div>
+  <div class="opts">
+    <button>That activation is sufficient to carry the difference between the two prompts.</button>
+    <button>That activation is necessary for every task.</button>
+    <button>The model is broken.</button>
+    <button>The probe was overfitting.</button>
+  </div>
+  <div class="why">This is denoising. It tests sufficiency. Noising (the opposite direction) tests necessity. See <a href="05-causal-methods.html">Chapter 5</a>.</div>
+</div>
+
+<div class="quiz" data-answer="3">
+  <div class="q">A linear probe reads "is this statement true?" from layer 12 with high accuracy. What should you do next to show the model uses this information?</div>
+  <div class="opts">
+    <button>Train a bigger, nonlinear probe.</button>
+    <button>Report the accuracy; it already proves use.</button>
+    <button>Test the probe on the same data again.</button>
+    <button>Intervene: remove or add the direction and check if the model's behaviour changes.</button>
+  </div>
+  <div class="why">Probes show presence. Interventions show use. See <a href="07-probing-steering.html">Chapter 7</a>.</div>
+</div>
+
+<div class="quiz" data-answer="1">
+  <div class="q">What is the main trade-off when you train a sparse autoencoder?</div>
+  <div class="opts">
+    <button>Speed of the base model versus its accuracy.</button>
+    <button>Sparsity (few active features) versus reconstruction quality.</button>
+    <button>Number of layers versus number of heads.</button>
+    <button>Learning rate versus batch size only.</button>
+  </div>
+  <div class="why">A stronger sparsity penalty gives fewer active features but worse reconstruction. See <a href="08-dictionary-learning.html">Chapter 8</a>.</div>
+</div>
+
+<div class="quiz" data-answer="2">
+  <div class="q">Why did Anthropic use cross-layer transcoders instead of plain SAEs to build attribution graphs?</div>
+  <div class="opts">
+    <button>Transcoders are smaller and faster to train.</button>
+    <button>SAEs cannot find any interpretable features.</button>
+    <button>Transcoder features replace the MLPs, so features connect to each other through fixed weights and the graph can be traced.</button>
+    <button>Transcoders do not need any training data.</button>
+  </div>
+  <div class="why">SAE features sit on activations, but the MLP between them is still a black box. Transcoders replace that computation. See <a href="09-circuit-tracing.html">Chapter 9</a>.</div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <div class="q">In the "Biology of a Large Language Model" poem example, what showed that Claude plans ahead?</div>
+  <div class="opts">
+    <button>Features for the rhyme word ("rabbit") were active before the line was written, and changing them changed the line.</button>
+    <button>The model wrote "I am planning" in its output.</button>
+    <button>The loss curve had a bump.</button>
+    <button>A linear probe found the word "poem".</button>
+  </div>
+  <div class="why">The plan features appeared at the newline before the line. Suppressing or replacing them changed how the line ended. See <a href="09-circuit-tracing.html">Chapter 9</a>.</div>
+</div>
+
+<div class="quiz" data-answer="2">
+  <div class="q">For "the capital of the state containing Dallas is", the attribution graph shows Dallas → Texas → say "Austin". What happened when researchers suppressed the "Texas" features?</div>
+  <div class="opts">
+    <button>Nothing changed, so the graph was wrong.</button>
+    <button>The model named another state capital, such as Sacramento.</button>
+    <button>"Austin" fell from about 98% to about 6%, and no other capital took over.</button>
+    <button>The model said "Dallas".</button>
+  </div>
+  <div class="why">Without "Texas", the model no longer knew which capital to say, so it spread its bets over generic words. Other capitals (Albany, Sacramento) appeared only when the "Dallas" features were suppressed instead. Swapping "Texas" for "California" gave "Sacramento". See <a href="09-circuit-tracing.html">Chapter 9</a>.</div>
+</div>
+
+<div class="quiz" data-answer="3">
+  <div class="q">Which statement best describes the state of the field in 2026?</div>
+  <div class="opts">
+    <button>Frontier models are fully understood.</button>
+    <button>Interpretability tools have no practical use yet.</button>
+    <button>Sparse autoencoders are accepted as the one correct method.</button>
+    <button>Tools explain parts of real models and help in audits, but much computation is still unexplained and methods are debated.</button>
+  </div>
+  <div class="why">The field has real tools and real uses (white-box audits in system cards, probes in production), and also open problems and active debate (attribution graphs explain only some prompts; probes can be evaded; SAE versus simpler methods). See <a href="11-frontier.html">Chapter 11</a>.</div>
+</div>
+
+<h2 id="about" data-short="About this survey">About this survey</h2>
+
+<h3>How it was made</h3>
+<ul>
+<li><b>Research notes.</b> The survey is built on seven research notes, one per topic (history, superposition, transformer circuits, probing and steering, dictionary learning, causal methods and the frontier, researchers and open gaps), plus an eighth <b>recency sweep</b> of June 2025 to October 2026. They are in the <code>notes/</code> folder next to this site. Each note lists its sources and tags claims as verified, secondary or <code>[UNSURE]</code>. The chapters leave out or soften claims that could not be checked.</li>
+<li><b>Independent fact-check.</b> In October 2026, every chapter got a separate fact-check pass. Reviewers pulled out the checkable claims (names, author lists, dates, numbers, quotes, head and neuron IDs, URLs), compared them with the primary sources (papers, arXiv records, lab posts, system-card PDFs), fixed errors, and tested every external link. Each pass wrote a changelog (old text, new text, reason, source) in <code>notes/review/</code>. This reference chapter, the glossary and the timeline were then checked against the corrected chapters.</li>
+<li><b>Simple language.</b> The text follows the spirit of <b>ASD-STE100 Simplified Technical English</b>: short sentences, active voice, one idea per sentence, common words, and one meaning per term. Technical terms are defined at first use and in the glossary.</li>
+<li><b>Real data where possible.</b> The activation-patching heatmaps in <a href="05-causal-methods.html">Chapter 5</a> are real results. We computed them on GPT-2 small for the IOI prompt "When Mary and John went to the store, John gave a drink to", with the script <code>book/scripts/patch_ioi.py</code>. They reproduce the published IOI story: S-inhibition heads 7.3, 7.9, 8.6 and 8.10, name movers 9.6, 9.9 and 10.0, and negative heads 10.7 and 11.10. The Chapter 9 explorer shows the output numbers reported in the "Biology" paper's intervention figures (for example, suppressing "Texas" drops "Austin" from 98% to 6% with no other capital taking over).</li>
+<li><b>Illustrations.</b> Some widgets use toy models that train live in your browser (superposition in Chapter 3, SAEs in Chapter 8). Others are schematic and say so in their captions. They show the shape of a published result, not new data.</li>
+</ul>
+
+<h3>Limits</h3>
+<ul>
+<li>This survey is current <b>as of October 2026</b>. The timeline ends in September 2026. The field moves fast, and newer results may change some conclusions.</li>
+<li>Some 2025–2026 results come from lab blog posts and system cards, not peer-reviewed papers. The chapters say so, and they leave out numbers that only appeared in secondary reports.</li>
+<li>Simple language leaves out detail. For any exact number or claim, read the original paper. Every chapter ends with its references.</li>
+<li>Coverage is broad, not complete. Some threads (for example, interpretability of speech models or of robotics policies) get little or no space.</li>
+</ul>
+
+<div class="callout good">
+<span class="label">Where to go from here</span>
+<p>The best way to learn mechanistic interpretability is to do it. Pick a small open model, load it with TransformerLens or nnsight, and reproduce one result from this survey, such as induction heads or the IOI patching map. Then change one thing and see what happens.</p>
+</div>
+
+</article>
+</main>
+<script src="assets/glossary.js"></script>
+<script src="assets/timeline.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/search-index.js"></script>
+<script src="assets/search.js"></script>
+<script src="assets/ch12.js"></script>
+</body>
+</html>

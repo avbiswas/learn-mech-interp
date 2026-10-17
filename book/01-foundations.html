@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What Is Mech Interp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-chapter="1">
+<main>
+<article class="article">
+
+<div class="kicker">Chapter 1</div>
+<h1>What is mechanistic interpretability?</h1>
+<p class="lede">We train neural networks. We do not write them. This chapter explains why that is a problem, and what it means to "reverse engineer" a network.</p>
+
+<div class="tldr">
+<h3>In short</h3>
+<ul>
+<li>A trained network is a large set of numbers. Nobody wrote its rules by hand.</li>
+<li><b>Mechanistic interpretability</b> (mech interp) tries to find the algorithm that these numbers carry out.</li>
+<li>The main objects are <b>features</b> (what the model represents) and <b>circuits</b> (how features connect to compute new features).</li>
+<li>There are two kinds of tools. Some tools <b>observe</b> the model. Other tools <b>intervene</b> in the model to test causes.</li>
+</ul>
+</div>
+
+<div class="callout example" id="learning-path">
+<span class="label">Learning path · Chapter 1 of 12 · about 15 min · 1 widget · 2 quizzes</span>
+<p><b>Before you start:</b> No background is needed. If you know what a function and a list of numbers (a vector) are, that is enough.</p>
+<p><b>You will learn:</b></p>
+<ul><li>why a trained network is like a program with no source code</li><li>what a neuron, an activation, a layer and the residual stream are</li><li>the three core objects of the field: features, circuits and universality</li><li>the difference between <b>observing</b> a model and <b>intervening</b> in it</li></ul>
+</div>
+
+
+<h2 id="problem" data-short="The problem">The problem: we build what we cannot read</h2>
+
+<p>A normal computer program has source code. A person wrote each line. If the program does something wrong, you can read the code and find the bad line.</p>
+
+<p>A neural network is different. Engineers write the <em>training</em> code. Then training changes millions or billions of numbers, called <span class="term" data-term="weights">weights</span>. At the end, the weights do the task. But no person chose them, and no person knows what each one does.</p>
+
+<p>Large language models now write code, answer medical questions, and act as agents. We know that they work on many tests. We do not know <em>how</em> they work inside. This gap is the central problem of the field.</p>
+
+<div class="callout analogy">
+<span class="label">Analogy</span>
+<p>Think of a trained network as a compiled program with no source code. The weights are like a binary file. Mechanistic interpretability tries to <b>decompile</b> it: to turn the binary back into code that a human can read and check.</p>
+</div>
+
+<figure class="panel">
+<svg viewBox="0 0 720 210" role="img" aria-label="Software: a programmer writes source code, a compiler makes a binary. Deep learning: training makes weights. Mech interp tries to go back from weights to a readable algorithm.">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+  </defs>
+  <text x="10" y="40" font-size="13" font-weight="700" class="muted">SOFTWARE</text>
+  <rect x="110" y="18" width="150" height="40" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="185" y="43" text-anchor="middle" font-size="14">Source code</text>
+  <line x1="262" y1="38" x2="440" y2="38" stroke="var(--ink-3)" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text x="351" y="30" text-anchor="middle" font-size="12" class="muted">compiler</text>
+  <rect x="445" y="18" width="150" height="40" rx="8" fill="var(--bg-2)" stroke="var(--ink-3)"/>
+  <text x="520" y="43" text-anchor="middle" font-size="14" font-family="var(--mono)">0101 1100 …</text>
+
+  <text x="10" y="134" font-size="13" font-weight="700" class="muted">DEEP</text>
+  <text x="10" y="150" font-size="13" font-weight="700" class="muted">LEARNING</text>
+  <rect x="110" y="118" width="150" height="40" rx="8" fill="var(--bg-2)" stroke="var(--ink-3)" stroke-dasharray="4 3"/>
+  <text x="185" y="143" text-anchor="middle" font-size="14" class="muted">Algorithm = ?</text>
+  <rect x="445" y="118" width="150" height="40" rx="8" fill="var(--bg-2)" stroke="var(--ink-3)"/>
+  <text x="520" y="143" text-anchor="middle" font-size="14" font-family="var(--mono)">0.12 −1.7 0.03 …</text>
+  <text x="520" y="175" text-anchor="middle" font-size="12" class="muted">billions of weights</text>
+  <path d="M 30 172 L 30 190 L 600 190" fill="none" stroke="var(--ink-3)" stroke-width="1.5"/>
+  <text x="80" y="185" font-size="12" class="muted">data + training</text>
+  <line x1="610" y1="190" x2="610" y2="164" stroke="var(--ink-3)" stroke-width="1.5" marker-end="url(#ar)"/>
+  <path d="M 443 150 C 380 175, 330 175, 264 150" fill="none" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#ar2)"/>
+  <text x="352" y="122" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">mechanistic</text>
+  <text x="352" y="138" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">interpretability</text>
+</svg>
+<figcaption><b>Figure 1.1.</b> In software, people write the algorithm and a compiler makes the binary. In deep learning, training makes the "binary" (the weights) directly. Mech interp tries to go backwards.</figcaption>
+</figure>
+
+<h2 id="nn-basics" data-short="Neural nets in 5 minutes">Neural networks in five minutes</h2>
+
+<p>You need only a few ideas to follow this survey. We explain them here with simple words.</p>
+
+<h3>A neuron</h3>
+<p>A <span class="term" data-term="neuron">neuron</span> takes some input numbers. It multiplies each input by a weight. It adds the results together, plus a constant called the <em>bias</em>. Then it applies a simple function. The most common function is <span class="term" data-term="relu">ReLU</span>: keep the number if it is positive, else output zero.</p>
+
+<div class="mathblock">output = ReLU( w₁·x₁ + w₂·x₂ + w₃·x₃ + b )</div>
+
+<p>The output of the neuron is its <span class="term" data-term="activation">activation</span>. Try the widget below. Move the inputs and see how the activation changes.</p>
+
+<div class="widget" id="neuronWidget">
+  <div class="widget-title">Interactive · One neuron</div>
+  <div class="widget-sub">Weights are fixed (they were "learned"). Inputs change with each example. Line thickness shows weight size. Orange means positive, blue means negative.</div>
+  <svg id="neuronSvg" viewBox="0 0 640 230"></svg>
+  <div class="controls" id="neuronCtl"></div>
+  <div class="readout" id="neuronOut"></div>
+</div>
+
+<h3>Layers and activations</h3>
+<p>A <span class="term" data-term="layer">layer</span> is many neurons side by side. A network is many layers in a row. The first layer reads the input (pixels or words). Each next layer reads the activations of the layer before it. The last layer gives the output.</p>
+
+<p>For one input, each layer produces a list of numbers: its activations. A list of numbers is a <span class="term" data-term="vector">vector</span>. If a layer has 512 neurons, its activation is a point in a space with 512 <span class="term" data-term="dimension">dimensions</span>. Much of this survey is about the <b>geometry</b> of that space: which <span class="term" data-term="direction">directions</span> mean what.</p>
+
+<div class="callout key">
+<span class="label">Key idea</span>
+<p><b>Weights</b> are fixed after training. They are the program. <b>Activations</b> change with each input. They are the data that the program computes on. Mech interp studies both.</p>
+</div>
+
+<h3>Training</h3>
+<p>Training shows the network many examples. For each example, it measures the error. Then it moves every weight a little to make the error smaller. It uses the <span class="term" data-term="gradient">gradient</span> to find the right direction. After millions of steps, the network does the task. But training only optimizes the error. It does not care if the result is easy for humans to read.</p>
+
+<h3>Transformers</h3>
+<p>Modern language models are <b>transformers</b>. They read text as <span class="term" data-term="token">tokens</span> (words or parts of words). Each token has a vector that flows through the model. This vector is called the <span class="term" data-term="residual stream">residual stream</span>. Two kinds of blocks read and write it: <span class="term" data-term="attention heads">attention heads</span> move information between tokens, and <span class="term" data-term="mlp">MLPs</span> process each token on its own. <a href="04-transformers.html">Chapter 4</a> explains this in detail.</p>
+
+<h2 id="what-mechanistic-means" data-short="What 'mechanistic' means">What "mechanistic" means</h2>
+
+<p>Interpretability is a large field. Many methods explain <em>what</em> a model does, or <em>which input parts</em> mattered. Mechanistic interpretability asks a stronger question: <b>what algorithm runs inside, step by step?</b></p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Approach</th><th>Question it asks</th><th>Example</th></tr></thead>
+<tbody>
+<tr><td>Behavioural testing</td><td>What does the model do on these inputs?</td><td>Benchmarks, red-teaming</td></tr>
+<tr><td>Attribution</td><td>Which parts of the input mattered for this output?</td><td>Saliency maps, SHAP, Integrated Gradients</td></tr>
+<tr><td>Probing</td><td>Is information X present in this layer?</td><td>Linear probe for "is this sentence true?"</td></tr>
+<tr><td><b>Mechanistic</b></td><td><b>Which internal parts compute the output, and how?</b></td><td>The induction-head circuit; the IOI circuit; attribution graphs</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The term "mechanistic interpretability" comes from Chris Olah and his collaborators. It became common from about 2020. The line between the approaches is not sharp. Mech interp uses probes and attributions as tools. But its goal is a causal, step-by-step story that you can check.</p>
+
+<div class="callout example">
+<span class="label">Example of a mechanistic claim</span>
+<p>"In GPT-2 small, head 9.9 (one of several 'name mover' heads) copies the name of the indirect object to the final position. Heads 7.3, 7.9, 8.6 and 8.10 tell head 9.9 to <em>not</em> attend to the repeated name." This claim names parts, says what each part does, and can be tested by switching parts off. (<a href="06-circuit-case-studies.html">Chapter 6</a> explains it.)</p>
+</div>
+
+<h2 id="core-objects" data-short="Features, circuits, universality">The three core objects: features, circuits, universality</h2>
+
+<p>In 2020, Chris Olah and colleagues wrote "Zoom In: An Introduction to Circuits". It made three claims. These claims are still the base of the field.</p>
+
+<div class="cards">
+  <div class="card"><h4>1 · Features</h4><p>Features are the basic units of a network. They are directions in activation space. Examples: a curve detector, a "French text" feature. They can be studied and understood.</p></div>
+  <div class="card"><h4>2 · Circuits</h4><p>Features connect through weights to form circuits. A circuit computes new features from old ones. Example: curve detectors plus edge detectors build circle detectors.</p></div>
+  <div class="card"><h4>3 · Universality</h4><p>Similar features and circuits form in different models trained on similar tasks. If this is true, what we learn in one model transfers to others.</p></div>
+</div>
+
+<p>The authors called these claims "speculative". Later work refined the first claim. Most features found so far are directions, but some are not single directions. For example, some language models store days of the week and months on a circle in a small subspace (<a href="https://arxiv.org/abs/2405.14860">Engels et al., 2024</a>).</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 230" id="circuitToy" role="img" aria-label="Toy circuit: edge and curve features in layer 1 combine through weights into a circle feature in layer 2 and a wheel feature in layer 3.">
+  <defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <text x="90" y="20" text-anchor="middle" font-size="12" class="muted">LAYER 1</text>
+  <text x="360" y="20" text-anchor="middle" font-size="12" class="muted">LAYER 2</text>
+  <text x="630" y="20" text-anchor="middle" font-size="12" class="muted">LAYER 3</text>
+  <g font-size="13">
+    <rect x="30" y="40" width="120" height="36" rx="18" fill="var(--green-soft)" stroke="var(--green)"/><text x="90" y="63" text-anchor="middle">curve ◜</text>
+    <rect x="30" y="96" width="120" height="36" rx="18" fill="var(--green-soft)" stroke="var(--green)"/><text x="90" y="119" text-anchor="middle">curve ◞</text>
+    <rect x="30" y="152" width="120" height="36" rx="18" fill="var(--green-soft)" stroke="var(--green)"/><text x="90" y="175" text-anchor="middle">straight edge</text>
+    <rect x="300" y="68" width="120" height="36" rx="18" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="360" y="91" text-anchor="middle">circle</text>
+    <rect x="300" y="140" width="120" height="36" rx="18" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="360" y="163" text-anchor="middle">spoke</text>
+    <rect x="570" y="104" width="120" height="36" rx="18" fill="var(--purple-soft)" stroke="var(--purple)"/><text x="630" y="127" text-anchor="middle">wheel</text>
+  </g>
+  <g stroke-width="2.5" fill="none" marker-end="url(#ar3)">
+    <path d="M150 58 C 220 58, 230 86, 298 86" stroke="var(--accent)"/>
+    <path d="M150 114 C 220 114, 230 86, 298 86" stroke="var(--accent)"/>
+    <path d="M150 170 C 220 170, 230 100, 298 92" stroke="var(--blue)" stroke-dasharray="5 4"/>
+    <path d="M150 170 C 220 170, 230 158, 298 158" stroke="var(--accent)"/>
+    <path d="M420 86 C 490 86, 500 122, 568 122" stroke="var(--accent)"/>
+    <path d="M420 158 C 490 158, 500 122, 568 122" stroke="var(--accent)"/>
+  </g>
+  <text x="225" y="212" font-size="12" class="muted">orange = positive weight (excite) · dashed blue = negative weight (inhibit)</text>
+</svg>
+<figcaption><b>Figure 1.2.</b> A cartoon circuit. Features in one layer combine through weights into new features in the next layer. This picture is simplified, but real circuits of this kind were found in the InceptionV1 vision model (<a href="02-vision-era.html">Chapter 2</a>).</figcaption>
+</figure>
+
+<p>The story would be simple if each neuron were one feature. Sadly, this is often false. Many neurons respond to several unrelated things. This is called <span class="term" data-term="polysemanticity">polysemanticity</span>. The main explanation is <span class="term" data-term="superposition">superposition</span>: the model stores more features than it has neurons. Much of the modern field is a fight with superposition. <a href="03-superposition.html">Chapter 3</a> explains it, and <a href="08-dictionary-learning.html">Chapter 8</a> shows the main tool to undo it.</p>
+
+<h2 id="toolbox" data-short="The toolbox">The toolbox: observe, then intervene</h2>
+
+<p>Mech interp methods fall into two groups.</p>
+
+<ul>
+<li><b>Observational methods</b> look at the model without changing it. They answer "what is represented here?" Examples: feature visualization, probes, sparse autoencoders.</li>
+<li><b>Interventional methods</b> change something inside the model and watch the output. They answer "does this part <em>cause</em> the behaviour?" Examples: ablation, activation patching, steering.</li>
+</ul>
+
+<p>Good research uses both. Observation gives a hypothesis. Intervention tests it. A probe can find information that the model never uses. Only an intervention shows that the model uses it.</p>
+
+<figure class="panel wide">
+<svg viewBox="0 0 960 330" role="img" aria-label="Map of methods. Observe: feature visualization, attribution, probing, logit lens, dictionary learning. Intervene: ablation, activation patching, path patching, causal scrubbing, steering. Combined: circuit discovery and attribution graphs.">
+  <rect x="10" y="10" width="440" height="250" rx="14" fill="var(--blue-soft)"/>
+  <rect x="510" y="10" width="440" height="250" rx="14" fill="var(--accent-soft)"/>
+  <text x="30" y="40" font-size="15" font-weight="800" fill="var(--blue)">OBSERVE — what is represented?</text>
+  <text x="530" y="40" font-size="15" font-weight="800" fill="var(--accent)">INTERVENE — what causes the output?</text>
+  <g font-size="14">
+    <a href="02-vision-era.html"><rect x="30" y="60" width="190" height="40" rx="8" fill="var(--panel)" stroke="var(--rule)"/><text x="125" y="85" text-anchor="middle">Feature visualization</text></a>
+    <a href="02-vision-era.html"><rect x="240" y="60" width="190" height="40" rx="8" fill="var(--panel)" stroke="var(--rule)"/><text x="335" y="85" text-anchor="middle">Saliency / attribution</text></a>
+    <a href="07-probing-steering.html"><rect x="30" y="115" width="190" height="40" rx="8" fill="var(--panel)" stroke="var(--rule)"/><text x="125" y="140" text-anchor="middle">Probing</text></a>
+    <a href="04-transformers.html"><rect x="240" y="115" width="190" height="40" rx="8" fill="var(--panel)" stroke="var(--rule)"/><text x="335" y="140" text-anchor="middle">Logit lens</text></a>
+    <a href="08-dictionary-learning.html"><rect x="30" y="170" width="400" height="40" rx="8" fill="var(--panel)" stroke="var(--blue)" stroke-width="1.5"/><text x="230" y="195" text-anchor="middle" font-weight="700">Dictionary learning (sparse autoencoders)</text></a>
+    <a href="05-causal-methods.html"><rect x="530" y="60" width="190" height="40" rx="8" fill="var(--panel)" stroke="var(--rule)"/><text x="625" y="85" text-anchor="middle">Ablation</text></a>
+    <a href="05-causal-methods.html"><rect x="740" y="60" width="190" height="40" rx="8" fill="var(--panel)" stroke="var(--rule)"/><text x="835" y="85" text-anchor="middle">Activation patching</text></a>
+    <a href="05-causal-methods.html"><rect x="530" y="115" width="190" height="40" rx="8" fill="var(--panel)" stroke="var(--rule)"/><text x="625" y="140" text-anchor="middle">Path patching</text></a>
+    <a href="05-causal-methods.html"><rect x="740" y="115" width="190" height="40" rx="8" fill="var(--panel)" stroke="var(--rule)"/><text x="835" y="140" text-anchor="middle">Causal scrubbing / DAS</text></a>
+    <a href="07-probing-steering.html"><rect x="530" y="170" width="400" height="40" rx="8" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/><text x="730" y="195" text-anchor="middle" font-weight="700">Steering (add a vector, watch behaviour change)</text></a>
+  </g>
+  <text x="230" y="240" text-anchor="middle" font-size="12" class="muted">finds candidate features &amp; hypotheses</text>
+  <text x="730" y="240" text-anchor="middle" font-size="12" class="muted">tests whether they matter</text>
+  <a href="09-circuit-tracing.html"><rect x="250" y="275" width="460" height="46" rx="10" fill="var(--purple-soft)" stroke="var(--purple)" stroke-width="1.5"/>
+  <text x="480" y="303" text-anchor="middle" font-size="15" font-weight="700" fill="var(--purple)">Circuit discovery &amp; attribution graphs (both together)</text></a>
+  <path d="M230 262 L 330 274" stroke="var(--ink-3)" fill="none"/><path d="M730 262 L 630 274" stroke="var(--ink-3)" fill="none"/>
+</svg>
+<figcaption><b>Figure 1.3.</b> The method map for this survey. Click a box to go to its chapter.</figcaption>
+</figure>
+
+<h2 id="why" data-short="Why it matters">Why does this matter?</h2>
+
+<p>People study mech interp for several reasons.</p>
+<ol>
+<li><b>Safety.</b> A model could look good on tests but have hidden goals or unsafe knowledge. If we can read its internal reasoning, we can find problems that tests miss. This is the main reason for much of the funding in the field.</li>
+<li><b>Trust and debugging.</b> If a model fails, we want to know why. Knowing the mechanism helps us fix the cause, not only the symptom.</li>
+<li><b>Science.</b> Neural networks learn real structure from data. Reading them may teach us new facts about language, vision, or even biology. It is also a new kind of science: we have full access to every weight, unlike in neuroscience.</li>
+<li><b>Control.</b> If we know which direction means "refuse" or "Golden Gate Bridge", we can turn it up or down. This gives new ways to steer models.</li>
+</ol>
+
+<div class="callout limit">
+<span class="label">Honest limit</span>
+<p>Mech interp has made real progress, but it is far from complete. Today we can explain small parts of large models, or most of very small models. We cannot yet give a full account of a frontier model. <a href="11-frontier.html">Chapter 11</a> covers the open debates.</p>
+</div>
+
+<h2 id="neuroscience" data-short="Compare: neuroscience">A useful comparison: neuroscience</h2>
+
+<p>Neuroscientists study brains. They record neurons, damage regions, and stimulate cells. Mech interp uses the same moves: we record activations, ablate components, and add steering vectors. But we have three big advantages.</p>
+<ul>
+<li>We can read <b>every</b> neuron and <b>every</b> weight, with no noise.</li>
+<li>We can run the same input again and get exactly the same result.</li>
+<li>We can change any part and see the effect at once. No ethics board is needed.</li>
+</ul>
+<p>Chris Olah listed advantages like these in a 2021 note, "<a href="https://colah.github.io/notes/interp-v-neuro/">Interpretability vs Neuroscience</a>". He argued that researchers should use them "as ruthlessly as possible". Still, the problems are hard. A large model has billions of parameters, and the features we care about are often spread across many neurons.</p>
+
+<h2 id="map" data-short="Map of this survey">How to read this survey</h2>
+
+<p>The chapters follow the history of the field. Each chapter starts with a short summary and ends with a quiz. Underlined words show a definition when you hover over them. Boxes with an orange dot are interactive.</p>
+
+<div class="cards">
+  <a class="card" href="02-vision-era.html"><h4>2 · The birth</h4><p>Saliency maps, feature visualization, curve detectors, and the Circuits thread on vision models.</p></a>
+  <a class="card" href="03-superposition.html"><h4>3 · Superposition</h4><p>Why neurons are messy. Toy models where you can watch superposition appear.</p></a>
+  <a class="card" href="04-transformers.html"><h4>4 · Transformers</h4><p>The residual stream, QK and OV circuits, induction heads, logit lens.</p></a>
+  <a class="card" href="05-causal-methods.html"><h4>5 · Causal tools</h4><p>Ablation, activation patching, path patching, causal scrubbing, ACDC, DAS.</p></a>
+  <a class="card" href="06-circuit-case-studies.html"><h4>6 · Case studies</h4><p>IOI, greater-than, grokking, Othello-GPT, factual recall.</p></a>
+  <a class="card" href="07-probing-steering.html"><h4>7 · Probing &amp; steering</h4><p>Reading and writing concepts with directions. Truth, refusal, personas.</p></a>
+  <a class="card" href="08-dictionary-learning.html"><h4>8 · Dictionary learning</h4><p>Sparse autoencoders, Golden Gate Claude, and the debate about them.</p></a>
+  <a class="card" href="09-circuit-tracing.html"><h4>9 · Circuit tracing</h4><p>Transcoders, attribution graphs, and the "biology" of a large model.</p></a>
+  <a class="card" href="10-new-directions.html"><h4>10 · New directions</h4><p>Models that explain their own activations, developmental interp, chess and RL agents, vision, diffusion and biology models.</p></a>
+  <a class="card" href="11-frontier.html"><h4>11 · Frontier</h4><p>Auditing, safety uses, people, critiques, open problems, and where the field is going.</p></a>
+  <a class="card" href="12-reference.html"><h4>12 · Reference</h4><p>Concept map, full timeline, searchable glossary, reading list.</p></a>
+</div>
+
+<div class="quiz" data-answer="2">
+  <div class="q">What is the main difference between mechanistic interpretability and attribution methods such as saliency maps?</div>
+  <div class="opts">
+    <button>Mech interp only works on vision models.</button>
+    <button>Attribution methods change the weights; mech interp does not.</button>
+    <button>Attribution says which inputs mattered; mech interp tries to find the internal algorithm that computes the output.</button>
+    <button>There is no difference.</button>
+  </div>
+  <div class="why">Saliency and other attribution methods point to important input parts. They do not say <em>how</em> the model used them. Mech interp tries to identify the internal features and circuits and test them causally.</div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <div class="q">A probe can read "is this text in French?" from layer 6 with 99% accuracy. What does this prove?</div>
+  <div class="opts">
+    <button>The information is present in layer 6. It does not prove that the model uses it.</button>
+    <button>The model uses layer 6 to decide the output language.</button>
+    <button>Layer 6 contains a French neuron.</button>
+    <button>The model will fail if layer 6 is removed.</button>
+  </div>
+  <div class="why">Probes are observational. To show use, you must intervene, for example by removing that direction and checking if behaviour changes. <a href="07-probing-steering.html">Chapter 7</a> covers this in detail.</div>
+</div>
+
+
+<div class="callout key" id="takeaways">
+<span class="label">Key takeaways</span>
+<ul>
+<li>A trained network is a large set of learned numbers (weights). Nobody wrote its algorithm, so we must reverse engineer it.</li>
+<li>Mech interp looks for <b>features</b> (what the model represents, usually directions in activation space) and <b>circuits</b> (how features connect through weights).</li>
+<li><b>Universality</b> is the hope that similar features and circuits appear in many models, so that lessons transfer.</li>
+<li>Many neurons mix unrelated concepts (polysemanticity). The main explanation is superposition.</li>
+<li>Observation gives a hypothesis. Only an intervention shows that the model uses something.</li>
+</ul>
+<p><b>Where this leads:</b> <a href="02-vision-era.html">Chapter 2</a> starts the history, with vision models from 2013. If you only care about language models, skim it and go to <a href="03-superposition.html">Chapter 3</a> (superposition) and <a href="04-transformers.html">Chapter 4</a> (transformers).</p>
+</div>
+
+</article>
+</main>
+
+<script src="assets/glossary.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/search-index.js"></script>
+<script src="assets/search.js"></script>
+<script>
+/* ---- One-neuron widget ---- */
+(function () {
+  const svg = document.getElementById("neuronSvg");
+  const ctl = document.getElementById("neuronCtl");
+  const out = document.getElementById("neuronOut");
+  const W = [1.2, -0.8, 0.5], B = -0.3;
+  const X = [0.8, 0.4, 0.6];
+  const names = ["x₁ (has fur)", "x₂ (has wheels)", "x₃ (has ears)"];
+  X.forEach((v, i) => {
+    const lab = MI.el("label", { html: `${names[i]} <input type="range" min="0" max="1" step="0.01" value="${v}"> <output>${v.toFixed(2)}</output>` }, ctl);
+    const inp = lab.querySelector("input"), o = lab.querySelector("output");
+    inp.oninput = () => { X[i] = +inp.value; o.textContent = X[i].toFixed(2); draw(); };
+  });
+  function draw() {
+    svg.innerHTML = "";
+    const ys = [45, 115, 185];
+    const sum = W.reduce((s, w, i) => s + w * X[i], B);
+    const act = Math.max(0, sum);
+    ys.forEach((y, i) => {
+      MI.svg("line", { x1: 120, y1: y, x2: 400, y2: 115, stroke: W[i] > 0 ? "var(--accent)" : "var(--blue)", "stroke-width": 1 + Math.abs(W[i]) * 5, opacity: 0.25 + 0.75 * X[i] }, svg);
+      MI.svg("circle", { cx: 100, cy: y, r: 22, fill: MI.diverge(X[i]), stroke: "var(--ink-3)" }, svg);
+      MI.svg("text", { x: 100, y: y + 5, "text-anchor": "middle", "font-size": 13 }, svg).textContent = X[i].toFixed(2);
+      MI.svg("text", { x: 190, y: y + (115 - y) * 0.25 - 10, "text-anchor": "middle", "font-size": 12, class: "muted" }, svg).textContent = "w=" + W[i];
+    });
+    MI.svg("circle", { cx: 430, cy: 115, r: 34, fill: MI.diverge(Math.min(1, act / 1.5)), stroke: "var(--ink)" , "stroke-width": 1.5}, svg);
+    MI.svg("text", { x: 430, y: 112, "text-anchor": "middle", "font-size": 12 }, svg).textContent = "ReLU";
+    MI.svg("text", { x: 430, y: 128, "text-anchor": "middle", "font-size": 13, "font-weight": 700 }, svg).textContent = act.toFixed(2);
+    MI.svg("line", { x1: 464, y1: 115, x2: 560, y2: 115, stroke: "var(--ink-3)", "stroke-width": 2 }, svg);
+    MI.svg("text", { x: 570, y: 112, "font-size": 13 }, svg).textContent = "activation";
+    MI.svg("text", { x: 570, y: 130, "font-size": 13, "font-weight": 700, fill: act > 0 ? "var(--accent)" : "var(--ink-3)" }, svg).textContent = act > 0 ? "FIRES" : "silent";
+    out.textContent = `sum = 1.2·${X[0].toFixed(2)} − 0.8·${X[1].toFixed(2)} + 0.5·${X[2].toFixed(2)} − 0.3 = ${sum.toFixed(3)}   →   ReLU → ${act.toFixed(3)}`;
+  }
+  draw();
+  MI.onTheme(draw);
+})();
+</script>
+</body>
+</html>

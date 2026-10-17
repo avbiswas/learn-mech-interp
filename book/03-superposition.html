@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Features and Superposition</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .toy-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .toy-grid svg { width: 100%; height: auto; display: block; }
+  .toy-side h5 { font-family: var(--sans); font-size: 0.75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); margin: 0 0 6px; }
+  .stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .stat { background: var(--bg-2); border-radius: 8px; padding: 6px 10px; font-size: 0.78125rem; color: var(--ink-2); }
+  .stat b { display: block; font-size: 1rem; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; }
+  .phase-wrap { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 18px; align-items: center; }
+  .phase-wrap svg { width: 100%; height: auto; }
+  .phase-info { background: var(--bg-2); border-radius: 10px; padding: 14px 16px; font-size: 0.90625rem; line-height: 1.5; min-height: 150px; }
+  .phase-info b { font-size: 0.96875rem; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.8125rem; color: var(--ink-2); margin-top: 8px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .mathblock, .readout { white-space: pre-wrap; }
+  @media (max-width: 760px) { .toy-grid, .phase-wrap { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-chapter="3">
+<main>
+<article class="article">
+
+<div class="kicker">Chapter 3</div>
+<h1>Features and superposition</h1>
+<p class="lede">We hoped that each neuron would mean one thing. Many neurons do not. This chapter explains why: networks pack more concepts than they have neurons, by storing them in directions that are almost, but not fully, perpendicular.</p>
+
+<div class="tldr">
+<h3>In short</h3>
+<ul>
+<li>A <b>feature</b> is a property of the input that the network tracks. Most evidence says that features are <b>directions</b> in activation space.</li>
+<li>Many neurons are <b>polysemantic</b>: one neuron fires for cat faces, car fronts and cat legs.</li>
+<li>The main explanation is <b>superposition</b>. The network stores more features than it has dimensions. It gives them directions that are almost orthogonal.</li>
+<li>Superposition needs two things: features must be <b>sparse</b> (rarely on), and the network needs a <b>nonlinearity</b> (like ReLU) to filter the crosstalk.</li>
+<li>Anthropic's "Toy Models of Superposition" (2022) showed this in tiny networks. Features form pentagons, triangles and tetrahedra, and the switch to superposition is a sharp <b>phase change</b>. You can train one yourself below.</li>
+<li>Because of superposition, single neurons are a bad unit of study. This motivates <b>dictionary learning</b> (<a href="08-dictionary-learning.html">Chapter 8</a>).</li>
+</ul>
+</div>
+
+<div class="callout example" id="learning-path">
+<span class="label">Learning path · Chapter 3 of 12 · about 45 min · 4 widgets · 5 quizzes</span>
+<p><b>Before you start:</b> <a href="01-foundations.html#nn-basics">Chapter 1</a>: an activation is a vector, a point in a space with one axis per neuron. <a href="02-vision-era.html#dogs-cars">Chapter 2: dog heads, cars and superposition</a>: the polysemantic neuron 4e:55 and the first use of the word "superposition".</p>
+<p><b>You will learn:</b></p>
+<ul><li>what a "feature" is, and why most features look like directions</li><li>the linear representation hypothesis and the privileged basis</li><li>why sparse features plus a ReLU let a network store more features than it has neurons</li><li>how to train a toy model in your browser and watch superposition appear</li><li>why superposition is the main obstacle to reading networks</li></ul>
+</div>
+
+
+<!-- ============================================================ -->
+<h2 id="features" data-short="What is a feature?">What is a feature?</h2>
+
+<p>Everyone in the field uses the word "feature". But it is surprisingly hard to define. In "Toy Models of Superposition", Nelson Elhage, Chris Olah and colleagues gave three candidate definitions. They did not choose one as final.</p>
+
+<ol>
+<li><b>Any function of the input.</b> This is too broad. "Cat" and "car" feel like features. "Cat plus car" or "cat minus car" do not. They feel like mixtures.</li>
+<li><b>A property that humans can understand.</b> This is too narrow. The authors wrote: "If AlphaFold discovers some important chemical structure for predicting protein folding, it very well might not be something we initially understand!"</li>
+<li><b>Something that a large enough network would give its own neuron.</b> This is the definition the authors used. If you made the network bigger and bigger, some properties would get a dedicated neuron. Those properties are features. The authors admit that this definition is "slightly circular".</li>
+</ol>
+
+<p>In practice, people use a working definition: <b>a feature is a property of the input that the network represents, such that you can find it inside the activations.</b> Examples: "there is a curve here", "this text is in French", "this token is part of a Python function name", "the Golden Gate Bridge".</p>
+
+<h3>Features as directions</h3>
+
+<p>Recall from <a href="01-foundations.html">Chapter 1</a> that a layer's activation is a <span class="term" data-term="vector">vector</span>: a point in a space with one axis per neuron. Where in that space is a feature?</p>
+
+<p>The common answer is: <b>a feature is a <span class="term" data-term="direction">direction</span></b>. Each feature <i>i</i> has an arrow <span class="math">W<sub>i</sub></span>. For now, W<sub>i</sub> is only a name for that arrow. It is not yet a weight of any network. If the feature is active with strength <span class="math">x<sub>i</sub></span>, the network adds <span class="math">x<sub>i</sub>·W<sub>i</sub></span> to the activation. If several features are active, their arrows add up.</p>
+
+<div class="mathblock">activation  =  x₁·W₁  +  x₂·W₂  +  x₃·W₃  +  …</div>
+
+<p>To read a feature, you take the dot product of the activation with that feature's direction. If the directions are orthogonal (at 90°), the reading is exact. If they are not, other features leak into the reading. This leak is <span class="term" data-term="interference">interference</span>, and it is the center of this chapter.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 270" role="img" aria-label="Left: features aligned with neuron axes. Right: five features in a two-dimensional space, not aligned with the axes.">
+  <defs>
+    <marker id="a31" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+    <marker id="a31b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--blue)"/></marker>
+    <marker id="a31g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--green)"/></marker>
+    <marker id="a31p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--purple)"/></marker>
+    <marker id="a31y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--yellow)"/></marker>
+  </defs>
+  <text x="180" y="22" text-anchor="middle" font-size="14" font-weight="700">A · One feature per neuron</text>
+  <line x1="60" y1="140" x2="300" y2="140" class="rule" stroke-width="1.5"/>
+  <line x1="180" y1="250" x2="180" y2="40" class="rule" stroke-width="1.5"/>
+  <text x="300" y="158" font-size="12" class="muted" text-anchor="end">neuron 1</text>
+  <text x="188" y="48" font-size="12" class="muted">neuron 2</text>
+  <line x1="180" y1="140" x2="282" y2="140" stroke="var(--accent)" stroke-width="3" marker-end="url(#a31)"/>
+  <line x1="180" y1="140" x2="180" y2="58" stroke="var(--blue)" stroke-width="3" marker-end="url(#a31b)"/>
+  <text x="250" y="130" font-size="13" fill="var(--accent)" font-weight="600">"curve"</text>
+  <text x="120" y="80" font-size="13" fill="var(--blue)" font-weight="600">"French"</text>
+  <text x="180" y="268" text-anchor="middle" font-size="12" class="muted">2 features, 2 neurons: clean, monosemantic</text>
+
+  <text x="540" y="22" text-anchor="middle" font-size="14" font-weight="700">B · Five features in two dimensions</text>
+  <line x1="420" y1="140" x2="660" y2="140" class="rule" stroke-width="1.5"/>
+  <line x1="540" y1="250" x2="540" y2="40" class="rule" stroke-width="1.5"/>
+  <text x="660" y="158" font-size="12" class="muted" text-anchor="end">neuron 1</text>
+  <text x="548" y="48" font-size="12" class="muted">neuron 2</text>
+  <!-- pentagon at angles 90, 162, 234, 306, 18 ; r=88 -->
+  <line x1="540" y1="140" x2="540" y2="54" stroke="var(--accent)" stroke-width="3" marker-end="url(#a31)"/>
+  <line x1="540" y1="140" x2="456.3" y2="112.8" stroke="var(--blue)" stroke-width="3" marker-end="url(#a31b)"/>
+  <line x1="540" y1="140" x2="488.3" y2="211.2" stroke="var(--green)" stroke-width="3" marker-end="url(#a31g)"/>
+  <line x1="540" y1="140" x2="591.7" y2="211.2" stroke="var(--purple)" stroke-width="3" marker-end="url(#a31p)"/>
+  <line x1="540" y1="140" x2="623.7" y2="112.8" stroke="var(--yellow)" stroke-width="3" marker-end="url(#a31y)"/>
+  <text x="540" y="268" text-anchor="middle" font-size="12" class="muted">5 features, 2 neurons: each neuron reads several features</text>
+</svg>
+<figcaption><b>Figure 3.1.</b> (A) If each feature has its own neuron, each neuron means one thing. (B) If there are more features than neurons, features become directions that are not aligned with any neuron. Each neuron then responds to several features. This is superposition. Panel B is the real shape that a tiny model learns, as you will see below.</figcaption>
+</figure>
+
+<h3 id="three-objects">Three things that are easy to mix up</h3>
+
+<p>The equation above has three different objects in it. People often mix them up. Take a layer with 1,024 neurons.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Object</th><th>Symbol</th><th>Size</th><th>Changes with the input?</th></tr></thead>
+<tbody>
+<tr><td><b>Activation vector</b></td><td>h</td><td>1,024 numbers, one per neuron</td><td>Yes. Every input gives a new h.</td></tr>
+<tr><td><b>Feature direction</b> (also called "feature vector")</td><td>W<sub>i</sub></td><td>1,024 numbers, for each feature</td><td>No. It is fixed once the model is trained.</td></tr>
+<tr><td><b>Feature activation</b></td><td>x<sub>i</sub></td><td>1 number, for each feature</td><td>Yes. It says how much of feature i is in this input.</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The feature directions are like a fixed list of ingredients. The feature activations are the recipe for one input: how much of each ingredient to use. The activation vector is the finished dish.</p>
+
+<div class="callout example">
+<span class="label">A worked example: 3 features, 2 neurons</span>
+<p>A layer has 2 neurons, so every vector has 2 numbers. The model has 3 features, with these fixed directions:</p>
+<div class="mathblock">W₁ = (1, 0)        W₂ = (0, 1)        W₃ = (0.6, 0.8)</div>
+<p>Now an input arrives in which only feature 3 is on, with strength 0.5. So x = (0, 0, 0.5). The activation vector is:</p>
+<div class="mathblock">h  =  0·W₁ + 0·W₂ + 0.5·W₃  =  (0.3, 0.4)</div>
+<p>Look at what each object tells you:</p>
+<ul>
+<li><b>The neuron values are 0.3 and 0.4.</b> They are not "the amount of each feature". There are 3 features and only 2 neurons, and feature 3 is spread over both neurons.</li>
+<li><b>To read feature 3</b>, take the dot product: h · W₃ = 0.3×0.6 + 0.4×0.8 = <b>0.5</b>. This is correct.</li>
+<li><b>To read feature 1</b>, do the same: h · W₁ = <b>0.3</b>. But feature 1 is off. The true value is 0. This false 0.3 is interference.</li>
+</ul>
+</div>
+
+<p>So here are the answers to three common questions.</p>
+<ol>
+<li><b>Is the activation vector a feature vector?</b> No. The activation vector is a <em>sum</em> of feature vectors, each scaled by how active that feature is.</li>
+<li><b>Does each of the 1,024 numbers give the amount of one feature?</b> Only if every feature lines up with exactly one neuron. With superposition there are more features than neurons, so this cannot be true. The 1,024 numbers are neuron values. You get a feature's amount from a dot product with its direction.</li>
+<li><b>Are the feature directions the columns of the layer's weight matrix?</b> In the toy model later in this chapter, yes. In a real network, no. The next box explains.</li>
+</ol>
+
+<div class="callout warn" id="where-is-w">
+<span class="label">Where is W stored?</span>
+<p><b>In the toy model: in the weights.</b> The toy model is built so that its input is the list of feature amounts x. Then column i of its weight matrix is exactly the direction of feature i. You can open the matrix and read the directions. See <a href="#toy-models">the toy model setup</a>.</p>
+<p><b>In a real network: nowhere as one matrix.</b> A real layer does not receive a clean list of features. It receives the mixed activation of the layer before. So no weight matrix has one column per feature. The rows and columns of real weights belong to <em>neurons</em>: what each neuron reads and what it writes (<a href="04-transformers.html#mlps">Chapter 4</a>).</p>
+<p>In a real network, a feature direction is defined by behavior: it is the direction in which the activation moves when that property is in the input. The weights still cause this. Earlier layers push the activation along W<sub>i</sub>. Later layers read it with dot products. But the list of directions is hidden inside all the weights together. We believe it exists, and we must recover it from the activations.</p>
+<p><b>Later in the course:</b> <a href="08-dictionary-learning.html#anatomy">Chapter 8</a> recovers the list with a sparse autoencoder. There, the feature directions W<sub>i</sub> are the columns of the autoencoder's decoder, and the feature activations x<sub>i</sub> are its hidden values. <a href="07-probing-steering.html">Chapter 7</a> finds single directions one at a time, with probes and steering vectors.</p>
+</div>
+
+<div class="quiz" data-answer="2">
+  <div class="q">A layer has 1,024 neurons. For one input, neuron 7 has the value 2.1. What does this tell you?</div>
+  <div class="opts">
+    <button>Feature 7 is present with strength 2.1.</button>
+    <button>Column 7 of the weight matrix is the direction of feature 7.</button>
+    <button>The activation vector has the value 2.1 along the axis of neuron 7. Several features may have added to it.</button>
+    <button>The layer stores exactly 1,024 features.</button>
+  </div>
+  <div class="why">A neuron value is one coordinate of the activation vector. Under superposition, many feature directions have a non-zero part along that axis, so several features can add to the same neuron. To measure one feature, you need its direction and a dot product.</div>
+</div>
+
+<h3>Early evidence: word arithmetic</h3>
+
+<p>The first famous evidence for directions came from word embeddings. In 2013, Tomas Mikolov and colleagues trained word2vec. They found that vector arithmetic works on meanings:</p>
+
+<div class="mathblock">vector("king") − vector("man") + vector("woman")  ≈  vector("queen")</div>
+
+<p>The step from "man" to "woman" is about the same arrow as the step from "king" to "queen". So "gender" seems to be one direction. "Royalty" seems to be another. One caveat: the trick usually works only if you exclude the input words from the search for the nearest word.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 220" role="img" aria-label="Parallelogram: man, woman, king, queen. The gender arrow and the royalty arrow are parallel on both sides.">
+  <defs>
+    <marker id="a32" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+    <marker id="a32b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--blue)"/></marker>
+  </defs>
+  <g font-size="15" font-weight="600">
+    <circle cx="200" cy="170" r="6" fill="var(--ink)"/><text x="200" y="198" text-anchor="middle">man</text>
+    <circle cx="380" cy="170" r="6" fill="var(--ink)"/><text x="380" y="198" text-anchor="middle">woman</text>
+    <circle cx="300" cy="50" r="6" fill="var(--ink)"/><text x="300" y="34" text-anchor="middle">king</text>
+    <circle cx="480" cy="50" r="6" fill="var(--ink)"/><text x="480" y="34" text-anchor="middle">queen</text>
+  </g>
+  <line x1="208" y1="170" x2="370" y2="170" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#a32)"/>
+  <line x1="308" y1="50" x2="470" y2="50" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#a32)"/>
+  <line x1="204" y1="163" x2="295" y2="58" stroke="var(--blue)" stroke-width="2.5" marker-end="url(#a32b)"/>
+  <line x1="384" y1="163" x2="475" y2="58" stroke="var(--blue)" stroke-width="2.5" marker-end="url(#a32b)"/>
+  <text x="290" y="160" text-anchor="middle" font-size="13" fill="var(--accent)">"gender" direction</text>
+  <text x="560" y="115" font-size="13" fill="var(--blue)">"royalty" direction</text>
+</svg>
+<figcaption><b>Figure 3.2.</b> In word2vec, the same arrow takes "man" to "woman" and "king" to "queen". Concepts behave like directions that you can add and subtract.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="linear-representation" data-short="Linear representation hypothesis">The linear representation hypothesis</h2>
+
+<p>The <span class="term" data-term="linear representation hypothesis">linear representation hypothesis</span> says that models store most concepts as directions, and that several concepts combine by adding. Note one point: the <em>features</em> can be very nonlinear functions of the input. "Is this a dog?" is a hard function of the pixels. Only the map from features to the activation vector is linear.</p>
+
+<h3>The idea in one example</h3>
+<p>Take four words: <i>man</i>, <i>king</i>, <i>woman</i>, <i>queen</i>. Suppose the model has one direction that means "royal" and another that means "female". The hypothesis says that the activation for each word is built like a recipe:</p>
+<div class="mathblock">activation(king)  = base + 1·royal + 0·female
+activation(queen) = base + 1·royal + 1·female
+activation(woman) = base + 0·royal + 1·female</div>
+<p>Three claims are packed into this recipe. Each one is something you can test.</p>
+<ol>
+<li><b>Composition is addition.</b> "Royal and female" is just the royal arrow plus the female arrow. Nothing special happens when they combine.</li>
+<li><b>Intensity is length.</b> "Very royal" is the same arrow, only longer. The direction says <em>what</em>; the length says <em>how much</em>.</li>
+<li><b>Reading is one dot product.</b> To ask "how royal is this?", project the activation onto the royal arrow. A single weighted sum does it. This is exactly what a <em>linear probe</em> does, and adding an arrow on purpose is what <em>steering</em> does (<a href="07-probing-steering.html">Chapter 7</a>).</li>
+</ol>
+<p>Try all three below. Then lower the angle between the two arrows. When the arrows are no longer perpendicular, the royal probe starts to "see" some femaleness, even though none was added. That leak is called <b>interference</b>, and it is the central problem of the rest of this chapter.</p>
+
+<div class="widget" id="lrhWidget">
+  <div class="widget-title">Interactive · Features are arrows that add</div>
+  <div class="widget-sub">The black arrow is the activation. It is built by walking along the royal arrow, then along the female arrow. The bars on the right are two linear probes: each is one dot product.</div>
+  <div class="controls">
+    <label>royal <input type="range" id="lrhA" min="0" max="1.5" step="0.01" value="1"> <output id="lrhAo">1.00</output></label>
+    <label>female <input type="range" id="lrhB" min="0" max="1.5" step="0.01" value="0"> <output id="lrhBo">0.00</output></label>
+    <label>angle between arrows <input type="range" id="lrhT" min="30" max="90" step="1" value="90"> <output id="lrhTo">90°</output></label>
+  </div>
+  <div class="controls presets" id="lrhPresets">
+    <button class="btn" data-a="0" data-b="0">man</button>
+    <button class="btn" data-a="1" data-b="0">king</button>
+    <button class="btn" data-a="0" data-b="1">woman</button>
+    <button class="btn" data-a="1" data-b="1">queen = king − man + woman</button>
+    <button class="btn" data-a="1.5" data-b="0">very royal (×1.5)</button>
+  </div>
+  <svg id="lrhSvg" viewBox="0 0 640 300" style="width:100%;height:auto"></svg>
+  <div class="readout" id="lrhOut"></div>
+</div>
+
+<p>What would a <em>non</em>-linear representation look like? Imagine the model stored "queen" at some point that has nothing to do with king + woman, or stored "very royal" in a different direction from "royal". Then no single probe could read royalty, and adding an arrow would not steer. The hypothesis is a bet that this is rare. The "onion" counterexample at the end of this section shows it can happen.</p>
+
+<p>Elhage et al. gave three reasons why networks would prefer linear representations:</p>
+<ul>
+<li><b>They are natural.</b> A neuron computes a weighted sum, which is a template match. Template matches give linear outputs.</li>
+<li><b>They are easy to read.</b> A neuron in the next layer can select a feature in one step, with one weighted sum.</li>
+<li><b>They generalize well.</b> Directions let the network reuse the same "gender" arrow for many word pairs.</li>
+</ul>
+
+<p>They also gave a ladder of properties. Each step is a stronger claim than the step before.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>#</th><th>Property</th><th>Meaning</th><th>How common?</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Decomposability</td><td>Activations break into features that you can understand one at a time.</td><td>Thought to be widespread</td></tr>
+<tr><td>2</td><td>Linearity</td><td>Features are directions, and they add.</td><td>Thought to be widespread</td></tr>
+<tr><td>3</td><td>Superposition</td><td>There are more feature directions than dimensions. (Technically: WᵀW is not invertible.)</td><td>Common</td></tr>
+<tr><td>4</td><td>Basis-aligned</td><td>Each feature lines up with exactly one neuron.</td><td>Only sometimes</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="paper">
+  <div class="yr">2023</div>
+  <div><div class="t"><a href="https://arxiv.org/abs/2311.03658">The Linear Representation Hypothesis and the Geometry of Large Language Models</a></div>
+  <div class="a">Kiho Park, Yo Joong Choe, Victor Veitch · ICML 2024</div>
+  <div class="s">Makes "linear representation" precise using pairs of words that differ in one concept (male→female, English→French). Shows that the "output" version of a direction works as a probe and the "input" version works as a steering vector. Tested on LLaMA-2 7B.</div></div>
+</div>
+
+<p>Park and colleagues found a subtle point. In a space with no special axes, the normal dot product is not the "right" way to measure angles. They proposed a <b>causal inner product</b>, based on the covariance of the unembedding vectors. (The unembedding is the matrix that turns the model's last vector into one score per word; see <a href="04-transformers.html#anatomy">Chapter 4</a>.) Under this inner product, concepts that vary independently (like gender and language) become orthogonal. Under the normal dot product, they do not.</p>
+
+<p>In July 2024, Chris Olah (with editing by Adam Jermyn) added a clarification. "Linear" means <b>mathematically linear</b>, not "one-dimensional". It has two parts:</p>
+<ol>
+<li><b>Composition is addition.</b> A feature is present when its vector is added.</li>
+<li><b>Intensity is scaling.</b> A stronger feature gives a longer vector.</li>
+</ol>
+<p>So a feature can be a circle or a curve and still be "linear", as long as it adds to the rest. We will see such features at the end of this chapter.</p>
+
+<p>The hypothesis is a strong default, not a law. In 2024, Róbert Csordás and colleagues found a clear counterexample. Small recurrent networks that had to repeat a sequence stored each position at a different <em>size</em> (order of magnitude), not in a different direction. They called these "onion" representations. You cannot find them in separate linear subspaces. Larger versions of the same networks did use linear representations. The lesson: check linearity, do not assume it.</p>
+
+<!-- ============================================================ -->
+<h2 id="privileged-basis" data-short="Privileged basis">Neurons and the privileged basis</h2>
+
+<p>If features are directions, do the neuron axes matter at all? It depends on the layer. And the answer decides something practical: whether looking at one neuron at a time can tell you anything.</p>
+
+<h3>Why you should care</h3>
+
+<p>Almost everything in <a href="02-vision-era.html">Chapter 2</a> worked by looking at single neurons. Pick a neuron, find the inputs that make it fire, and give it a name. That is how researchers found curve detectors, and it is how they found the strange neuron 4e:55. It is the cheapest method in interpretability, because a neuron is just one number that you can read off directly.</p>
+
+<p>Now try the same method on a transformer. Most of its information travels in the <span class="term" data-term="residual stream">residual stream</span> (the main vector that flows through the model; <a href="04-transformers.html#residual-stream">Chapter 4</a>). You pick coordinate 512, look at what makes it large, and you get a mess. Is the method broken? Did you just pick a bad coordinate?</p>
+
+<p>Neither. In that layer, coordinate 512 is not a real object at all. It comes from how we chose to write the numbers down. The model itself has no way to notice it. The idea of a privileged basis tells you, before you spend a week on it, which layers have real neurons and which do not.</p>
+
+<h3>A layer where the axes are arbitrary</h3>
+
+<p>Start with a layer that only feeds into a weighted sum. Nothing else touches it.</p>
+
+<div class="callout example">
+<span class="label">A worked example: rotate the layer, get the same model</span>
+<p>The layer has 2 coordinates. For one input, h = (3, 1). The next layer reads it with the weights w = (1, 2), so its output is 3·1 + 1·2 = 5.</p>
+<p>Now turn the whole space by 90°. Every activation gets turned, and we turn the reading weights by the same amount.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th></th><th>Activation h</th><th>Reading weights w</th><th>Output w · h</th></tr></thead>
+<tbody>
+<tr><td>Original</td><td>(3, 1)</td><td>(1, 2)</td><td>5</td></tr>
+<tr><td>Turned by 90°</td><td>(−1, 3)</td><td>(−2, 1)</td><td>5</td></tr>
+</tbody>
+</table>
+</div>
+<p>The output is 5 both times, and this holds for every input. So these are two copies of the same model. But coordinate 1 was 3 in the first copy and −1 in the second. Training could have ended at either copy. So what would it mean to ask what coordinate 1 "represents"?</p>
+</div>
+
+<p>The general rule: take any invertible matrix M. Multiply the layer's activations by M, and multiply the next layer's weights by M⁻¹. The two changes cancel, and the model computes exactly the same function. A layer where you can do this for free has a <b>non-privileged basis</b>. Its coordinates mean nothing on their own. Only directions survive the rotation.</p>
+
+<p>Word embeddings are the classic case. Training word2vec only ever uses dot products between vectors. If you rotate every vector by the same rotation, every dot product stays the same, so the rotated model is exactly as good. The <a href="#linear-representation">king − man + woman</a> arithmetic still works, because all the arrows turned together. But "dimension 17" now holds completely different numbers. The gender <em>direction</em> is a fact about the model. Dimension 17 is not.</p>
+
+<p>The residual stream behaves the same way, because the model only reads from it and writes to it with linear maps. This is why later chapters stop asking about coordinates and search for directions instead, with probes (<a href="07-probing-steering.html">Chapter 7</a>) and sparse autoencoders (<a href="08-dictionary-learning.html">Chapter 8</a>).</p>
+
+<h3>A layer where the axes are fixed</h3>
+
+<p>Now put a ReLU on the layer. ReLU looks at each coordinate separately and cuts it at zero. So it does care which axes you use. Take h = (1, −1) and compare two paths.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Path</th><th>Steps</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>ReLU in the original axes</td><td>(1, −1) → cut negatives</td><td>(1, 0)</td></tr>
+<tr><td>Turn 45°, ReLU, turn back</td><td>(1, −1) → (1.41, 0) → nothing to cut → turn back</td><td>(1, −1)</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The results differ. In the first path, ReLU deleted the second coordinate. In the second path, the same vector had no negative coordinate, so ReLU did nothing. You can no longer rotate the layer and fix it up in the next layer's weights. The axes that ReLU acts on are built into the model. We call this a <span class="term" data-term="privileged basis">privileged basis</span>, and its coordinates are what we call <b>neurons</b>. Any elementwise nonlinearity does this, GELU included.</p>
+
+<p>You have already seen the evidence that this matters in real networks. In Network Dissection (<a href="02-vision-era.html#network-dissection">Chapter 2</a>), the authors rotated the conv5 layer of AlexNet after training. Accuracy did not change, but there were about 80% fewer unique concept detectors. If the neuron axes were arbitrary, the rotated axes should have been just as readable as the original ones. They were not. Training had lined many concepts up with the exact axes that ReLU acts on.</p>
+
+<h3>Which layers are which</h3>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Layer</th><th>Privileged basis?</th><th>Why</th><th>What to study</th></tr></thead>
+<tbody>
+<tr><td>Word embeddings</td><td>No</td><td>Only dot products are used.</td><td>Directions</td></tr>
+<tr><td>Transformer residual stream</td><td>No</td><td>Only read and written by linear maps.</td><td>Directions</td></tr>
+<tr><td>Hidden layer h of this chapter's <a href="#toy-models">toy model</a></td><td>No</td><td>h = Wx is only used by another linear map.</td><td>Directions</td></tr>
+<tr><td>Hidden layer of a transformer MLP</td><td>Yes</td><td>ReLU or GELU acts on each neuron.</td><td>Neurons, with care</td></tr>
+<tr><td>Channels of a convolutional network</td><td>Yes</td><td>ReLU acts on each channel.</td><td>Neurons, with care</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Why "with care"</h3>
+
+<p>A privileged basis <em>encourages</em> features to align with neurons. It does not <em>guarantee</em> it.</p>
+
+<p>The encouragement comes from how ReLU works. It can switch one neuron off without touching the others. So if a feature sits on its own neuron, the layer can cut that feature at zero by itself. If the feature is spread over several neurons, each cut hits a mixture of features. Training therefore has a reason to give a feature its own neuron when it can.</p>
+
+<p>But it cannot always. If the layer needs more features than it has neurons, some neurons must carry several. Neuron 4e:55 lives in a privileged basis and still responds to cat faces and car fronts.</p>
+
+<p>This is also why mixed neurons count as a puzzle. In a non-privileged basis, a coordinate that mixes many features is what you expect, because the coordinate was arbitrary to begin with. In a privileged basis, the network had a reason to keep its neurons clean and did not. Something pushed against that reason. The rest of this chapter argues that the something is superposition.</p>
+
+<div class="callout key">
+<span class="label">Key idea</span>
+<p>It only makes sense to ask "what does this neuron mean?" in a layer with a privileged basis. Even there, the answer can be messy, as the next section shows.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="polysemantic" data-short="Polysemantic neurons">Polysemantic neurons: the evidence</h2>
+
+<p>A neuron is <span class="term" data-term="monosemantic">monosemantic</span> if it responds to one clear thing. It is <span class="term" data-term="polysemantic">polysemantic</span> if it responds to several unrelated things.</p>
+
+<h3>In vision models</h3>
+<p>In "Zoom In" (2020), Olah and colleagues described a neuron in the vision model InceptionV1. In their words: "InceptionV1 contains one neuron that responds to cat faces, fronts of cars, and cat legs." This is neuron <b>4e:55</b>. Feature visualization shows that it is not looking for something cats and cars share. It looks for the eyes and whiskers of a cat, for furry legs, and for shiny fronts of cars. These are three different things.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 250" role="img" aria-label="Two bar charts of top activating examples. A monosemantic neuron: all top examples are curves. A polysemantic neuron: top examples are a mix of cat faces, car fronts and cat legs.">
+  <text x="180" y="22" text-anchor="middle" font-size="14" font-weight="700">Monosemantic neuron</text>
+  <text x="540" y="22" text-anchor="middle" font-size="14" font-weight="700">Polysemantic neuron (like 4e:55)</text>
+  <g id="hist1"></g><g id="hist2"></g>
+  <line x1="40" y1="200" x2="320" y2="200" class="rule"/><line x1="400" y1="200" x2="680" y2="200" class="rule"/>
+  <text x="180" y="220" text-anchor="middle" font-size="12" class="muted">top 14 inputs, sorted by activation →</text>
+  <text x="540" y="220" text-anchor="middle" font-size="12" class="muted">top 14 inputs, sorted by activation →</text>
+  <g font-size="12">
+    <rect x="60" y="232" width="10" height="10" fill="var(--green)"/><text x="76" y="241">curve</text>
+    <rect x="420" y="232" width="10" height="10" fill="var(--accent)"/><text x="436" y="241">cat face</text>
+    <rect x="510" y="232" width="10" height="10" fill="var(--blue)"/><text x="526" y="241">car front</text>
+    <rect x="610" y="232" width="10" height="10" fill="var(--purple)"/><text x="626" y="241">cat leg</text>
+  </g>
+</svg>
+<figcaption><b>Figure 3.3.</b> A schematic of what researchers see when they sort a neuron's strongest inputs. For a monosemantic neuron, all top inputs share one concept. For a polysemantic neuron, the top inputs come from unrelated concepts. (Illustrative bars, not real data.)</figcaption>
+</figure>
+
+<p>Elhage et al. also note that in InceptionV1, the fraction of polysemantic neurons <b>grows with depth</b>. Their explanation: deeper features are more abstract and rarer. Rarer features are better candidates for superposition, as we will see.</p>
+
+<h3>In language models</h3>
+<p>Neurons in the first MLP layer of transformer language models are often extremely polysemantic. One reason may be that early layers must separate the same token in different contexts. For example, "die" means different things in English, German, Dutch and Afrikaans. Each of these context features is very rare.</p>
+<p>Many language-model neurons also show a pattern: their <em>top</em> activations look clean, but their weaker activations are a mess of unrelated things. This "primary feature plus weak secondary features" pattern appears in the toy models too.</p>
+
+<h3>Polysemanticity is not the same as superposition</h3>
+<p>These two words are easy to mix up.</p>
+<ul>
+<li><b>Polysemanticity</b> is an <em>observation</em> about a neuron: it responds to many unrelated things.</li>
+<li><b>Superposition</b> is a <em>hypothesis</em> about a representation: it holds more features than it has dimensions.</li>
+</ul>
+<p>Superposition causes polysemanticity in a privileged basis. But polysemanticity can have other causes. In 2023, Victor Lecomte and colleagues showed <b>incidental polysemanticity</b>. Random initialization can put two features on the same neuron by chance. Training then makes the overlap stronger. This can happen even when there are enough neurons for every feature.</p>
+
+<div class="quiz" data-answer="1">
+  <div class="q">You find a direction in the transformer residual stream. You ask: "Is coordinate 512 of the residual stream a French-text neuron?" Why is this question badly formed?</div>
+  <div class="opts">
+    <button>Because the residual stream has too few dimensions.</button>
+    <button>Because the residual stream has no privileged basis: you can rotate it without changing the model, so single coordinates have no special meaning.</button>
+    <button>Because French text is never represented linearly.</button>
+    <button>Because coordinates in the residual stream are always polysemantic.</button>
+  </div>
+  <div class="why">Nothing in the residual stream acts on single coordinates (no elementwise nonlinearity is applied to it directly). Any rotation can be undone by the weights that read from it. So we must look for directions, not coordinates.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="hypothesis" data-short="The superposition hypothesis">The superposition hypothesis</h2>
+
+<p>Here is the hypothesis in the words of Elhage et al. (2022):</p>
+
+<div class="callout key">
+<span class="label">The superposition hypothesis</span>
+<p>"Neural networks 'want to represent more features than they have neurons', so they exploit a property of high-dimensional spaces to simulate a model with many more neurons."</p>
+</div>
+
+<p>And in more detail: features are stored as <b>almost-orthogonal</b> directions. Because they are only almost orthogonal, one active feature looks like other features slightly active. This "noise" has a cost. But if features are sparse, the cost can be smaller than the benefit of storing many more features.</p>
+
+<p>A good mental picture: the real network is a small network that is <b>"noisily simulating"</b> a much larger, very sparse network. The larger network is the one we want to read.</p>
+
+<h3>Why the world makes superposition attractive</h3>
+<p>Think about all the concepts a language model could use: every person, place, programming function, legal term, chemical, and joke format. There are millions. But any one sentence uses only a few. So each concept is <span class="term" data-term="sparsity">sparse</span>: it is off for almost all inputs. If two features are almost never on together, they can share space with little harm.</p>
+
+<h3>Two ingredients are both necessary</h3>
+<p>Superposition means accepting interference: when one feature is on, the others read small wrong values. Two things make that acceptable. A <b>nonlinearity</b> lets the network throw small wrong values away. <b>Sparsity</b> makes sure the wrong values usually <em>are</em> small, because features rarely fire together. Below, both are shown on the same tiny model: five features squeezed into a two-dimensional space, arranged as a pentagon. This is exactly the shape the toy model learns later in this chapter.</p>
+
+<h3>Ingredient 1: a nonlinearity throws interference away</h3>
+<p>Turn on feature 1 alone. The hidden vector h is just the feature 1 arrow. To read feature <i>j</i>, the model takes the dot product of h with arrow <i>j</i>. Because the arrows are not perpendicular, the four off features do not read 0. Their neighbours read +0.31 (cos 72°) and the far ones read −0.81 (cos 144°).</p>
+<ul>
+<li>In <b>Linear</b> mode, those wrong values go straight to the output. A bias cannot help: shifting every output by the same amount fixes nothing. This is why the best purely linear model never uses superposition. It keeps only as many features as it has dimensions (that is PCA) and drops the rest.</li>
+<li>In <b>ReLU</b> mode, every negative reading becomes 0. That removes the −0.81s for free.</li>
+<li>Now lower the bias to about −0.35. The small positive readings (+0.31) fall below zero too, and the ReLU removes them as well. The price: the true feature reads a bit low (0.65 instead of 1). A weak wrong signal is gone; a strong right signal survives.</li>
+</ul>
+
+<div class="widget" id="reluWidget">
+  <div class="widget-title">Interactive · Five features in two dimensions</div>
+  <div class="widget-sub">Click the feature chips to turn features on (value 1). Left: the five stored arrows and the hidden vector h. Right: for each feature, the dashed box is the true value, the pale bar is the raw reading (arrow · h + bias), and the solid bar is the output.</div>
+  <div class="controls">
+    <span class="seg" id="reluFeats"><button class="on" data-k="0">f₁</button><button data-k="1">f₂</button><button data-k="2">f₃</button><button data-k="3">f₄</button><button data-k="4">f₅</button></span>
+    <label>bias b <input type="range" id="reluB" min="-0.6" max="0.2" step="0.01" value="0"> <output id="reluBo">0.00</output></label>
+    <span class="seg" id="reluMode"><button class="on" data-m="relu">ReLU</button><button data-m="lin">Linear</button></span>
+  </div>
+  <svg id="reluSvg" viewBox="0 0 640 260" style="width:100%;height:auto"></svg>
+  <div class="readout" id="reluOut"></div>
+</div>
+
+<p>Now turn on <b>two</b> neighbouring features, f₁ and f₂. Each one adds +0.31 of false signal to the other's neighbours, and those false signals stack up. Some now pass the bias, and the outputs go wrong. The ReLU can only clean up interference that is small. Interference stays small only if few features are on at once. That is the second ingredient.</p>
+
+<h3>Ingredient 2: sparsity keeps collisions rare</h3>
+<p>Let each feature be on with probability <i>p</i> = 1 − <i>S</i>, where <i>S</i> is the <span class="term" data-term="sparsity">sparsity</span>. The left panel draws 40 random inputs. Each column is one input; a dot means that feature is on. Columns where two or more features are on at once are <b>collisions</b>, marked in red. In a collision, the pentagon model makes errors like the ones you just saw.</p>
+<p>The right panel compares two strategies, each with its best bias, over thousands of random inputs:</p>
+<ul>
+<li><b>Keep 2, drop 3</b> (what a linear model, i.e. PCA, does): two features get their own perpendicular directions and are always perfect. Three features are never stored. The model can only guess their average.</li>
+<li><b>Pentagon</b> (superposition): all five are stored, with a ReLU and bias to clean up interference.</li>
+</ul>
+
+<div class="widget" id="sparseWidget">
+  <div class="widget-title">Interactive · When does superposition pay?</div>
+  <div class="widget-sub">Drag the sparsity slider. The y-axis on the right is the fraction of the input's signal that the model fails to reconstruct (lower is better).</div>
+  <div class="controls">
+    <label>sparsity S <input type="range" id="spS" min="0" max="0.97" step="0.01" value="0.2"> <output id="spSo">0.20</output></label>
+    <button class="btn" id="spRe">New samples</button>
+  </div>
+  <svg id="sparseSvg" viewBox="0 0 640 250" style="width:100%;height:auto"></svg>
+  <div class="readout" id="spOut"></div>
+</div>
+
+<p>When features are dense, most inputs are collisions, and the pentagon is swamped by interference. Giving up three features entirely is the better deal. As features get sparser, collisions vanish. Then almost every input has at most one feature on, and that is exactly the case the ReLU handles well. The pentagon wins, and the gap grows with sparsity. Notice also the best bias: it becomes more negative as features get sparser, because the ReLU threshold is doing more of the work.</p>
+<p>So the two ingredients do different jobs. The nonlinearity <b>filters</b> interference; sparsity <b>keeps interference small enough to filter</b>. Remove either one and superposition stops paying.</p>
+
+<p>The next sections look at each piece more closely: how much room high-dimensional space has, and the smallest possible case of ReLU filtering.</p>
+
+<!-- ============================================================ -->
+<h2 id="room" data-short="Room in high dimensions">How much room is there in high dimensions?</h2>
+
+<p>In <i>d</i> dimensions, you can fit only <i>d</i> directions that are exactly orthogonal. But if you allow a small error, you can fit far more. The number of directions with pairwise |cosine| below a small ε grows <b>exponentially</b> with <i>d</i>. This follows from the <b>Johnson–Lindenstrauss lemma</b> (1984) and from a fact called concentration of measure.</p>
+
+<p>Random unit vectors in <i>d</i> dimensions have cosine similarities that are roughly normal with mean 0 and spread 1/√<i>d</i>. So in high dimensions, random directions are almost always nearly perpendicular. Try it.</p>
+
+<div class="widget" id="orthoWidget">
+  <div class="widget-title">Interactive · Random directions are almost orthogonal</div>
+  <div class="widget-sub">Draw N random unit vectors in d dimensions. The histogram shows the cosine similarity of every pair. Cosine 0 means 90°. Watch the spread shrink as d grows.</div>
+  <div class="controls">
+    <label>dimensions d <input type="range" id="orthoD" min="0" max="9" step="1" value="3"> <output id="orthoDo">20</output></label>
+    <label>vectors N <input type="range" id="orthoN" min="20" max="400" step="10" value="200"> <output id="orthoNo">200</output></label>
+    <button class="btn" id="orthoRe">Redraw</button>
+  </div>
+  <svg id="orthoSvg" viewBox="0 0 640 230" style="width:100%;height:auto"></svg>
+  <div class="readout" id="orthoOut"></div>
+</div>
+
+<p>Here are numbers from a quick simulation with random vectors:</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Dimensions d</th><th>Vectors N</th><th>Mean |cos|</th><th>Max |cos|</th></tr></thead>
+<tbody>
+<tr><td>2</td><td>10</td><td>0.69</td><td>1.00</td></tr>
+<tr><td>10</td><td>100</td><td>0.26</td><td>0.88</td></tr>
+<tr><td>100</td><td>1,000</td><td>0.080</td><td>0.51</td></tr>
+<tr><td>1,000</td><td>10,000</td><td>0.025</td><td>0.18</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>In 1,000 dimensions, 10,000 <em>random</em> directions are all within about 10° of perpendicular. A trained network can place directions even better than random. A real model's residual stream has thousands of dimensions. So it has room for a huge number of almost-orthogonal features.</p>
+
+<h3>A second fact: compressed sensing</h3>
+<p>Normally, if you project a vector into fewer dimensions, you lose information. You cannot get it back. But around 2006, Candès, Romberg, Tao and Donoho showed an exception. If the vector is <b>sparse</b> (only a few non-zero entries), you can often recover it exactly from far fewer measurements. This field is called <b>compressed sensing</b>. Superposition is a cousin of it. In the toy model, the ReLU plus bias acts as a cheap, one-step decoder.</p>
+
+<!-- ============================================================ -->
+<h2 id="interference" data-short="How ReLU filters interference">How a ReLU filters interference</h2>
+
+<p>Let us take the smallest possible case: <b>two features in one dimension</b>. The network gives feature 1 the direction +1 and feature 2 the direction −1. They point in opposite directions. This is called an <b>antipodal pair</b>.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 150" role="img" aria-label="A number line. Feature 1 is stored at plus one, feature 2 at minus one. They are antipodal.">
+  <defs><marker id="a34" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+  <marker id="a34b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--blue)"/></marker></defs>
+  <line x1="80" y1="70" x2="640" y2="70" class="rule" stroke-width="2"/>
+  <line x1="360" y1="60" x2="360" y2="80" stroke="var(--ink-3)" stroke-width="2"/>
+  <text x="360" y="100" text-anchor="middle" font-size="12" class="muted">0</text>
+  <line x1="360" y1="70" x2="580" y2="70" stroke="var(--accent)" stroke-width="4" marker-end="url(#a34)"/>
+  <line x1="360" y1="70" x2="140" y2="70" stroke="var(--blue)" stroke-width="4" marker-end="url(#a34b)"/>
+  <text x="580" y="50" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent)">W₁ = +1</text>
+  <text x="140" y="50" text-anchor="middle" font-size="14" font-weight="700" fill="var(--blue)">W₂ = −1</text>
+  <text x="360" y="130" text-anchor="middle" font-size="13" class="muted">the one hidden dimension h</text>
+</svg>
+<figcaption><b>Figure 3.4.</b> Two features share one dimension by pointing in opposite directions. When feature 1 is on, h is positive. When feature 2 is on, h is negative.</figcaption>
+</figure>
+
+<p>To decode, the network reads h with each feature's direction, adds a bias, and applies ReLU:</p>
+<div class="mathblock">out₁ = ReLU( +h + b )      out₂ = ReLU( −h + b )</div>
+
+<p>Suppose only feature 1 is on, with value 0.8. Then h = 0.8. The reading for feature 2 is −0.8. This is <b>negative interference</b>. A ReLU turns it into 0. So the network gets the right answer for both features. The ReLU makes negative interference free. Use the demo to check this, and to see when it fails.</p>
+
+<div class="widget" id="interfWidget">
+  <div class="widget-title">Interactive · Two features, one dimension</div>
+  <div class="widget-sub">Set the true feature values. The model squeezes them into h = x₁ − x₂, then tries to recover them. Compare with and without the ReLU.</div>
+  <div class="controls">
+    <label>x₁ <input type="range" id="ifx1" min="0" max="1" step="0.01" value="0.8"> <output id="ifx1o">0.80</output></label>
+    <label>x₂ <input type="range" id="ifx2" min="0" max="1" step="0.01" value="0"> <output id="ifx2o">0.00</output></label>
+    <label>bias b <input type="range" id="ifb" min="-0.3" max="0.3" step="0.01" value="0"> <output id="ifbo">0.00</output></label>
+    <span class="seg" id="ifMode"><button class="on" data-m="relu">ReLU</button><button data-m="lin">Linear</button></span>
+  </div>
+  <svg id="interfSvg" viewBox="0 0 640 210" style="width:100%;height:auto"></svg>
+  <div class="readout" id="interfOut"></div>
+</div>
+
+<p>Three lessons come from this demo:</p>
+<ol>
+<li>With ReLU and only one feature on, recovery is perfect. Negative interference is clipped.</li>
+<li>Without ReLU (linear mode), the off feature reads as a negative number. The error is large.</li>
+<li>When <b>both</b> features are on, they cancel inside h, and the model fails. This is the price of superposition. It is cheap only if both features are rarely on at the same time. That is why sparsity matters.</li>
+</ol>
+
+<div class="callout analogy">
+<span class="label">Analogy</span>
+<p>Imagine two people who share one desk. One works only on Mondays and the other only on Thursdays. They almost never collide, so sharing is cheap. If both worked every day, sharing one desk would be a disaster. Sparse features are part-time workers. Dense features need their own desk.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="toy-models" data-short="Toy Models of Superposition">Toy Models of Superposition (2022)</h2>
+
+<div class="paper">
+  <div class="yr">2022</div>
+  <div><div class="t"><a href="https://transformer-circuits.pub/2022/toy_model/index.html">Toy Models of Superposition</a></div>
+  <div class="a">Nelson Elhage, Tristan Hume, Catherine Olsson, … Martin Wattenberg, Christopher Olah · Anthropic, September 2022</div>
+  <div class="s">Trains tiny networks on synthetic sparse data and shows that superposition really happens, that it is governed by phase changes, and that features arrange into regular geometric shapes.</div></div>
+</div>
+
+<p>Real models are too big to study superposition directly. So the authors built the smallest model where it could appear.</p>
+
+<h3>The setup</h3>
+<p>Imagine a large ideal model whose neurons <em>are</em> the features. We have <i>n</i> features. We ask a small model to squeeze them into <i>m</i> &lt; <i>n</i> dimensions and then recover them.</p>
+<ul>
+<li><b>Data.</b> Each input x has <i>n</i> features. Each feature is 0 with probability S (the <b>sparsity</b>). Otherwise it is a random number between 0 and 1. All features are independent.</li>
+<li><b>Importance.</b> Each feature has an importance I<sub>i</sub>. The loss cares more about important features. A common choice is I<sub>i</sub> = 0.7<sup>i</sup>, so feature 1 matters most.</li>
+<li><b>Model.</b> A matrix W of size <i>m</i> × <i>n</i> compresses: h = Wx. Then the same matrix (transposed) decompresses, a bias b is added, and a ReLU is applied.</li>
+<li><b>Loss.</b> Importance-weighted squared error: L = Σ<sub>i</sub> I<sub>i</sub> (x<sub>i</sub> − x′<sub>i</sub>)².</li>
+</ul>
+
+<div class="mathblock">h = W x        x′ = ReLU( Wᵀ h + b )  =  ReLU( WᵀW x + b )</div>
+
+<figure class="panel">
+<svg viewBox="0 0 720 210" role="img" aria-label="Toy model diagram: n input features are compressed by W into m hidden dimensions, then expanded by W transpose, plus bias, through ReLU, to n output features.">
+  <defs><marker id="a35" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <g id="toyArch"></g>
+  <text x="80" y="200" text-anchor="middle" font-size="13" font-weight="600">x  (n = 5 features)</text>
+  <text x="360" y="200" text-anchor="middle" font-size="13" font-weight="600">h  (m = 2 dims)</text>
+  <text x="640" y="200" text-anchor="middle" font-size="13" font-weight="600">x′ = ReLU(Wᵀh + b)</text>
+  <text x="220" y="22" text-anchor="middle" font-size="13" fill="var(--accent)" font-weight="700">W  (compress)</text>
+  <text x="500" y="22" text-anchor="middle" font-size="13" fill="var(--accent)" font-weight="700">Wᵀ  (expand), + b, ReLU</text>
+</svg>
+<figcaption><b>Figure 3.5.</b> The toy model is an autoencoder with a bottleneck. The same W is used to compress and expand ("tied weights"). This makes each feature's direction clear: it is column W<sub>i</sub>.</figcaption>
+</figure>
+
+<p>Two design choices matter:</p>
+<ul>
+<li><b>Tied weights.</b> Using the same W in both steps means that column W<sub>i</sub> is "the direction of feature i". There is no confusion between a read direction and a write direction.</li>
+<li><b>The bias b.</b> It lets the model output an average value for dropped features. More important, a <b>negative</b> bias removes small positive interference.</li>
+</ul>
+
+<div class="callout example">
+<span class="label">Why W is both things here, and only here</span>
+<p>In this toy model, W is a real weight matrix, and its columns are also the feature directions. This is true because we chose the input to be the feature list itself.</p>
+<p>Take n = 5 and m = 2. Turn on only feature 3, with strength 0.5. So x = (0, 0, 0.5, 0, 0). Then h = Wx picks out one column:</p>
+<div class="mathblock">h  =  W x  =  0.5 · W₃</div>
+<p>The hidden vector moves along column 3 and nothing else. So column 3 is the direction of feature 3. This is the same equation as in <a href="#three-objects">the section on features as directions</a>.</p>
+<p>A real network gives you no such x. Nobody gives us the list of true features. This is why the toy model is useful: we know the true features, so we can check what training does with them. In real models we must find the directions first (<a href="08-dictionary-learning.html#anatomy">Chapter 8</a>).</p>
+</div>
+
+<p>The authors compared this <b>ReLU output model</b> with a <b>linear model</b> that is the same but has no ReLU. Their main sizes were n = 20, m = 5 with I<sub>i</sub> = 0.7<sup>i</sup>, and n = 5, m = 2 for pictures in 2D.</p>
+
+<h3>The basic result</h3>
+<ul>
+<li>The <b>linear model</b> always learns the top <i>m</i> most important features in orthogonal directions. It ignores the rest. This is the same as PCA. Sparsity does not change this.</li>
+<li>The <b>ReLU model</b> acts like the linear model when features are dense. As sparsity rises, superposition appears. "It starts with less important features, and gradually affects the most important ones." It first forms antipodal pairs, then other shapes.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="train-it" data-short="Train a toy model yourself">Train a toy model yourself</h2>
+
+<p>This widget trains the toy model in your browser with real gradient descent (Adam). There are 5 features and 2 hidden dimensions. Each arrow is one column W<sub>i</sub> of the weight matrix: the direction where feature <i>i</i> lives. Each feature has its own color. Feature 1 is the most important; importance falls as I<sub>i</sub> = r<sup>i</sup>. The dashed circle marks length 1.</p>
+
+<div class="widget" id="toyWidget">
+  <div class="widget-title">Interactive · Live toy model of superposition (n = 5, m = 2)</div>
+  <div class="widget-sub">Pick a sparsity and press <b>Train</b>. Try the presets in order. Training uses a fixed random seed per reset, so results repeat.</div>
+  <div class="controls">
+    <label>sparsity S <input type="range" id="tS" min="0" max="0.97" step="0.01" value="0"> <output id="tSo">0.00</output></label>
+    <label>importance decay r <input type="range" id="tR" min="0.6" max="1" step="0.01" value="0.85"> <output id="tRo">0.85</output></label>
+    <span class="seg" id="tMode"><button class="on" data-m="relu">ReLU output</button><button data-m="lin">Linear</button></span>
+  </div>
+  <div class="controls presets">
+    <span style="font-size:0.8125rem;color:var(--ink-3)">Presets:</span>
+    <button class="btn" data-p="0">Dense (S=0)</button>
+    <button class="btn" data-p="0.8">Sparse (S=0.8)</button>
+    <button class="btn" data-p="0.95">Very sparse (S=0.95)</button>
+    <span style="flex:1"></span>
+    <button class="btn primary" id="tTrain">▶ Train</button>
+    <button class="btn" id="tReset">Reset</button>
+  </div>
+  <div class="toy-grid">
+    <div><svg id="toySvg" viewBox="0 0 360 360"></svg></div>
+    <div class="toy-side">
+      <h5>WᵀW (interference matrix)</h5>
+      <svg id="gramSvg" viewBox="0 0 220 215"></svg>
+      <h5 style="margin-top:12px">Per feature: norm ‖Wᵢ‖ and bias bᵢ</h5>
+      <svg id="barSvg" viewBox="0 0 220 130"></svg>
+    </div>
+  </div>
+  <div class="stat-row">
+    <div class="stat">step<b id="tStep">0</b></div>
+    <div class="stat">loss<b id="tLoss">–</b></div>
+    <div class="stat">features stored ‖W‖²<sub>F</sub><b id="tFro">–</b></div>
+    <div class="stat">dims per feature D*<b id="tDstar">–</b></div>
+  </div>
+  <div class="readout" id="tMsg">Press Train.</div>
+</div>
+
+<p>What you should see:</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Setting</th><th>What the model learns</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Dense, S = 0</td><td>Two features at 90°. Three features dropped.</td><td>Collisions are constant, so superposition does not pay. This is PCA.</td></tr>
+<tr><td>Sparse, S ≈ 0.8</td><td>Four features in two antipodal pairs, at 90° to each other. One feature dropped.</td><td>Each pair shares a dimension. Negative interference is free with ReLU.</td></tr>
+<tr><td>Very sparse, S ≥ 0.95</td><td>All five features in a regular <b>pentagon</b>, 72° apart. The bias becomes negative and the arrows grow slightly longer than 1.</td><td>Collisions are rare. A negative bias cuts the small positive interference between neighbours. Longer arrows compensate for the bias.</td></tr>
+<tr><td>Linear, any S</td><td>Always the top two features, orthogonal.</td><td>Without a nonlinearity, interference cannot be filtered.</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>We checked these results by training the same code offline with several seeds. The paper reports the same picture. One caution from the authors: with only 2 hidden dimensions, training can get stuck in bad solutions. They trained each model several times and kept the best. If a run looks odd, press Reset and train again.</p>
+
+<h3>How the paper shows superposition</h3>
+<p>The authors used two pictures, which this widget also shows.</p>
+<ul>
+<li><b>The matrix WᵀW.</b> Entry (i, j) is the dot product W<sub>i</sub>·W<sub>j</sub>. The diagonal shows how strongly each feature is stored. Off-diagonal entries are interference. A dense model has a clean diagonal block. A superposed model has many non-zero off-diagonal entries. Large negative entries mark features that point in opposite directions (for example, antipodal pairs).</li>
+<li><b>Bars per feature.</b> Bar length is ‖W<sub>i</sub>‖ (is the feature stored at all?). In the paper, bar color showed how much the feature shares its direction with others.</li>
+</ul>
+
+<h3>The math in one paragraph</h3>
+<p>Why does sparsity cause superposition? Split the expected loss by how many features are on at once. When S is close to 1, the most common case is "exactly one feature is on". In that case, a ReLU makes negative interference free, so the model only pays for positive interference. The problem becomes: place <i>n</i> points on a sphere in <i>m</i> dimensions so they push each other apart. This is like the <b>Thomson problem</b> from physics and chemistry: how to place electrons on a sphere to minimize repulsion. The pentagon is the answer for 5 points on a circle.</p>
+
+<div class="quiz" data-answer="3">
+  <div class="q">In the toy model, you set sparsity to 0.95 but switch the output to Linear (no ReLU). What happens?</div>
+  <div class="opts">
+    <button>A pentagon forms, as with ReLU.</button>
+    <button>Two antipodal pairs form.</button>
+    <button>All five features are stored with no interference.</button>
+    <button>Only the top two features are stored, at 90°. The others are dropped.</button>
+  </div>
+  <div class="why">A linear readout cannot remove interference, so the best linear solution is always PCA: keep the m most important features in orthogonal directions. Sparsity alone is not enough. You also need a nonlinearity.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="phase-change" data-short="Phase changes">Superposition is a phase change</h2>
+
+<p>The switch to superposition is not gradual. It is sudden, like water turning to ice. The authors showed this with the simplest case: <b>2 features in 1 dimension</b>. Feature 1 has importance 1. Feature 2 (the "extra" feature) has importance between 0.1 and 10. The density (1 − S) goes from 1 (always on) down to 0.01 (on 1% of the time).</p>
+
+<p>For each setting, three solutions compete:</p>
+<ul>
+<li><b>Ignore the extra feature.</b> W = [1, 0]. Only feature 1 is stored.</li>
+<li><b>Give the dimension to the extra feature.</b> W = [0, 1]. Feature 1 is dropped.</li>
+<li><b>Superposition.</b> W = [1, −1]. Both are stored as an antipodal pair. The model cannot represent both at once.</li>
+</ul>
+
+<p>The model picks whichever solution has the lowest loss. When the loss curves of two solutions cross, the best solution jumps. This is a true <b>first-order phase change</b>: the slope of the best loss jumps too. The paper's training results matched the theory.</p>
+
+<div class="widget" id="phaseWidget">
+  <div class="widget-title">Interactive · Phase diagram for 2 features in 1 dimension</div>
+  <div class="widget-sub">Move your mouse over the grid (or tap). Each cell is the winning solution for that importance and density. We computed this grid ourselves from the paper's three candidate solutions, by optimizing each one's weight and bias numerically.</div>
+  <div class="phase-wrap">
+    <svg id="phaseSvg" viewBox="0 0 420 340"></svg>
+    <div>
+      <div class="phase-info" id="phaseInfo"><b>Hover a cell.</b><br>Top rows: features are dense. Bottom rows: features are sparse.</div>
+      <div class="legend"><span><i style="background:var(--bg-2);border:1px solid var(--rule)"></i>extra feature ignored</span><span><i style="background:var(--blue)"></i>extra feature gets the dimension</span><span><i style="background:var(--accent)"></i>superposition</span></div>
+    </div>
+  </div>
+</div>
+
+<p>The lesson has three parts:</p>
+<ol>
+<li><b>Sparsity is necessary.</b> At high density, superposition never wins.</li>
+<li><b>Relative importance decides who gets stored.</b> In the dense regime, the more important feature takes the dimension.</li>
+<li><b>The transition is sharp.</b> A small change in sparsity can flip the whole solution.</li>
+</ol>
+
+<p>The authors also drew a phase diagram for 3 features in 2 dimensions. There, the extra feature can become antipodal to one of the others, or two other features can pair up while the extra one gets its own dimension. Each option is a separate phase.</p>
+
+<div class="callout good">
+<span class="label">Why phase changes give hope</span>
+<p>Because superposition comes from sharp transitions, every model has a regime with no superposition. In principle, it exists if we can afford a large enough model, or a large enough dictionary to decode it.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="geometry" data-short="Geometry: sticky fractions">The geometry of superposition</h2>
+
+<p>The most surprising result of the paper is that superposition forms <b>regular shapes</b>.</p>
+
+<h3>Counting features</h3>
+<p>The squared size of the whole matrix, ‖W‖²<sub>F</sub>, is a good count of stored features. Each stored feature has ‖W<sub>i</sub>‖² ≈ 1 and each dropped feature has ≈ 0. So the average <b>dimensions per feature</b> is:</p>
+<div class="mathblock">D* = m / ‖W‖²_F</div>
+<p>With all features equally important (the paper used n = 400, m = 30), the authors plotted D* against 1/(1 − S). The curve is not smooth. It is <b>"sticky"</b>: it stays flat at D* = 1 and at D* = 1/2 for wide ranges of sparsity. The 1/2 plateau means antipodal pairs: two features per dimension. The authors note a loose resemblance to the fractional quantum Hall effect in physics.</p>
+
+<h3>Feature dimensionality</h3>
+<p>The authors then defined a per-feature number. It says what fraction of a dimension feature <i>i</i> gets:</p>
+<div class="mathblock">D_i = ‖W_i‖² / Σ_j ( Ŵ_i · W_j )²</div>
+<p>Here Ŵ<sub>i</sub> is the unit vector in direction W<sub>i</sub>. The top is "how much feature i is stored". The bottom is "how many features share its space". Some values:</p>
+<ul>
+<li>A feature with its own dimension: D = 1.</li>
+<li>An antipodal pair: D = 1/(1 + 1) = 1/2.</li>
+<li>A dropped feature: D = 0.</li>
+<li>When features are packed well, the D<sub>i</sub> add up to about <i>m</i>.</li>
+</ul>
+
+<p>When the authors plotted every feature's D<sub>i</sub>, the points clustered at a few <b>sticky fractions</b>. Each fraction is a shape. The rule: <i>k</i> features spread evenly in a <i>d</i>-dimensional subspace each get D = <i>d</i>/<i>k</i>.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 300" role="img" aria-label="Chart of sticky fractions: 1 for dedicated dimension, three quarters for tetrahedron, two thirds for triangle, one half for antipodal pair, two fifths for pentagon, three eighths for square antiprism, zero for not learned.">
+  <g id="stickyG"></g>
+</svg>
+<figcaption><b>Figure 3.6.</b> The sticky fractions from Toy Models of Superposition. Each value of D (fraction of a dimension per feature) matches a regular shape. For example, a pentagon puts 5 features in 2 dimensions, so D = 2/5. The paper lists ¾ (tetrahedron), ⅔ (triangle), ½ (antipodal pair), ⅖ (pentagon), ⅜ (square antiprism) and 0 (not learned).</figcaption>
+</figure>
+
+<p>These shapes are solutions to the Thomson problem that are <b>uniform polytopes</b>: every corner looks the same, so every feature gets the same D. Less symmetric solutions show up split into parts. For example, instead of a 5-point shape with D = 3/5, you see a triangle (2/3) plus an antipodal pair (1/2) in perpendicular subspaces. Such a combination of shapes in orthogonal subspaces is called a <b>tegum product</b>. Features in different parts do not interfere at all.</p>
+
+<p>The authors wrote that "superposition isn't just one thing". Like ice, which has many crystal phases, superposition has many phases with different geometries.</p>
+
+<h3>Non-uniform features</h3>
+<ul>
+<li><b>One feature denser than the others.</b> Start from a pentagon (n = 5, m = 2). Make one feature denser: it pushes the others away and gets more room. Make it sparser: it gets squeezed. Past a critical point, the pentagon <b>snaps</b> into two antipodal pairs and the sparse feature is dropped. This is another first-order phase change.</li>
+<li><b>Correlated features</b> (features that tend to be on together) prefer to be orthogonal to each other. If there is no room, they sit side by side. If there is still no room, they collapse into their average direction. In the dense limit, this becomes PCA. So PCA and superposition are two ends of one range.</li>
+<li><b>Anti-correlated features</b> (only one is on at a time) prefer to share space, ideally as antipodal pairs.</li>
+</ul>
+
+<h3>Learning dynamics: energy levels</h3>
+<p>During training, single features jump between sticky fractions. Each jump matches a sudden drop in the loss. The authors suspect that the smooth loss curves of large models may be made of many such small jumps. They also saw training pass through clear geometric stages. For example, one model (6 features in 3 dimensions, in two correlated groups) first learned a PCA-like solution and then moved, in steps, to an octahedron.</p>
+
+<div class="callout warn">
+<span class="label">How far does this generalize?</span>
+<p>The authors were careful: "Some of the phenomena we observe (superposition, monosemantic vs polysemantic neurons, perhaps the relationship to adversarial examples) are likely to generalize, while other phenomena (especially the geometry and learning dynamics results) are much more uncertain." Real features are correlated, unequal and sometimes multi-dimensional.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="computation" data-short="Computing in superposition">Neurons, computation, and adversarial examples</h2>
+
+<h3>Superposition in real neurons</h3>
+<p>The ReLU output model has no privileged hidden basis: you can rotate h freely. To study neurons, the authors added a ReLU on the hidden layer too: h = ReLU(Wx). Now each hidden coordinate is a neuron. With n = 10 features, m = 5 neurons and I<sub>i</sub> = 0.75<sup>i</sup>, they saw a clear shift. When features are dense, neurons are <b>monosemantic</b>. As sparsity grows, neurons become <b>polysemantic</b>. Both kinds can exist in one model at the same time.</p>
+
+<h3>Computation in superposition</h3>
+<p>Storing features is one thing. Can the network also <em>compute</em> with them while they overlap? The authors tested a simple function: absolute value, |x| = ReLU(x) + ReLU(−x). With n = 100 sparse inputs and only m = 40 neurons (I<sub>i</sub> = 0.8<sup>i</sup>), the model computed |x| for <b>more features than it had neurons</b>, once the inputs were sparse enough.</p>
+<ul>
+<li>Neurons for the most important features stayed monosemantic.</li>
+<li>Many neurons had one big "primary" weight plus small "secondary" weights. This matches language-model neurons whose top activations are clean but whose weaker activations are mixed.</li>
+<li>The authors found a motif they called <b>asymmetric superposition</b>. One neuron stores two features with unequal weights, so A interferes with B but not the reverse. A second neuron then inhibits the bad case.</li>
+</ul>
+
+<div class="paper">
+  <div class="yr">2024</div>
+  <div><div class="t"><a href="https://arxiv.org/abs/2408.05451">Mathematical Models of Computation in Superposition</a></div>
+  <div class="a">Kaarel Hänni, Jake Mendel, Dmitry Vaintrob, Lawrence Chan · ICML 2024 Mech Interp Workshop</div>
+  <div class="s">Proves that a one-layer MLP can compute the AND of all ~m²/2 pairs of m sparse boolean features using only about m<sup>2/3</sup> neurons (the "U-AND" construction), even when the inputs are in superposition.</div></div>
+</div>
+
+<p>The idea of U-AND is simple. Wire each neuron to a random subset of features. Set its threshold so it fires only when two of its inputs are on. Every pair of features shares some neurons, so every AND can be read out. The result suggests that networks can be "much bigger on the inside" than their width. It is a theoretical existence proof. It does not show that trained networks use this exact trick.</p>
+
+<div class="callout warn">
+<span class="label">A cautionary debate (2025–2026)</span>
+<p>Researchers at Apollo Research (Braun and colleagues, 2025) used a "compressed computation" toy model that seemed to compute 100 ReLU functions with only 50 neurons. Later, Jai Bhagat and colleagues argued that the gain came from an unintended mixing term in the labels (caused by a noisy residual stream), not from true computation in superposition. The gain vanished when that term was removed. In July 2026, Ferreira da Silva and Heimersheim showed that training the same setup with a different loss (the mean fourth power of the error, instead of the square) gives a solution that does appear to compute all 100 functions in superposition. The lesson: claims about computation in superposition need careful controls.</p>
+</div>
+
+<h3>A link to adversarial examples</h3>
+<p>Without superposition, the model's output for feature 0 depends only on input feature 0. With superposition, it also depends a little on many other features: the weights look like (1, ε, −ε, ε, …). Each small ε is a lever for an attacker. Many small pushes add up.</p>
+<p>The authors measured this. They used optimal attacks with a size limit of 0.1 × the average input norm. Vulnerability "sharply increases as superposition forms (increasing by &gt;3×)". It tracks the number of features per dimension. Adversarial training did reduce superposition, but only with very large attacks (80% of the input norm). The authors do not claim that this is <em>the</em> cause of adversarial examples in real models. It is one plausible cause.</p>
+
+<div class="quiz" data-answer="2">
+  <div class="q">In the toy model, which feature dimensionality D matches five features arranged as a regular pentagon in a 2D plane?</div>
+  <div class="opts">
+    <button>1/5</button>
+    <button>1/2</button>
+    <button>2/5</button>
+    <button>5/2</button>
+  </div>
+  <div class="why">The rule is D = (dimensions of the subspace) / (number of features in it). A pentagon puts 5 features in 2 dimensions, so each gets 2/5 of a dimension.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="follow-ups" data-short="Follow-up work">Follow-up work on superposition</h2>
+
+<div class="paper">
+  <div class="yr">2023</div>
+  <div><div class="t"><a href="https://transformer-circuits.pub/2023/toy-double-descent/index.html">Superposition, Memorization, and Double Descent</a></div>
+  <div class="a">Tom Henighan, Shan Carter, Tristan Hume, Nelson Elhage, … Christopher Olah · Anthropic, January 2023</div>
+  <div class="s">Trains the toy model on a finite dataset. With little data, the model stores <em>training examples</em> in superposition (memorization). With lots of data, it stores <em>features</em> (generalization). The switch between them produces double descent.</div></div>
+</div>
+
+<p>The setup used 10,000 very sparse features (S = 0.999). With few training examples, the hidden vectors of the <em>examples</em> formed clean polygons, while the feature directions looked like a mess. With many examples, the reverse happened. Test loss went down, up, and down again as data grew: <b>double descent</b>. The peak sat at the crossover between the two regimes. This gives a mechanistic story for double descent. It also warns us: an overfit model may contain "features" that are really memorized data points. The authors called this work preliminary.</p>
+
+<div class="paper">
+  <div class="yr">2022</div>
+  <div><div class="t"><a href="https://arxiv.org/abs/2210.01892">Polysemanticity and Capacity in Neural Networks</a></div>
+  <div class="a">Adam Scherlis, Kshitij Sachan, Adam Jermyn, Joe Benton, Buck Shlegeris · Redwood Research</div>
+  <div class="s">Defines the "capacity" each feature uses (a number between 0 and 1). At the optimum, the most important features get a full dimension, middle features share, and the least important are ignored. Polysemanticity grows with input kurtosis (heavier tails).</div></div>
+</div>
+
+<div class="paper">
+  <div class="yr">2023</div>
+  <div><div class="t"><a href="https://arxiv.org/abs/2305.01610">Finding Neurons in a Haystack: Case Studies with Sparse Probing</a></div>
+  <div class="a">Wes Gurnee, Neel Nanda, Matthew Pauly, Katherine Harvey, Dmitrii Troitskii, Dimitris Bertsimas</div>
+  <div class="s">Trains probes that may use only k neurons. Studies over 100 features in 7 Pythia models from 70M to 6.9B parameters. Finds superposition in early layers and dedicated neurons in middle layers.</div></div>
+</div>
+
+<p>Gurnee and colleagues gave real evidence from language models.</p>
+<ul>
+<li><b>Early layers</b> use sparse <em>combinations</em> of neurons. Example: the compound word "social security". No single neuron detects it, but the sum of three neurons separates it almost perfectly. Early-layer neurons also had large weights and large negative biases, as the toy model predicts.</li>
+<li><b>Middle layers</b> have more dedicated "context neurons", for example a French-text neuron and a Go-code neuron. One neuron in Pythia-1B fires on the word "return" only in Go code.</li>
+<li><b>Scale.</b> On average, larger models use sparser representations. But features differ. Some features get a dedicated neuron only at larger scale. Others split into several more specific neurons. Many do not change.</li>
+</ul>
+<p>One limit: <span class="term" data-term="probing">probing</span> shows that information is present, not that the model uses it (see <a href="07-probing-steering.html">Chapter 7</a>).</p>
+
+<div class="paper">
+  <div class="yr">2025</div>
+  <div><div class="t"><a href="https://arxiv.org/abs/2505.10465">Superposition Yields Robust Neural Scaling</a></div>
+  <div class="a">Yizhou Liu, Ziming Liu, Jeff Gore (MIT) · NeurIPS 2025 (Best Paper runner-up)</div>
+  <div class="s">Uses weight decay to control how much superposition a toy model has. With strong superposition, loss falls as 1/width for many data distributions. Open LLMs appear to be in this strong regime.</div></div>
+</div>
+
+<p>This paper links superposition to <b>scaling laws</b>, the smooth curves that show loss falling as models grow. In weak superposition, the loss follows a power law only if feature frequencies do. In strong superposition, loss ∝ 1/m (inverse width) for many distributions, because interference between overlapping vectors scales like 1/m. Analysis of several families of open LLMs suggests that real LLMs are in the strong regime. The authors also report that the Chinchilla scaling laws are consistent with this picture.</p>
+
+<p>Two 2026 papers extend the theory. Prieto and colleagues show that when features are <b>correlated</b>, interference can be helpful: features that fire together can be placed so they support each other. This explains semantic clusters seen in real LLMs, which the idealized toy model cannot. Ivanov and colleagues study the eigenvalues of WWᵀ and recover the toy-model shapes (simplices, polygons, antiprisms) as special cases, with a method that applies to real weight matrices.</p>
+
+<!-- ============================================================ -->
+<h2 id="beyond-lines" data-short="Circles and manifolds">Beyond straight lines: circles and manifolds</h2>
+
+<p>The toy model assumes that each feature is one direction. Some real features are not.</p>
+
+<div class="paper">
+  <div class="yr">2024</div>
+  <div><div class="t"><a href="https://arxiv.org/abs/2405.14860">Not All Language Model Features Are One-Dimensionally Linear</a></div>
+  <div class="a">Joshua Engels, Eric J. Michaud, Isaac Liao, Wes Gurnee, Max Tegmark (MIT) · ICLR 2025</div>
+  <div class="s">Finds circular representations of the days of the week and months of the year in GPT-2 small and Mistral 7B. Shows with interventions that the model uses the circle to do arithmetic like "two days from Monday".</div></div>
+</div>
+
+<p>Engels and colleagues used a <b>sparse autoencoder</b> (SAE), a tool that splits activations into many readable feature directions. <a href="08-dictionary-learning.html">Chapter 8</a> explains it. They grouped SAE features whose directions were similar. Some groups formed circles. The 7 days of the week sat around a circle in order. So did the 12 months. Then they tested tasks like "Two days from Monday is" (49 prompts) and "Four months from January is" (144 prompts). Mistral 7B got 31/49 and 125/144 right. Llama 3 8B got 29/49 and 143/144.</p>
+
+<p>The key test was causal. They found the circle in a 5-dimensional subspace. Then they <b>rotated</b> the "day" around the circle by patching activations. The model's answer shifted to match. So the model does not just store a circle; it uses it to compute.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 280" role="img" aria-label="Days of the week arranged on a circle. An arrow labeled plus two takes Monday to Wednesday.">
+  <defs><marker id="a37" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs>
+  <g id="daysG"></g>
+  <text x="390" y="80" font-size="14" font-weight="700">"Two days from Monday is …"</text>
+  <text x="390" y="106" font-size="13" class="muted">1. Find "Monday" on the circle.</text>
+  <text x="390" y="128" font-size="13" class="muted">2. Rotate by 2 × (360°/7).</text>
+  <text x="390" y="150" font-size="13" class="muted">3. Read off "Wednesday".</text>
+  <text x="390" y="186" font-size="13" class="muted">Patching a rotated point into the</text>
+  <text x="390" y="206" font-size="13" class="muted">model changes its answer to match.</text>
+</svg>
+<figcaption><b>Figure 3.7.</b> A circular feature. The days of the week lie on a circle inside a small subspace. Modular arithmetic ("days later") becomes a rotation. This is a multi-dimensional feature: you cannot split it into independent 1-D directions.</figcaption>
+</figure>
+
+<div class="paper">
+  <div class="yr">2024</div>
+  <div><div class="t"><a href="https://arxiv.org/abs/2410.19750">The Geometry of Concepts: Sparse Autoencoder Feature Structure</a></div>
+  <div class="a">Yuxiao Li, Eric J. Michaud, David D. Baek, Joshua Engels, Xiaoqing Sun, Max Tegmark</div>
+  <div class="s">Studies the cloud of feature directions at three scales: small "crystals" (parallelograms like man:woman::king:queen), "lobes" of related features (math and code cluster together), and a global shape with a power-law spectrum.</div></div>
+</div>
+
+<div class="paper">
+  <div class="yr">2025</div>
+  <div><div class="t"><a href="https://transformer-circuits.pub/2025/linebreaks/index.html">When Models Manipulate Manifolds: The Geometry of a Counting Task</a></div>
+  <div class="a">Wes Gurnee, Emmanuel Ameisen, Isaac Kauvar, Julius Tarng, Adam Pearce, Chris Olah, Joshua Batson · Anthropic, October 2025</div>
+  <div class="s">Studies how Claude 3.5 Haiku decides where to break lines in fixed-width text. Character count lives on a curved 1-D manifold in a ~6-D subspace. Attention heads "twist" this manifold to compare the current position with the line width.</div></div>
+</div>
+
+<p>This 2025 study is a beautiful example of geometry in a real model. To predict a line break, the model must count characters on the current line, know the line width, and compare the remainder with the length of the next word.</p>
+<ul>
+<li>The character count is a <b>curved line</b> (a 1-D manifold). About 10 features tile it, like place cells in a mouse brain. Usually two neighbouring features are active at once.</li>
+<li>The top 6 directions of this curve explain 95% of its variance. In that subspace, the curve twists like a helix.</li>
+<li>The curve "ripples". The authors explain this as a superposition effect inside the manifold: the best low-dimensional way to make each count similar to its neighbours and different from far counts.</li>
+<li>Special "boundary" attention heads (the parts of a transformer that move information between tokens; <a href="04-transformers.html#qk-ov">Chapter 4</a>) <b>rotate</b> the count manifold so that count <i>i</i> lines up with line width <i>k</i> ≈ <i>i</i>. The head then attends to the last newline when the line is nearly full.</li>
+<li>At the end, "characters remaining" and "next word length" sit in near-orthogonal subspaces. This makes the "break or not" decision a simple linear cut.</li>
+</ul>
+<p>The authors stress a duality. You can describe the same computation as discrete features and circuits, or as continuous curves and rotations. Both views are correct. Some inserted character sequences even caused "visual illusions" that distorted the model's sense of position.</p>
+
+<!-- ============================================================ -->
+<h2 id="ways-out" data-short="Three ways out">Why this matters: three ways out</h2>
+
+<p>Superposition is the main obstacle to reading networks. Elhage et al. explained why:</p>
+<ul>
+<li>We would like to <b>list all features</b>. Then we could make strong claims like "no deception feature takes part in this circuit". Without superposition, features would be neurons, and listing neurons is easy. Superposition breaks this.</li>
+<li>Simple tools become unreliable. Cosine similarity can mislead, because unrelated features get small positive dot products.</li>
+<li>You cannot find one direction, remove it, and repeat, because the directions are not orthogonal.</li>
+</ul>
+
+<p>The paper proposed three ways out.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 230" role="img" aria-label="Three paths. One: train models without superposition. Two: find an overcomplete basis after training, which is dictionary learning, leading to sparse autoencoders. Three: hybrid approaches.">
+  <rect x="270" y="10" width="180" height="44" rx="10" fill="var(--red-soft)" stroke="var(--red)"/>
+  <text x="360" y="37" text-anchor="middle" font-size="14" font-weight="700">Superposition</text>
+  <g stroke="var(--ink-3)" stroke-width="1.5" fill="none"><path d="M330 54 L120 96"/><path d="M360 54 L360 96"/><path d="M390 54 L600 96"/></g>
+  <rect x="20" y="98" width="200" height="88" rx="10" fill="var(--panel)" stroke="var(--rule)"/>
+  <text x="120" y="122" text-anchor="middle" font-size="13.5" font-weight="700">1. Avoid it</text>
+  <text x="120" y="144" text-anchor="middle" font-size="12" class="muted">train models that do not</text>
+  <text x="120" y="160" text-anchor="middle" font-size="12" class="muted">use superposition (sparse</text>
+  <text x="120" y="176" text-anchor="middle" font-size="12" class="muted">activations, mixture of experts)</text>
+  <rect x="250" y="98" width="220" height="88" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="360" y="122" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--accent)">2. Decode it afterwards</text>
+  <text x="360" y="144" text-anchor="middle" font-size="12">find an overcomplete basis:</text>
+  <text x="360" y="160" text-anchor="middle" font-size="12">H ≈ A·B with A sparse</text>
+  <text x="360" y="176" text-anchor="middle" font-size="12">(dictionary learning)</text>
+  <rect x="500" y="98" width="200" height="88" rx="10" fill="var(--panel)" stroke="var(--rule)"/>
+  <text x="600" y="122" text-anchor="middle" font-size="13.5" font-weight="700">3. Hybrid</text>
+  <text x="600" y="144" text-anchor="middle" font-size="12" class="muted">reduce superposition a</text>
+  <text x="600" y="160" text-anchor="middle" font-size="12" class="muted">little during training,</text>
+  <text x="600" y="176" text-anchor="middle" font-size="12" class="muted">then decode</text>
+  <path d="M360 186 L360 204" stroke="var(--accent)" stroke-width="2"/>
+  <text x="360" y="222" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">→ sparse autoencoders (Chapter 8)</text>
+</svg>
+<figcaption><b>Figure 3.8.</b> The "three ways out" from Toy Models of Superposition. The second path, dictionary learning, became the dominant approach from 2023 onward.</figcaption>
+</figure>
+
+<ol>
+<li><b>Build models without superposition.</b> For example, add a penalty that makes activations sparse, or use mixture-of-experts layers so that each neuron can be rare without cost.</li>
+<li><b>Find an overcomplete basis after training.</b> Collect many activations H. Find a sparse matrix A and a dictionary B with H ≈ A·B, where B has many more directions than the layer has dimensions. The authors called this "a relatively standard sparse coding (or dictionary learning) problem". They expected hard problems: the number of features is unknown, and the dictionary might need to be "a thousand or more times larger" than the layer.</li>
+<li><b>Hybrid approaches.</b> Reduce superposition during training, then decode what remains.</li>
+</ol>
+
+<p>Path 2 became the main road. In 2023, Anthropic's "Towards Monosemanticity" trained <span class="term" data-term="sparse autoencoder">sparse autoencoders</span> on a small one-layer transformer and found thousands of mostly interpretable features. <a href="08-dictionary-learning.html">Chapter 8</a> tells that story.</p>
+
+<div class="quiz" data-answer="0">
+  <div class="q">Why does superposition make it hard to say "this model has no deception feature"?</div>
+  <div class="opts">
+    <button>Because features are not neurons, so you cannot just list and check every neuron. A feature could hide as a direction spread over many neurons.</button>
+    <button>Because superposition only happens in vision models.</button>
+    <button>Because superposition deletes rare features from the model.</button>
+    <button>Because features in superposition are always orthogonal.</button>
+  </div>
+  <div class="why">Without superposition (and with a privileged basis), each feature would be a neuron and you could check every neuron. With superposition, there are many more features than neurons, stored as non-aligned directions. You first need a method, like dictionary learning, to list them.</div>
+</div>
+
+<div class="callout key" id="takeaways">
+<span class="label">Key takeaways</span>
+<ul>
+<li>A feature is a property that the network tracks. Most features behave like directions that add up (the linear representation hypothesis). Some are circles or curves.</li>
+<li>Keep three objects apart. The activation vector changes with every input. A feature direction is fixed. A feature activation is one number that says how much of that feature is present. The activation vector is the sum of the active feature directions.</li>
+<li>In the toy model, the feature directions are the columns of the weight matrix. In a real network they are not stored in one matrix. We must recover them from the activations.</li>
+<li>Single neurons are meaningful only where an elementwise nonlinearity creates a privileged basis. The residual stream has none.</li>
+<li>Superposition: a network stores more features than dimensions, as almost-orthogonal directions. It needs sparse features and a nonlinearity to filter interference.</li>
+<li>In toy models, superposition appears in sharp phase changes and forms regular shapes: antipodal pairs, triangles, pentagons.</li>
+<li>Because of superposition, listing neurons does not list features. We need a tool that finds the hidden directions.</li>
+</ul>
+<p><b>Where this leads:</b> <a href="04-transformers.html">Chapter 4</a> moves to transformers, where most modern work happens. <a href="08-dictionary-learning.html">Chapter 8</a> returns to superposition with sparse autoencoders, the main tool to undo it.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="references">References</h2>
+<ol class="refs">
+<li>Elhage, N., Hume, T., Olsson, C., et al. (2022). <a href="https://transformer-circuits.pub/2022/toy_model/index.html">Toy Models of Superposition</a>. Transformer Circuits Thread. arXiv:2209.10652.</li>
+<li>Olah, C., Cammarata, N., Schubert, L., Goh, G., Petrov, M., Carter, S. (2020). <a href="https://distill.pub/2020/circuits/zoom-in/">Zoom In: An Introduction to Circuits</a>. Distill.</li>
+<li>Mikolov, T., et al. (2013). Distributed representations of words and phrases and their compositionality (word2vec). NeurIPS.</li>
+<li>Park, K., Choe, Y. J., Veitch, V. (2023). <a href="https://arxiv.org/abs/2311.03658">The Linear Representation Hypothesis and the Geometry of Large Language Models</a>. ICML 2024.</li>
+<li>Olah, C. (edited by A. Jermyn) (2024). <a href="https://transformer-circuits.pub/2024/july-update/index.html">What is a Linear Representation? What is a Multidimensional Feature?</a> Transformer Circuits, July 2024 update.</li>
+<li>Csordás, R., Potts, C., Manning, C. D., Geiger, A. (2024). <a href="https://arxiv.org/abs/2408.10920">Recurrent Neural Networks Learn to Store and Generate Sequences using Non-Linear Representations</a>. BlackboxNLP 2024.</li>
+<li>Lecomte, V., Thaman, K., Schaeffer, R., Bashkansky, N., Chow, T., Koyejo, S. (2023). <a href="https://arxiv.org/abs/2312.03096">What Causes Polysemanticity? An Alternative Origin Story of Mixed Selectivity from Incidental Causes</a>.</li>
+<li>Henighan, T., Carter, S., Hume, T., et al. (2023). <a href="https://transformer-circuits.pub/2023/toy-double-descent/index.html">Superposition, Memorization, and Double Descent</a>. Transformer Circuits Thread.</li>
+<li>Scherlis, A., Sachan, K., Jermyn, A., Benton, J., Shlegeris, B. (2022). <a href="https://arxiv.org/abs/2210.01892">Polysemanticity and Capacity in Neural Networks</a>.</li>
+<li>Gurnee, W., Nanda, N., Pauly, M., Harvey, K., Troitskii, D., Bertsimas, D. (2023). <a href="https://arxiv.org/abs/2305.01610">Finding Neurons in a Haystack: Case Studies with Sparse Probing</a>.</li>
+<li>Hänni, K., Mendel, J., Vaintrob, D., Chan, L. (2024). <a href="https://arxiv.org/abs/2408.05451">Mathematical Models of Computation in Superposition</a>.</li>
+<li>Braun, D., Bushnaq, L., Heimersheim, S., Mendel, J., Sharkey, L. (2025). <a href="https://arxiv.org/abs/2501.14926">Interpretability in Parameter Space: Minimizing Mechanistic Description Length with Attribution-based Parameter Decomposition</a>. (Source of the "compressed computation" toy model.)</li>
+<li>Bhagat, J., Molas-Medina, S., Giglemiani, G., Heimersheim, S. (2025; arXiv 2026). <a href="https://www.lesswrong.com/posts/ZxFchCFJFcgysYsT9/compressed-computation-is-probably-not-computation-in">Compressed Computation is (probably) not Computation in Superposition</a>. LessWrong; <a href="https://arxiv.org/abs/2606.14673">arXiv:2606.14673</a>.</li>
+<li>Ferreira da Silva, F., Heimersheim, S. (2026). <a href="https://arxiv.org/abs/2607.04800">Compressed Computation under L⁴ Loss is likely Computation in Superposition</a>.</li>
+<li>Engels, J., Michaud, E. J., Liao, I., Gurnee, W., Tegmark, M. (2024). <a href="https://arxiv.org/abs/2405.14860">Not All Language Model Features Are One-Dimensionally Linear</a>. ICLR 2025.</li>
+<li>Li, Y., Michaud, E. J., Baek, D. D., Engels, J., Sun, X., Tegmark, M. (2024). <a href="https://arxiv.org/abs/2410.19750">The Geometry of Concepts: Sparse Autoencoder Feature Structure</a>.</li>
+<li>Gurnee, W., Ameisen, E., Kauvar, I., Tarng, J., Pearce, A., Olah, C., Batson, J. (2025). <a href="https://transformer-circuits.pub/2025/linebreaks/index.html">When Models Manipulate Manifolds: The Geometry of a Counting Task</a>. Transformer Circuits Thread.</li>
+<li>Modell, A., Rubin-Delanchy, P., Whiteley, N. (2025). <a href="https://arxiv.org/abs/2505.18235">The Origins of Representation Manifolds in Large Language Models</a>.</li>
+<li>Liu, Y., Liu, Z., Gore, J. (2025). <a href="https://arxiv.org/abs/2505.10465">Superposition Yields Robust Neural Scaling</a>. NeurIPS 2025.</li>
+<li>Prieto, L., Stevinson, E., Barsbey, M., Birdal, T., Mediano, P. A. M. (2026). <a href="https://arxiv.org/abs/2603.09972">From Data Statistics to Feature Geometry: How Correlations Shape Superposition</a>.</li>
+<li>Ivanov, G., Oozeer, N., Raval, S., Pejovic, T., Upadhyay, S., Abdullah, A. (2026). <a href="https://arxiv.org/abs/2602.02224">Spectral Superposition: A Theory of Feature Geometry</a>.</li>
+<li>Johnson, W. B., Lindenstrauss, J. (1984). Extensions of Lipschitz mappings into a Hilbert space. (The Johnson–Lindenstrauss lemma.)</li>
+<li>Candès, E., Romberg, J., Tao, T. (2006); Donoho, D. (2006). Foundational papers on compressed sensing.</li>
+</ol>
+
+</article>
+</main>
+
+<script src="assets/glossary.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/search-index.js"></script>
+<script src="assets/search.js"></script>
+<script src="assets/ch3-toy.js"></script>
+<script src="assets/ch3.js"></script>
+</body>
+</html>

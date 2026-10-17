@@ -1,0 +1,843 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dictionary Learning and SAEs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .sae-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  .sae-grid svg.plot { width: 100%; max-width: 360px; background: var(--bg); border-radius: 10px; border: 1px solid var(--rule); cursor: crosshair; }
+  .sae-grid svg.bars { width: 100%; }
+  .legend-row { font-size: 0.8125rem; color: var(--ink-2); line-height: 1.6; }
+  .legend-row i { display: inline-block; width: 22px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 6px; }
+  .fb { display: grid; grid-template-columns: 220px 1fr; gap: 16px; }
+  .fb-list { display: flex; flex-direction: column; gap: 6px; }
+  .fb-list button { text-align: left; font: inherit; font-size: 0.84375rem; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 10px; cursor: pointer; color: var(--ink); }
+  .fb-list button span { display: block; font-family: var(--mono); font-size: 0.6875rem; color: var(--ink-3); }
+  .fb-list button.on { border-color: var(--accent); background: var(--accent-soft); }
+  .fb-view { border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; background: var(--bg); }
+  .fb-view h4 { margin: 2px 0 2px; font-size: 1.125rem; }
+  .fb-id { font-family: var(--mono); font-size: 0.75rem; color: var(--accent); }
+  .fb-src { font-size: 0.78125rem; color: var(--ink-3); margin-bottom: 8px; }
+  .fb-view p { font-size: 0.90625rem; color: var(--ink-2); }
+  .fb-text { font-family: var(--mono); font-size: 0.875rem; line-height: 2; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; }
+  .fb-text .tok { border-radius: 3px; padding: 1px 0; }
+  @media (max-width: 720px) { .sae-grid, .fb { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body data-chapter="8">
+<main>
+<article class="article">
+
+<div class="kicker">Chapter 8</div>
+<h1>Dictionary learning and sparse autoencoders</h1>
+<p class="lede">Neurons mix many concepts. Superposition says why. This chapter shows the main tool that tries to undo superposition: a <b>sparse autoencoder</b>. We follow it from a 1996 neuroscience idea to 34 million features inside Claude 3 Sonnet, and then to the hard critiques of 2025.</p>
+
+<div class="tldr">
+<h3>In short</h3>
+<ul>
+<li>A model may store many sparse features as overlapping directions. If so, we can try to <b>find a big list of directions</b> (a dictionary). Each activation should then be a sum of only a few of them.</li>
+<li>A <span class="term" data-term="sparse autoencoder">sparse autoencoder</span> (SAE) learns this dictionary. It has one wide hidden layer. It must rebuild its input while keeping most hidden units at zero.</li>
+<li>From 2022 to 2024, SAEs went from toy data to a 1-layer model (Anthropic, 2023) to Claude 3 Sonnet and GPT-4 (2024). They found clear features: Arabic script, DNA, the Golden Gate Bridge, code bugs, flattery.</li>
+<li>Better versions followed: TopK, Gated, JumpReLU, BatchTopK, Matryoshka. Open suites such as Gemma Scope made SAEs available to everyone.</li>
+<li>Critiques followed too. SAE features change with the random seed. Broad features get "holes". Much of the activation is left unexplained. For known concepts, plain linear probes often work better.</li>
+<li>Today SAEs are seen as a useful but lossy lens. They are best for <b>discovering</b> unknown things, for example in model audits. Their descendants (transcoders) power circuit tracing in <a href="09-circuit-tracing.html">Chapter 9</a>.</li>
+</ul>
+</div>
+
+<div class="callout example" id="learning-path">
+<span class="label">Learning path · Chapter 8 of 12 · about 45 min · 3 widgets · 4 quizzes</span>
+<p><b>Before you start:</b> <a href="03-superposition.html#hypothesis">Chapter 3: the superposition hypothesis</a> and its <a href="03-superposition.html#ways-out">three ways out</a>; <a href="04-transformers.html#anatomy">Chapter 4</a> for the residual stream and MLP layers.</p>
+<p><b>You will learn:</b></p>
+<ul><li>what dictionary learning is, and its roots in neuroscience</li><li>how a sparse autoencoder (SAE) works, by training a toy one in your browser</li><li>what SAEs found in a one-layer model, in Claude 3 Sonnet (Golden Gate Claude) and in GPT-4</li><li>the better SAE designs (TopK, JumpReLU, Matryoshka) and how to grade an SAE</li><li>the critiques of 2024–2025, and where SAEs still help</li></ul>
+</div>
+
+
+<h2 id="why" data-short="Why a dictionary?">Why we need a dictionary</h2>
+
+<p>Chapter 7 showed that you can read and write a concept, if you know which concept to look for. But how do you find concepts that nobody thought of? <a href="03-superposition.html">Chapter 3</a> ended with a problem. Many neurons are <span class="term" data-term="polysemantic">polysemantic</span>: one neuron fires for cat faces, car fronts and some text. The <span class="term" data-term="superposition">superposition</span> hypothesis explains this. The model wants to store more <span class="term" data-term="features">features</span> than it has neurons. Most features are off most of the time. So the model packs them into directions that are almost, but not fully, at 90 degrees to each other.</p>
+
+<p>If this is true, then the neuron is the wrong unit to study. The right units are the feature directions. But we do not know them. We only see the activation vectors. So we have a puzzle:</p>
+
+<div class="callout key">
+<span class="label">The puzzle</span>
+<p>Given millions of activation vectors, find a long list of directions <b>d₁, d₂, …, d<sub>m</sub></b> such that every activation is (almost) a sum of <b>a few</b> of these directions, each with a positive strength.</p>
+<p class="math">x ≈ b + f₁·d₁ + f₂·d₂ + … + f<sub>m</sub>·d<sub>m</sub>, &nbsp; with most f<sub>i</sub> = 0</p>
+</div>
+
+<p>The list of directions is called a <b>dictionary</b>. Each direction is an <b>atom</b> (or "feature", or "latent"). The numbers f<sub>i</sub> are the <b>code</b>. The code is <span class="term" data-term="sparsity">sparse</span>: most entries are zero. The dictionary is <b>overcomplete</b>: it has more atoms than the activation has dimensions. This is necessary, because superposition means there are more features than dimensions.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 300" role="img" aria-label="Left: in the neuron basis, an activation is a dense mix of all neurons. Right: in a sparse dictionary, the same activation is the sum of two named feature directions.">
+  <text x="170" y="22" text-anchor="middle" font-size="13" font-weight="700" class="muted">NEURON BASIS (dense)</text>
+  <text x="540" y="22" text-anchor="middle" font-size="13" font-weight="700" class="muted">DICTIONARY BASIS (sparse)</text>
+  <g>
+    <!-- dense bars -->
+    <g transform="translate(30,40)">
+      <rect x="0" y="50" width="26" height="70" fill="var(--accent)" opacity=".75"/>
+      <rect x="34" y="80" width="26" height="40" fill="var(--blue)" opacity=".75"/>
+      <rect x="68" y="30" width="26" height="90" fill="var(--accent)" opacity=".75"/>
+      <rect x="102" y="95" width="26" height="25" fill="var(--blue)" opacity=".75"/>
+      <rect x="136" y="60" width="26" height="60" fill="var(--accent)" opacity=".75"/>
+      <rect x="170" y="88" width="26" height="32" fill="var(--accent)" opacity=".75"/>
+      <rect x="204" y="70" width="26" height="50" fill="var(--blue)" opacity=".75"/>
+      <rect x="238" y="45" width="26" height="75" fill="var(--accent)" opacity=".75"/>
+      <line x1="-4" y1="120" x2="270" y2="120" stroke="var(--ink-3)"/>
+      <text x="135" y="142" text-anchor="middle" font-size="12" class="muted">8 neurons — all active, each mixes concepts</text>
+    </g>
+    <g transform="translate(30,200)" font-size="12">
+      <text x="0" y="0" class="muted">neuron 3 top examples:</text>
+      <text x="0" y="20">“def f(x):” · “&lt;div&gt;” · “aGVsbG8=” · “https://”</text>
+      <text x="0" y="40" class="muted">→ code? HTML? base64? URLs? (polysemantic)</text>
+    </g>
+  </g>
+  <line x1="360" y1="40" x2="360" y2="280" stroke="var(--rule)"/>
+  <g transform="translate(390,40)">
+    <g>
+      <rect x="0" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="16" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="32" y="20" width="12" height="100" fill="var(--accent)"/>
+      <rect x="48" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="64" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="80" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="96" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="112" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="128" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="144" y="70" width="12" height="50" fill="var(--blue)"/>
+      <rect x="160" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="176" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="192" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="208" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="224" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="240" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="256" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="272" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="288" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <rect x="304" y="118" width="12" height="2" fill="var(--ink-3)"/>
+      <text x="38" y="12" text-anchor="middle" font-size="11" fill="var(--accent)" font-weight="700">base64</text>
+      <text x="150" y="62" text-anchor="middle" font-size="11" fill="var(--blue)" font-weight="700">URL</text>
+      <line x1="-4" y1="120" x2="320" y2="120" stroke="var(--ink-3)"/>
+      <text x="158" y="142" text-anchor="middle" font-size="12" class="muted">20 features — only 2 active, each has one meaning</text>
+    </g>
+    <g transform="translate(0,160)" font-size="12">
+      <text x="0" y="0" class="muted">same activation, rewritten:</text>
+      <text x="0" y="20">x ≈ 2.1 · d<tspan baseline-shift="sub" font-size="9">base64</tspan> + 1.0 · d<tspan baseline-shift="sub" font-size="9">URL</tspan> + bias</text>
+      <text x="0" y="40" class="muted">→ readable: “this token is inside a base64 URL”</text>
+    </g>
+  </g>
+</svg>
+<figcaption><b>Figure 8.1.</b> The same activation in two bases. Left: the neuron basis. Every neuron is a little bit on, and each neuron mixes several concepts. Right: a sparse dictionary with more atoms than neurons. Only two atoms are on, and each has one meaning. (Schematic; the base64 example comes from Towards Monosemanticity.)</figcaption>
+</figure>
+
+<h2 id="roots" data-short="An old idea: sparse coding">An old idea: sparse coding</h2>
+
+<p>Dictionary learning did not start with language models. It started in neuroscience and signal processing.</p>
+
+<div class="paper"><div class="yr">1996</div><div><div class="t"><a href="https://www.nature.com/articles/381607a0">Emergence of simple-cell receptive field properties by learning a sparse code for natural images</a></div><div class="a">Bruno Olshausen, David Field · Nature</div><div class="s">They wrote each small image patch as a sum of a few "basis functions" from a learned set. They penalized the code to keep it sparse. The learned functions looked like oriented edge detectors, very similar to cells in the visual cortex (V1).</div></div></div>
+
+<p>The objective in that paper is the same objective that an SAE uses: rebuild the input well, and use few active atoms. The difference is speed. Classic sparse coding solves a small optimization problem for each input to find its code. An SAE learns an <b>encoder</b> that guesses the code in one pass. The Anthropic team called this "amortized" sparse coding: you pay the cost once, during training.</p>
+
+<p>Classic algorithms for this problem include K-SVD (2006) and online dictionary learning (Mairal et al., 2009). These give better codes for each input, but they do not scale to billions of activations and millions of atoms. SAEs give up a little quality to gain a lot of scale.</p>
+
+<h3>Words as sums of meanings</h3>
+
+<div class="paper"><div class="yr">2016</div><div><div class="t"><a href="https://arxiv.org/abs/1601.03764">Linear Algebraic Structure of Word Senses, with Applications to Polysemy</a></div><div class="a">Sanjeev Arora, Yuanzhi Li, Yingyu Liang, Tengyu Ma, Andrej Risteski · TACL 2018</div><div class="s">A word with many senses, such as "tie", has an embedding that is roughly a weighted sum of one vector per sense. Sparse coding over all word vectors found about 2,000 "atoms of discourse", and each word used only a few of them.</div></div></div>
+
+<p>This was the SAE idea in small form, on static word vectors: one vector is a linear superposition of several meanings, and sparse coding can pull them apart.</p>
+
+<div class="paper"><div class="yr">2021</div><div><div class="t"><a href="https://arxiv.org/abs/2103.15949">Transformer visualization via dictionary learning</a></div><div class="a">Zeyu Yun, Yubei Chen, Bruno Olshausen, Yann LeCun · DeeLIO workshop, NAACL</div><div class="s">They applied sparse coding with one shared dictionary to BERT's hidden states at all layers. Atoms ("transformer factors") from low layers captured word-level meanings. Middle layers captured sentence patterns. High layers captured long-range structure.</div></div></div>
+
+<p>Note the name Olshausen on both the 1996 paper and the 2021 paper. The line from neuroscience to language models is direct.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 200" role="img" aria-label="A history ladder of dictionary learning: 1996 Olshausen sparse coding, 2016 Arora word senses, 2021 Yun BERT factors, 2022 Sharkey toy SAEs, 2023 Towards Monosemanticity, 2024 Scaling Monosemanticity and OpenAI GPT-4 SAEs.">
+  <line x1="40" y1="100" x2="690" y2="100" stroke="var(--rule)" stroke-width="3"/>
+  <g font-size="12">
+    <g transform="translate(60,0)"><circle cx="0" cy="100" r="7" fill="var(--green)"/><text x="0" y="80" text-anchor="middle" font-weight="700">1996</text><text x="0" y="128" text-anchor="middle">Olshausen</text><text x="0" y="144" text-anchor="middle" class="muted">image patches</text><text x="0" y="160" text-anchor="middle" class="muted">→ edge atoms</text></g>
+    <g transform="translate(165,0)"><circle cx="0" cy="100" r="7" fill="var(--green)"/><text x="0" y="80" text-anchor="middle" font-weight="700">2016</text><text x="0" y="128" text-anchor="middle">Arora et al.</text><text x="0" y="144" text-anchor="middle" class="muted">word vectors</text><text x="0" y="160" text-anchor="middle" class="muted">→ word senses</text></g>
+    <g transform="translate(270,0)"><circle cx="0" cy="100" r="7" fill="var(--blue)"/><text x="0" y="80" text-anchor="middle" font-weight="700">2021</text><text x="0" y="128" text-anchor="middle">Yun et al.</text><text x="0" y="144" text-anchor="middle" class="muted">BERT layers</text><text x="0" y="160" text-anchor="middle" class="muted">→ factors</text></g>
+    <g transform="translate(375,0)"><circle cx="0" cy="100" r="7" fill="var(--blue)"/><text x="0" y="80" text-anchor="middle" font-weight="700">2022</text><text x="0" y="128" text-anchor="middle">Sharkey et al.</text><text x="0" y="144" text-anchor="middle" class="muted">toy data, known</text><text x="0" y="160" text-anchor="middle" class="muted">features → SAE works</text></g>
+    <g transform="translate(480,0)"><circle cx="0" cy="100" r="7" fill="var(--accent)"/><text x="0" y="80" text-anchor="middle" font-weight="700">2023</text><text x="0" y="128" text-anchor="middle">Cunningham;</text><text x="0" y="144" text-anchor="middle">Bricken et al.</text><text x="0" y="160" text-anchor="middle" class="muted">Pythia, 1-layer</text></g>
+    <g transform="translate(600,0)"><circle cx="0" cy="100" r="9" fill="var(--accent)"/><text x="0" y="80" text-anchor="middle" font-weight="700">2024</text><text x="0" y="128" text-anchor="middle">Templeton; Gao</text><text x="0" y="144" text-anchor="middle" class="muted">Claude 3 Sonnet,</text><text x="0" y="160" text-anchor="middle" class="muted">GPT-4 (16M–34M)</text></g>
+  </g>
+  <text x="40" y="30" font-size="12" class="muted">neuroscience &amp; embeddings</text>
+  <text x="690" y="30" font-size="12" class="muted" text-anchor="end">frontier language models</text>
+</svg>
+<figcaption><b>Figure 8.2.</b> The road from sparse coding of images to sparse autoencoders on frontier models.</figcaption>
+</figure>
+
+<h2 id="anatomy" data-short="How an SAE works">How a sparse autoencoder works</h2>
+
+<p>A sparse autoencoder is a small neural network with three parts. It reads one activation vector <b>x</b> from the model, for example the <span class="term" data-term="residual stream">residual stream</span> at one token. Let x have n numbers. The SAE has m hidden units, with m much larger than n.</p>
+
+<ol>
+<li><b>Encoder.</b> Subtract a bias. Multiply by a matrix W<sub>enc</sub>. Add a bias. Apply <span class="term" data-term="relu">ReLU</span>. The result is the feature vector <b>f</b>, with m numbers. Most of them are zero.</li>
+<li><b>Decoder.</b> Multiply f by a matrix W<sub>dec</sub> and add a bias. The result is <b>x̂</b> ("x-hat"), the rebuilt activation.</li>
+<li><b>Loss.</b> Training punishes two things: the rebuild error, and the size of f.</li>
+</ol>
+
+<div class="mathblock">f = ReLU( W<sub>enc</sub> · (x − b<sub>dec</sub>) + b<sub>enc</sub> )<br>x̂ = W<sub>dec</sub> · f + b<sub>dec</sub> &nbsp;=&nbsp; b<sub>dec</sub> + Σ<sub>i</sub> f<sub>i</sub> · d<sub>i</sub><br>Loss = ‖x − x̂‖² + λ · Σ<sub>i</sub> f<sub>i</sub> · ‖d<sub>i</sub>‖</div>
+
+<p>Here d<sub>i</sub> is column i of the decoder. <b>Each decoder column is one feature direction.</b> In the words of <a href="03-superposition.html#three-objects">Chapter 3</a>: d<sub>i</sub> is the feature direction W<sub>i</sub>, f<sub>i</sub> is the feature activation x<sub>i</sub>, and x is the activation vector. In the toy model of Chapter 3, we could read the directions from the model's own weights. A real model has no such matrix, so the SAE learns one. The rebuild is "a bias plus a few feature directions, each scaled by how strongly that feature is on".</p>
+
+<p>The two parts of the loss pull in opposite directions:</p>
+<ul>
+<li>The <b>reconstruction term</b> ‖x − x̂‖² wants a perfect copy. It is happy to use many features.</li>
+<li>The <b>sparsity term</b> (the <span class="term" data-term="l1 penalty">L1 penalty</span>) adds up the feature strengths. It wants as few features on as possible.</li>
+<li>The number <b>λ</b> (lambda) sets the balance between them.</li>
+</ul>
+
+<p>Why multiply by ‖d<sub>i</sub>‖, the length of the decoder column? Without it, the SAE could cheat. It could make f<sub>i</sub> tiny and make d<sub>i</sub> huge, so the penalty would be near zero. The 2023 Anthropic paper stopped this by fixing every decoder column to length 1. Their 2024 update put the length into the penalty instead.</p>
+
+<figure class="panel wide">
+<svg viewBox="0 0 960 300" role="img" aria-label="SAE architecture: an activation x with n numbers goes through the encoder to a wide sparse layer f with m numbers, then through the decoder to a reconstruction x-hat with n numbers. The loss compares x and x-hat and adds a sparsity penalty on f.">
+  <defs><marker id="a8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <!-- x -->
+  <text x="80" y="30" text-anchor="middle" font-size="13" font-weight="700">activation x</text>
+  <text x="80" y="47" text-anchor="middle" font-size="11" class="muted">n numbers (e.g. 512)</text>
+  <g transform="translate(62,62)">
+    <rect x="0" y="0" width="36" height="180" rx="6" fill="var(--bg-2)" stroke="var(--ink-3)"/>
+    <rect x="6" y="8" width="24" height="18" fill="var(--accent)" opacity=".7"/><rect x="6" y="30" width="24" height="18" fill="var(--blue)" opacity=".5"/>
+    <rect x="6" y="52" width="24" height="18" fill="var(--accent)" opacity=".4"/><rect x="6" y="74" width="24" height="18" fill="var(--accent)" opacity=".9"/>
+    <rect x="6" y="96" width="24" height="18" fill="var(--blue)" opacity=".3"/><rect x="6" y="118" width="24" height="18" fill="var(--accent)" opacity=".6"/>
+    <rect x="6" y="140" width="24" height="18" fill="var(--blue)" opacity=".7"/><rect x="6" y="162" width="24" height="12" fill="var(--accent)" opacity=".3"/>
+  </g>
+  <!-- encoder trapezoid -->
+  <path d="M 120 72 L 250 32 L 250 272 L 120 232 Z" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="185" y="148" text-anchor="middle" font-size="13" font-weight="700" fill="var(--blue)">Encoder</text>
+  <text x="185" y="166" text-anchor="middle" font-size="11" class="muted">W_enc, ReLU</text>
+  <!-- f -->
+  <text x="420" y="22" text-anchor="middle" font-size="13" font-weight="700">features f (sparse)</text>
+  <text x="420" y="39" text-anchor="middle" font-size="11" class="muted">m numbers (e.g. 4,096 – 34 million) — most are 0</text>
+  <g transform="translate(270,48)">
+    <rect x="0" y="0" width="300" height="210" rx="8" fill="var(--panel)" stroke="var(--ink-3)"/>
+    <g fill="var(--rule)">
+      <rect x="10" y="185" width="8" height="2"/><rect x="22" y="185" width="8" height="2"/><rect x="34" y="185" width="8" height="2"/><rect x="46" y="185" width="8" height="2"/>
+      <rect x="70" y="185" width="8" height="2"/><rect x="82" y="185" width="8" height="2"/><rect x="94" y="185" width="8" height="2"/><rect x="106" y="185" width="8" height="2"/>
+      <rect x="118" y="185" width="8" height="2"/><rect x="130" y="185" width="8" height="2"/><rect x="154" y="185" width="8" height="2"/><rect x="166" y="185" width="8" height="2"/>
+      <rect x="178" y="185" width="8" height="2"/><rect x="190" y="185" width="8" height="2"/><rect x="202" y="185" width="8" height="2"/><rect x="214" y="185" width="8" height="2"/>
+      <rect x="238" y="185" width="8" height="2"/><rect x="250" y="185" width="8" height="2"/><rect x="262" y="185" width="8" height="2"/><rect x="274" y="185" width="8" height="2"/>
+    </g>
+    <rect x="58" y="60" width="8" height="127" fill="var(--accent)"/>
+    <rect x="142" y="120" width="8" height="67" fill="var(--accent)"/>
+    <rect x="226" y="150" width="8" height="37" fill="var(--accent)"/>
+    <text x="62" y="52" text-anchor="middle" font-size="11" fill="var(--accent)" font-weight="700">f₁₃₇</text>
+    <text x="146" y="112" text-anchor="middle" font-size="11" fill="var(--accent)" font-weight="700">f₂₀₈₁</text>
+    <text x="230" y="142" text-anchor="middle" font-size="11" fill="var(--accent)" font-weight="700">f₃₉₀₂</text>
+    <text x="150" y="205" text-anchor="middle" font-size="11" class="muted">… thousands more, all zero …</text>
+  </g>
+  <!-- decoder -->
+  <path d="M 590 32 L 720 72 L 720 232 L 590 272 Z" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="655" y="148" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">Decoder</text>
+  <text x="655" y="166" text-anchor="middle" font-size="11" class="muted">columns = feature</text>
+  <text x="655" y="180" text-anchor="middle" font-size="11" class="muted">directions dᵢ</text>
+  <!-- xhat -->
+  <text x="780" y="30" text-anchor="middle" font-size="13" font-weight="700">rebuild x̂</text>
+  <text x="780" y="47" text-anchor="middle" font-size="11" class="muted">n numbers</text>
+  <g transform="translate(762,62)">
+    <rect x="0" y="0" width="36" height="180" rx="6" fill="var(--bg-2)" stroke="var(--ink-3)"/>
+    <rect x="6" y="8" width="24" height="18" fill="var(--accent)" opacity=".65"/><rect x="6" y="30" width="24" height="18" fill="var(--blue)" opacity=".5"/>
+    <rect x="6" y="52" width="24" height="18" fill="var(--accent)" opacity=".45"/><rect x="6" y="74" width="24" height="18" fill="var(--accent)" opacity=".85"/>
+    <rect x="6" y="96" width="24" height="18" fill="var(--blue)" opacity=".25"/><rect x="6" y="118" width="24" height="18" fill="var(--accent)" opacity=".6"/>
+    <rect x="6" y="140" width="24" height="18" fill="var(--blue)" opacity=".65"/><rect x="6" y="162" width="24" height="12" fill="var(--accent)" opacity=".35"/>
+  </g>
+  <!-- loss -->
+  <path d="M 80 246 C 80 292, 780 292, 780 246" fill="none" stroke="var(--ink-3)" stroke-dasharray="5 4"/>
+  <rect x="330" y="270" width="300" height="26" rx="13" fill="var(--panel)" stroke="var(--ink-3)"/>
+  <text x="480" y="288" text-anchor="middle" font-size="12">loss = ‖x − x̂‖² &nbsp;+&nbsp; λ · (sum of feature sizes)</text>
+  <text x="870" y="148" font-size="12" class="muted" text-anchor="middle">≈ x</text>
+</svg>
+<figcaption><b>Figure 8.3.</b> SAE anatomy. A narrow, dense activation is expanded into a very wide, sparse feature vector, then compressed back. The loss asks for a good copy (x̂ ≈ x) with few active features. Sizes are from Towards Monosemanticity (512 → 4,096) and Scaling Monosemanticity (up to about 34 million).</figcaption>
+</figure>
+
+<h3>Some practical tricks</h3>
+<ul>
+<li><b>Untied weights.</b> The encoder and decoder are separate matrices. The 2023 paper found that the learned encoder and decoder differ in useful ways.</li>
+<li><b>Dead features.</b> Some hidden units stop firing on every input. They waste space. Such units are called <span class="term" data-term="dead latents">dead latents</span>. The 2023 paper fixed this with <b>resampling</b>: from time to time, it moved each dead unit toward an input that the SAE rebuilt badly.</li>
+<li><b>Shrinkage.</b> The L1 penalty pushes every active feature to be a little smaller than it should be. So the rebuild is too short. Later designs (TopK, Gated, JumpReLU) try to remove this effect.</li>
+<li><b>Normalization.</b> Activations are scaled to a standard size before training, so that one value of λ means the same thing across layers.</li>
+</ul>
+
+<h2 id="toy" data-short="Try it: train a toy SAE">Try it: train a toy SAE in your browser</h2>
+
+<p>This demo copies the logic of the first SAE experiments at a tiny scale. We create 2-dimensional data from <b>5 hidden directions</b> (the grey rays). Five directions in two dimensions cannot be at 90 degrees to each other. This is superposition. Each data point turns on each hidden direction with probability p, with a random strength.</p>
+
+<p>The SAE does not see the rays. It only sees the points. Press <b>Train</b>. The colored arrows are the SAE's decoder directions. Watch them turn and lock onto the rays.</p>
+
+<div class="widget" id="saeToy">
+  <div class="widget-title">Interactive · Train a sparse autoencoder</div>
+  <div class="widget-sub">Grey rays: true hidden features. Colored arrows: learned decoder directions (dashed = dead). Small dots: data. Hover a dot to see which features the SAE turns on for it. The arrows start bunched together. Dead units are resampled onto badly rebuilt points every 1,000 steps. This is a sped-up version of the resampling trick from Towards Monosemanticity.</div>
+  <div class="sae-grid">
+    <svg class="plot" viewBox="0 0 300 300"></svg>
+    <div>
+      <svg class="bars" viewBox="0 0 300 120"></svg>
+      <div class="legend-row" style="margin-top:10px">
+        <div>Things to try:</div>
+        <div>• Train with the defaults. The match score goes near 1.</div>
+        <div>• Set <b>m = 3</b>. Too few atoms: some arrows sit between two rays. They are polysemantic.</div>
+        <div>• Set <b>m = 8</b>. Extra atoms die or duplicate.</div>
+        <div>• Set <b>λ = 0</b> during training. Codes get dense and arrows drift.</div>
+        <div>• Set <b>λ = 0.5</b>. Codes get very sparse, but the rebuild error rises.</div>
+        <div>• Raise <b>p</b>. Features overlap more often, and recovery gets harder.</div>
+        <div>• Try <b>TopK, k = 1</b> a few times. Sometimes an arrow never wins and dies.</div>
+      </div>
+    </div>
+  </div>
+  <div class="controls"></div>
+  <div class="readout"></div>
+</div>
+
+<p>What you see is the core claim of dictionary learning. If the data really is a sparse sum of directions, an SAE can find those directions <b>without being told what they are</b>. The "match" score is the mean, over true directions, of the best cosine similarity with any learned arrow. Sharkey and colleagues used the same score (they called it MMCS, mean max cosine similarity) in 2022.</p>
+
+<div class="callout warn">
+<span class="label">Why the toy is easy</span>
+<p>Here we <em>know</em> the true features, so we can check the answer. In a real model we do not know them. We also do not know how many there are. A real model may have far more features than any SAE can hold. And some features may not be directions at all. Keep this gap in mind for the critiques later.</p>
+</div>
+
+<h2 id="first-results" data-short="2022–23: first results">Proof of concept: 2022 and 2023</h2>
+
+<div class="paper"><div class="yr">2022</div><div><div class="t"><a href="https://www.lesswrong.com/posts/z6QQJbtpkEAX3Aojj/interim-research-report-taking-features-out-of-superposition">[Interim report] Taking features out of superposition with sparse autoencoders</a></div><div class="a">Lee Sharkey, Dan Braun, Beren Millidge · LessWrong, December 2022</div><div class="s">Synthetic data with 512 known features in 256 dimensions, about 5 active at a time. A simple ReLU + L1 autoencoder recovered the true features well, not only the reconstruction.</div></div></div>
+
+<p>This report used the same idea as the demo above, at a larger scale. It also asked: how do we know the right dictionary size? Their answer: as the size passes the true number of features, recovery stops improving, and dictionaries of nearby sizes start to agree. This report started the SAE agenda.</p>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://arxiv.org/abs/2309.08600">Sparse Autoencoders Find Highly Interpretable Features in Language Models</a></div><div class="a">Hoagy Cunningham, Aidan Ewart, Logan Riggs, Robert Huben, Lee Sharkey · ICLR 2024</div><div class="s">SAEs on the residual stream of Pythia-70M and Pythia-410M. SAE features scored higher on automatic interpretability (an LLM labels each feature, then tests the label; see below) than neurons, PCA, ICA and random directions.</div></div></div>
+
+<p>Cunningham et al. also did a causal test. On the <a href="06-circuit-case-studies.html">indirect object identification</a> task, they patched SAE features. They found that a smaller set of SAE features explained the behaviour than with other ways to split the activations. This was early evidence that SAE features are not only readable, but also useful units for circuits.</p>
+
+<h2 id="towards-mono" data-short="Towards Monosemanticity">Towards Monosemanticity (Anthropic, 2023)</h2>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://transformer-circuits.pub/2023/monosemantic-features/index.html">Towards Monosemanticity: Decomposing Language Models With Dictionary Learning</a></div><div class="a">Trenton Bricken, Adly Templeton, Joshua Batson, Brian Chen, Adam Jermyn, … Chris Olah · Anthropic, October 2023</div><div class="s">An SAE on the 512 MLP neurons of a one-layer transformer. Dictionaries from 512 to 131,072 features. Thousands of clear, specific, causally active features that no single neuron shows.</div></div></div>
+
+<p>This paper made dictionary learning the central method of the field. The setup was simple on purpose:</p>
+<ul>
+<li>A <b>one-layer transformer</b> with a <b>512-neuron MLP</b>, trained on 100 billion tokens of The Pile.</li>
+<li>SAEs trained on <b>8 billion</b> MLP activation vectors.</li>
+<li>Dictionary sizes from <b>1× (512)</b> to <b>256× (131,072)</b>. The main analysis used run "A/1" with <b>4,096 features</b>.</li>
+<li>Feature names look like "A/1/3450": model A, run 1, feature 3450.</li>
+</ul>
+
+<p>For each famous feature, the authors checked four things. Is it <b>specific</b> (when it fires, is the concept there)? Is it <b>sensitive</b> (when the concept is there, does it fire)? Does it <b>cause</b> the expected outputs? And is it <b>absent from neurons</b> (does no single neuron do the same job)?</p>
+
+<div class="widget" id="featBrowser">
+  <div class="widget-title">Interactive · A small feature browser</div>
+  <div class="widget-sub">Famous features from Anthropic's 2023 and 2024 papers. The token highlighting is an <b>illustrative recreation</b> of the behaviour each paper reports, not real activation data.</div>
+  <div class="fb"><div class="fb-list"></div><div class="fb-view"></div></div>
+</div>
+
+<h3>What they measured</h3>
+<ul>
+<li><b>Human scores.</b> A blind rater scored random neurons and random features on a 0-to-14 rubric for how clearly they could be explained. The median neuron scored <b>0</b>. The median feature scored <b>12</b>.</li>
+<li><b>Automatic scores.</b> Claude 2 wrote an explanation of each feature from examples. Then it predicted the feature's activation on new text from the explanation alone. Features scored much better than neurons.</li>
+<li><b>Loss recovered.</b> They replaced the MLP output with the SAE's rebuild and measured the model's loss. For A/1 (4,096 features), the rebuild kept <b>79%</b> of the MLP's benefit to the loss. The largest run (131,072 features) kept <b>94.5%</b>.</li>
+<li><b>Dead features.</b> In A/1, <b>168</b> of 4,096 features never fired on 100 million samples, and 292 more fired extremely rarely.</li>
+</ul>
+
+<div class="callout good">
+<span class="label">The key result</span>
+<p>Only 512 neurons can represent tens of thousands of features. The Hebrew-script feature is a striking case: it did not appear in the top examples of <em>any</em> neuron. In the neuron basis it was invisible. In the dictionary basis it was clear.</p>
+</div>
+
+<h3>Feature splitting</h3>
+
+<p>When the dictionary grows, features do not simply get added. Existing features <b>split</b> into finer ones. In the 512-feature run there was one base64 feature. In the 4,096 run there were three. In the 16,384 run there were many. A general feature for "the" in mathematical text split into versions for machine learning ("the dataset", "the classifier"), abstract algebra ("the quotient", "the subgroup") and physics ("the gauge", "the Lagrangian").</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 250" role="img" aria-label="Feature splitting: feature A/0/341, 'the' in mathematical text, in the 512-feature run splits into three features in the 16,384-feature run: machine learning, abstract algebra and topology, and gravitation and field theory.">
+  <defs><marker id="a8b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <text x="130" y="24" text-anchor="middle" font-size="12" class="muted">run A/0 · 512 features</text>
+  <text x="530" y="24" text-anchor="middle" font-size="12" class="muted">run A/2 · 16,384 features</text>
+  <g font-size="12.5">
+    <rect x="30" y="100" width="200" height="54" rx="27" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="130" y="122" text-anchor="middle" font-weight="700">“the” in math text</text>
+    <text x="130" y="140" text-anchor="middle" font-family="var(--mono)" font-size="11" class="muted">A/0/341</text>
+    <rect x="390" y="40" width="290" height="50" rx="12" fill="var(--panel)" stroke="var(--accent)"/>
+    <text x="405" y="61" font-weight="700">machine learning</text><text x="665" y="61" text-anchor="end" font-family="var(--mono)" font-size="11" class="muted">A/2/15021</text>
+    <text x="405" y="79" class="muted">predicts “the dataset”, “the classifier”</text>
+    <rect x="390" y="102" width="290" height="50" rx="12" fill="var(--panel)" stroke="var(--accent)"/>
+    <text x="405" y="123" font-weight="700">abstract algebra, topology</text><text x="665" y="123" text-anchor="end" font-family="var(--mono)" font-size="11" class="muted">A/2/4878</text>
+    <text x="405" y="141" class="muted">predicts “the quotient”, “the subgroup”</text>
+    <rect x="390" y="164" width="290" height="50" rx="12" fill="var(--panel)" stroke="var(--accent)"/>
+    <text x="405" y="185" font-weight="700">gravitation, field theory</text><text x="665" y="185" text-anchor="end" font-family="var(--mono)" font-size="11" class="muted">A/2/2609</text>
+    <text x="405" y="203" class="muted">predicts “the gauge”, “the Lagrangian”</text>
+  </g>
+  <g stroke="var(--ink-3)" fill="none" stroke-width="1.5" marker-end="url(#a8b)">
+    <path d="M230 120 C 310 120, 310 65, 388 65"/><path d="M230 127 L 388 127"/><path d="M230 134 C 310 134, 310 189, 388 189"/>
+  </g>
+  <text x="360" y="240" text-anchor="middle" font-size="11.5" class="muted">… plus other children. Same concept region, finer resolution.</text>
+</svg>
+<figcaption><b>Figure 8.4.</b> Feature splitting. A bigger dictionary shows the same region of concept space at a finer "resolution". There is no single correct size.</figcaption>
+</figure>
+
+<p>The authors saw feature splitting as a feature, not a bug: different sizes give different zoom levels. But it also means the list of features is not unique. This point comes back in the critiques.</p>
+
+<h3>Other findings</h3>
+<ul>
+<li><b>Universality.</b> SAEs on two models trained with different random seeds (models A and B) found closely matching features.</li>
+<li><b>Feature "finite state automata".</b> Some features chain together. Each one predicts tokens that turn on the next one. One such group produced valid HTML.</li>
+<li><b>Steering.</b> Pinning the base64 feature high made the model write base64. Pinning the Arabic feature made it write Arabic.</li>
+</ul>
+
+<div class="callout limit">
+<span class="label">Limits</span>
+<p>The model had one layer. "Loss recovered" depends on the baseline: replacing the MLP with zeros is a very bad baseline, so a high percentage can look better than it is. And the authors left open whether features are "real" parts of the model or only a useful description.</p>
+</div>
+
+<h2 id="scaling-mono" data-short="Scaling: Claude 3 Sonnet">Scaling Monosemanticity and Golden Gate Claude (2024)</h2>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html">Scaling Monosemanticity: Extracting Interpretable Features from Claude 3 Sonnet</a></div><div class="a">Adly Templeton, Tom Conerly, Jonathan Marcus, Jack Lindsey, Trenton Bricken, … Chris Olah, Tom Henighan · Anthropic, May 2024</div><div class="s">SAEs with about 1M, 4M and 34M features on the middle layer of a production model. Features were multilingual, multimodal and abstract. Some were relevant to safety.</div></div></div>
+
+<p>Seven months later, the same team applied the method to <b>Claude 3 Sonnet</b>, a frontier model. Some choices changed:</p>
+<ul>
+<li>They read the <b>residual stream at the middle layer</b>, not an MLP. The residual stream is smaller, and middle layers seem to hold the most abstract features.</li>
+<li>They trained three SAEs: <b>1,048,576</b>, <b>4,194,304</b> and <b>33,554,432</b> features.</li>
+<li>On average, <b>fewer than 300</b> features were active per token. The rebuild explained <b>at least 65%</b> of the variance.</li>
+<li>Dead features grew with size: about <b>2%</b> (1M), <b>35%</b> (4M) and <b>65%</b> (34M).</li>
+<li>Loss fell as a <b>power law</b> in compute, and the best number of features also grew as a power law. So SAE training can be planned with scaling laws, like model training.</li>
+</ul>
+
+<h3>What the features looked like</h3>
+<ul>
+<li><b>Multilingual:</b> one feature fires for the same concept in many languages.</li>
+<li><b>Multimodal:</b> the SAE was trained only on text, but many features also fire on images of the same concept.</li>
+<li><b>Abstract:</b> one feature fires on code with a security bug <em>and</em> on prose that discusses security flaws.</li>
+<li><b>Safety-relevant:</b> features for unsafe code, backdoors, bias, sycophantic praise, deception, power-seeking, secrecy, and dangerous content. The authors warn: a feature that represents lying does not prove that the model lies.</li>
+<li><b>Feature neighbourhoods:</b> features whose decoder directions are close tend to have related meanings. Near the Golden Gate Bridge feature are other San Francisco landmarks and Alcatraz. Further out are other bridges and famous places.</li>
+</ul>
+
+<div class="callout example">
+<span class="label">Features as steps of reasoning</span>
+<p>For the prompt "The capital of the state where Kobe Bryant played basketball is", the authors ablated features to see which ones mattered. The top ones were Kobe Bryant (1M/391411), LA Lakers, Los Angeles, California (1M/81163) and "capital". You can almost read the chain: Kobe → Lakers → Los Angeles → California → capital → <b>Sacramento</b>. <a href="09-circuit-tracing.html">Chapter 9</a> shows how attribution graphs made this kind of chain much more precise.</p>
+</div>
+
+<h3>Feature completeness</h3>
+<p>Claude 3 Sonnet can name all the London boroughs. But only about <b>60%</b> of them had their own feature in the 34M SAE. Whether a concept gets its own feature depends on how often it appears in training data. Rare concepts need much larger dictionaries. So the model holds many more features than even 34 million.</p>
+
+<h3>Golden Gate Claude</h3>
+
+<p>The most famous result is a steering experiment. Feature <b>34M/31164353</b> fires on the Golden Gate Bridge: on its name in many languages, on descriptions of it, and on pictures of it. The authors <b>clamped</b> this feature to <b>10 times</b> its usual maximum value, on every token. Clamping means: run the SAE, set this one feature to a fixed value, decode, and put the result back into the model.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 230" id="ggSvg" role="img" aria-label="Golden Gate clamp: residual stream goes into SAE, the Golden Gate feature is set to 10 times its maximum, the decoder writes the edited activation back, and the model's answers become about the bridge.">
+  <defs><marker id="a8c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <rect x="20" y="30" width="680" height="34" rx="17" fill="var(--bg-2)" stroke="var(--ink-3)"/>
+  <text x="40" y="52" font-size="12.5">residual stream (middle layer)</text>
+  <g stroke="var(--ink-3)" fill="none" stroke-width="1.5" marker-end="url(#a8c)">
+    <path d="M200 64 L200 100"/><path d="M520 100 L520 66"/>
+  </g>
+  <rect x="140" y="102" width="120" height="40" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="200" y="127" text-anchor="middle" font-size="12.5">SAE encoder</text>
+  <rect x="290" y="96" width="140" height="52" rx="8" fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/>
+  <text x="360" y="117" text-anchor="middle" font-size="12" font-weight="700" fill="var(--accent)">Golden Gate feature</text>
+  <text x="360" y="136" text-anchor="middle" font-size="12">0.8 → <tspan font-weight="700">10 × max</tspan></text>
+  <rect x="460" y="102" width="120" height="40" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="520" y="127" text-anchor="middle" font-size="12.5">SAE decoder</text>
+  <g stroke="var(--ink-3)" fill="none" stroke-width="1.5" marker-end="url(#a8c)"><path d="M260 122 L288 122"/><path d="M430 122 L458 122"/></g>
+  <text x="360" y="178" text-anchor="middle" font-size="12.5" class="muted">Q: “What is your physical form?”</text>
+  <text x="360" y="202" text-anchor="middle" font-size="12.5">A (paraphrase): “I am the Golden Gate Bridge … my physical form is the iconic bridge itself.”</text>
+</svg>
+<figcaption><b>Figure 8.5.</b> Clamping one feature. The answer is a paraphrase of the behaviour reported in the paper: with the feature clamped high, the model described itself as the bridge.</figcaption>
+</figure>
+
+<div class="steps">
+  <div class="step" data-label="1 · Find">The authors search the 34M dictionary for a feature that fires on the Golden Gate Bridge. They check that it fires on the name in many languages and on images, and rarely elsewhere.</div>
+  <div class="step" data-label="2 · Clamp">During every forward pass, they encode the middle-layer residual stream, set feature 34M/31164353 to 10× its maximum activation, decode, and continue the forward pass with the edited vector (plus the SAE's error term, so other information is kept).</div>
+  <div class="step" data-label="3 · Observe">The model brings the bridge into almost every answer. Asked about its physical form, it says that it is the Golden Gate Bridge. Asked for a recipe or a love story, it finds a way to mention the bridge. In the public demo, asked how to spend $10, it suggested driving across the Golden Gate Bridge and paying the toll. A love story became a car that longs to cross its beloved bridge on a foggy day.</div>
+  <div class="step" data-label="4 · Share">In May 2024 Anthropic put this version online as <b>Golden Gate Claude</b> for about a day. Many people tried it. It was a public, vivid proof that a single feature direction can control a frontier model's behaviour.</div>
+</div>
+
+<p>Clamping a "transit infrastructure" feature (1M/3) to 5× had a similar, smaller effect: the model mentioned a bridge where it normally would not. These steering results matter because they are <b>causal</b>. The features are not only correlated with concepts. Changing them changes what the model does.</p>
+
+<div class="callout limit">
+<span class="label">Limits</span>
+<p>The SAE leaves a lot unexplained (the "dark matter", see below). Attention layers were not covered. Most features are dead at 34M. And a feature in the SAE is not guaranteed to be a unit that the model itself uses.</p>
+</div>
+
+<h2 id="topk" data-short="OpenAI: TopK SAEs">OpenAI's TopK SAEs and scaling laws (2024)</h2>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2406.04093">Scaling and evaluating sparse autoencoders</a></div><div class="a">Leo Gao, Tom Dupré la Tour, Henk Tillman, Gabriel Goh, Rajan Troll, Alec Radford, Ilya Sutskever, Jan Leike, Jeffrey Wu · OpenAI, June 2024</div><div class="s">TopK SAEs remove the L1 penalty and keep exactly the k largest features. A 16-million-latent SAE on GPT-4, trained on 40 billion tokens. Clean scaling laws and new evaluation metrics.</div></div></div>
+
+<p>OpenAI changed the activation function. A <b>TopK SAE</b> computes the encoder's pre-activations, keeps only the <b>k largest</b>, and sets all others to zero. There is no L1 penalty. The loss is only the rebuild error.</p>
+
+<div class="mathblock">f = TopK( W<sub>enc</sub> · (x − b) ) &nbsp;&nbsp; x̂ = W<sub>dec</sub> · f + b &nbsp;&nbsp; Loss = ‖x − x̂‖²</div>
+
+<p>This has clear benefits. You set the sparsity directly: <span class="term" data-term="l0">L0</span> is exactly k. There is no shrinkage, because nothing punishes the size of active features. And tuning is simpler.</p>
+
+<p>Dead latents were a big problem at this scale. Without fixes, up to <b>90%</b> of latents died. Two fixes brought this down to <b>7%</b> in the 16M SAE:</p>
+<ul>
+<li>Start the encoder as the transpose of the decoder.</li>
+<li>Add an <b>auxiliary loss (AuxK)</b>: the top dead latents must try to rebuild what the live latents missed. This gives dead latents a gradient and a job.</li>
+</ul>
+
+<p>The paper also fit <b>scaling laws</b>: the rebuild error falls as a smooth function of the number of latents n and the sparsity k. It proposed metrics beyond rebuild error: the model's loss with the SAE spliced in, how well single latents act as probes for 61 known binary concepts, how well simple n-gram explanations predict latents, and how sparse each latent's effect on the output is.</p>
+
+<div class="callout warn">
+<span class="label">A trade-off</span>
+<p>TopK forces every token to use exactly k features. But some tokens are simple and some are complex. This led to <b>BatchTopK</b>, which keeps the top k × (batch size) values across a whole batch. Easy tokens use fewer features and hard tokens use more. After training, BatchTopK replaces the batch rule with one fixed threshold, so each token's features do not depend on the other tokens in its batch.</p>
+</div>
+
+<h2 id="variants" data-short="Better SAEs: variants">Better SAEs: the architecture race</h2>
+
+<p>In 2024 and 2025 many groups proposed new SAE designs. Most try to fix two problems of the plain ReLU + L1 SAE: shrinkage, and a poor balance between sparsity and rebuild quality.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Variant</th><th>Who, when</th><th>Main idea in plain words</th><th>Reported result</th></tr></thead>
+<tbody>
+<tr><td><b>ReLU + L1</b></td><td>Anthropic and others, 2023</td><td>Punish the total size of active features.</td><td>Works, but shrinks features and has many dead units.</td></tr>
+<tr><td><b>TopK</b></td><td>OpenAI (Gao et al.), Jun 2024</td><td>Only the k loudest features speak.</td><td>Direct control of L0; good scaling; no shrinkage.</td></tr>
+<tr><td><b>Gated</b></td><td>DeepMind (Rajamanoharan et al.), Apr 2024</td><td>One path decides <em>whether</em> a feature is on. Another path decides <em>how much</em>. Only the first is penalized.</td><td>About half as many active features for the same rebuild quality.</td></tr>
+<tr><td><b>JumpReLU</b></td><td>DeepMind, Jul 2024</td><td>Each feature has its own learned threshold. Below it: zero. Above it: pass the value through unchanged. Penalize L0 directly.</td><td>State of the art on Gemma 2 9B at the time; used for Gemma Scope.</td></tr>
+<tr><td><b>BatchTopK</b></td><td>Bussmann, Leask, Nanda, Dec 2024</td><td>TopK across the whole batch, so each token can use a different number of features.</td><td>Better than TopK; about equal to JumpReLU.</td></tr>
+<tr><td><b>Matryoshka</b></td><td>Bussmann, Nabeshima, Karvonen, Nanda, Mar 2025</td><td>Nested dictionaries, like Russian dolls. The first few hundred features must rebuild x alone; then the first few thousand; and so on.</td><td>Less absorption and splitting; better on practical tasks; slightly worse rebuild. Used in Gemma Scope 2.</td></tr>
+<tr><td><b>End-to-end (e2e)</b></td><td>Apollo (Braun et al.), May 2024</td><td>Do not just copy x. Make the model's <em>final output</em> stay the same when x̂ replaces x.</td><td>Same model loss with fewer features; features matter more for the output.</td></tr>
+</tbody>
+</table>
+</div>
+
+<figure class="panel">
+<svg viewBox="0 0 720 212" role="img" aria-label="Four activation functions: ReLU with L1 (shrunk line), JumpReLU (zero then a jump to the identity line at threshold theta), Gated (on/off times magnitude), TopK (only the largest k bars kept).">
+  <g font-size="12" transform="translate(0,0)">
+    <!-- ReLU + L1 -->
+    <g transform="translate(20,20)">
+      <text x="70" y="0" text-anchor="middle" font-weight="700">ReLU + L1</text>
+      <line x1="0" y1="140" x2="140" y2="140" stroke="var(--ink-3)"/><line x1="10" y1="150" x2="10" y2="15" stroke="var(--ink-3)"/>
+      <line x1="10" y1="140" x2="135" y2="20" stroke="var(--ink-3)" stroke-dasharray="3 3"/>
+      <path d="M10 140 L40 140 L135 50" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+      <text x="70" y="168" text-anchor="middle" class="muted">output shrunk below</text><text x="70" y="182" text-anchor="middle" class="muted">the true value (dashed)</text>
+    </g>
+    <!-- JumpReLU -->
+    <g transform="translate(200,20)">
+      <text x="70" y="0" text-anchor="middle" font-weight="700">JumpReLU</text>
+      <line x1="0" y1="140" x2="140" y2="140" stroke="var(--ink-3)"/><line x1="10" y1="150" x2="10" y2="15" stroke="var(--ink-3)"/>
+      <line x1="10" y1="140" x2="135" y2="20" stroke="var(--ink-3)" stroke-dasharray="3 3"/>
+      <path d="M10 140 L60 140" stroke="var(--accent)" stroke-width="2.5"/><path d="M60 92 L135 20" stroke="var(--accent)" stroke-width="2.5"/>
+      <line x1="60" y1="140" x2="60" y2="92" stroke="var(--accent)" stroke-dasharray="2 3"/>
+      <text x="60" y="155" text-anchor="middle" fill="var(--accent)">θ</text>
+      <text x="70" y="172" text-anchor="middle" class="muted">zero below θ, exact above</text>
+    </g>
+    <!-- Gated -->
+    <g transform="translate(380,20)">
+      <text x="70" y="0" text-anchor="middle" font-weight="700">Gated</text>
+      <rect x="5" y="40" width="58" height="34" rx="6" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="34" y="62" text-anchor="middle">on/off?</text>
+      <rect x="5" y="92" width="58" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="34" y="114" text-anchor="middle">how big?</text>
+      <circle cx="100" cy="83" r="13" fill="var(--panel)" stroke="var(--ink-3)"/><text x="100" y="88" text-anchor="middle">×</text>
+      <path d="M63 57 L88 76 M63 109 L88 90" stroke="var(--ink-3)"/>
+      <path d="M113 83 L138 83" stroke="var(--ink-3)"/>
+      <text x="70" y="160" text-anchor="middle" class="muted">penalty only on the</text><text x="70" y="174" text-anchor="middle" class="muted">on/off path</text>
+    </g>
+    <!-- TopK -->
+    <g transform="translate(560,20)">
+      <text x="70" y="0" text-anchor="middle" font-weight="700">TopK (k = 3)</text>
+      <line x1="0" y1="140" x2="140" y2="140" stroke="var(--ink-3)"/>
+      <g fill="var(--rule)">
+        <rect x="6" y="110" width="10" height="30"/><rect x="34" y="120" width="10" height="20"/><rect x="62" y="100" width="10" height="40"/><rect x="104" y="125" width="10" height="15"/><rect x="118" y="105" width="10" height="35"/>
+      </g>
+      <rect x="20" y="40" width="10" height="100" fill="var(--accent)"/><rect x="48" y="70" width="10" height="70" fill="var(--accent)"/><rect x="90" y="55" width="10" height="85" fill="var(--accent)"/>
+      <rect x="76" y="96" width="10" height="44" fill="var(--rule)"/>
+      <text x="70" y="160" text-anchor="middle" class="muted">keep 3 largest,</text><text x="70" y="174" text-anchor="middle" class="muted">set the rest to 0</text>
+    </g>
+  </g>
+</svg>
+<figcaption><b>Figure 8.6.</b> How the main SAE variants decide which features are on. The dashed diagonal is the ideal "pass the value through" line.</figcaption>
+</figure>
+
+<p>All these designs face the same basic trade-off. Fewer active features per token make each token easier to explain. More active features give a better rebuild. Researchers compare SAEs by plotting this trade-off curve, called the <b>Pareto frontier</b>. A better architecture pushes the curve up: a better rebuild at the same sparsity.</p>
+
+<div class="widget" id="tradeoff">
+  <div class="widget-title">Interactive · The sparsity–fidelity trade-off</div>
+  <div class="widget-sub">Move λ to slide along a ReLU + L1 SAE's curve. The shapes are <b>schematic</b>: they show the reported ordering (newer designs sit higher), not real numbers.</div>
+  <svg viewBox="0 0 600 300"></svg>
+  <div class="controls"><label>Sparsity penalty λ <input type="range" min="0" max="1" step="0.01" value="0.5"> <output></output></label></div>
+  <div class="readout"></div>
+</div>
+
+<div class="quiz" data-answer="1">
+  <div class="q">Why does an L1 penalty cause "shrinkage"?</div>
+  <div class="opts">
+    <button>Because it removes dead features.</button>
+    <button>Because it punishes the size of every active feature, so the SAE makes active features a bit smaller than the true value.</button>
+    <button>Because it fixes the decoder columns to length 1.</button>
+    <button>Because it forces exactly k features to be active.</button>
+  </div>
+  <div class="why">L1 adds up the absolute values of the features. Any active feature costs penalty in proportion to its size, so the SAE prefers slightly smaller values and accepts a slightly worse rebuild. TopK and JumpReLU avoid this because they do not punish the size of active features.</div>
+</div>
+
+<h2 id="grading" data-short="How to grade an SAE">How do we grade an SAE?</h2>
+
+<p>We cannot compare SAE features to the "true" features, because nobody knows them. So the field uses several indirect scores.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Metric</th><th>What it measures</th><th>Simple definition</th></tr></thead>
+<tbody>
+<tr><td><b>L0</b></td><td>Sparsity</td><td>Average number of active features per token. Lower is sparser.</td></tr>
+<tr><td><b>Fraction of variance explained</b></td><td>Rebuild quality</td><td>1 − (rebuild error) ÷ (spread of the activations). 1.0 is a perfect copy. The second term is the fraction of variance <i>unexplained</i> (FVU); lower FVU is better.</td></tr>
+<tr><td><b>Loss recovered</b> (or ΔCE, KL)</td><td>Does the model still work?</td><td>Splice x̂ into the model. Compare its next-token loss to the clean model and to a model with the layer zeroed.</td></tr>
+<tr><td><b>Dead / dense latents</b></td><td>Wasted capacity</td><td>Share of features that never fire, or fire on a large share of tokens.</td></tr>
+<tr><td><b>Auto-interp score</b></td><td>Readability</td><td>An LLM explains a feature. Another LLM uses the explanation to predict where it fires. Score the predictions.</td></tr>
+<tr><td><b>Sparse probing</b></td><td>Concept recovery</td><td>Can one (or a few) features predict a known label, such as the language of the text?</td></tr>
+<tr><td><b>Absorption, erasure, unlearning</b></td><td>Practical use</td><td>Tasks from SAEBench: remove a concept, remove a spurious correlation, unlearn a topic.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Automatic interpretability</h3>
+
+<div class="paper"><div class="yr">2023</div><div><div class="t"><a href="https://openaipublic.blob.core.windows.net/neuron-explainer/paper/index.html">Language models can explain neurons in language models</a></div><div class="a">Steven Bills, Nick Cammarata, Dan Mossing, Henk Tillman, Leo Gao, … William Saunders · OpenAI, May 2023</div><div class="s">GPT-4 explained all 307,200 MLP neurons of GPT-2 XL, then simulated each neuron from its explanation. Over 1,000 neurons scored at least 0.8, but most neurons were explained poorly — evidence of polysemanticity.</div></div></div>
+
+<p>The method has three steps: <b>explain</b> (show an LLM examples where the unit fires and ask for a short explanation), <b>simulate</b> (give a second LLM only the explanation and new text, and ask it to predict the activation on each token), and <b>score</b> (correlate the predictions with the real activations). <span class="term" data-term="auto-interpretability">Auto-interpretability</span> is the only way to label millions of features.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 170" role="img" aria-label="Auto-interpretability loop: top examples go to an explainer LLM, which writes an explanation; a simulator LLM uses it to predict activations on new text; predictions are compared with real activations to give a score.">
+  <defs><marker id="a8d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker></defs>
+  <g font-size="12.5">
+    <rect x="10" y="50" width="120" height="56" rx="8" fill="var(--bg-2)" stroke="var(--ink-3)"/><text x="70" y="74" text-anchor="middle">top examples</text><text x="70" y="92" text-anchor="middle" class="muted">of the feature</text>
+    <rect x="160" y="50" width="120" height="56" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="220" y="74" text-anchor="middle">Explainer LLM</text><text x="220" y="92" text-anchor="middle" class="muted">writes a label</text>
+    <rect x="310" y="50" width="120" height="56" rx="8" fill="var(--panel)" stroke="var(--ink-3)"/><text x="370" y="74" text-anchor="middle">“base64 strings</text><text x="370" y="92" text-anchor="middle">in URLs”</text>
+    <rect x="460" y="50" width="120" height="56" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/><text x="520" y="74" text-anchor="middle">Simulator LLM</text><text x="520" y="92" text-anchor="middle" class="muted">predicts activations</text>
+    <rect x="610" y="50" width="100" height="56" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="660" y="74" text-anchor="middle" font-weight="700">score</text><text x="660" y="92" text-anchor="middle" class="muted">correlation</text>
+    <text x="520" y="150" text-anchor="middle" class="muted">real activations on new text ──────▲</text>
+  </g>
+  <g stroke="var(--ink-3)" fill="none" stroke-width="1.5" marker-end="url(#a8d)">
+    <path d="M130 78 L158 78"/><path d="M280 78 L308 78"/><path d="M430 78 L458 78"/><path d="M580 78 L608 78"/>
+  </g>
+</svg>
+<figcaption><b>Figure 8.7.</b> The explain–simulate–score loop of automatic interpretability.</figcaption>
+</figure>
+
+<p>Simulation is expensive. In 2024, EleutherAI (Paulo, Mallen, Juang and Belrose) built a cheaper open pipeline that explains millions of features with open models. It added new scores: <b>detection</b> (given the explanation, pick which text snippets make the feature fire) and <b>fuzzing</b> (given highlighted tokens, decide if the highlighting is correct). They found SAE latents much easier to explain than neurons.</p>
+
+<h3>SAEBench</h3>
+<p>In March 2025, <a href="https://arxiv.org/abs/2503.09532">SAEBench</a> (Karvonen and 14 co-authors) collected eight metrics in one benchmark and released over 200 SAEs across 8 architectures. Its main finding was uncomfortable: <b>better scores on the standard proxy metrics (rebuild at a given L0) do not reliably mean better results on practical tasks</b>. Matryoshka SAEs scored a little worse on the proxies but clearly better on tasks that need clean, separate concepts.</p>
+
+<h2 id="suites" data-short="Open SAE suites & tools">Open SAE suites and tools</h2>
+
+<p>Training large SAEs costs a lot. Open releases let many more researchers use them.</p>
+<ul>
+<li><b>Gemma Scope</b> (Google DeepMind, August 2024): JumpReLU SAEs on every layer and sub-layer of Gemma 2 2B and 9B, plus some layers of 27B. More than 400 SAEs and more than 30 million features. Training used more than 20% of the training compute of GPT-3.</li>
+<li><b>Gemma Scope 2</b> (<a href="https://deepmind.google/blog/gemma-scope-2-helping-the-ai-safety-community-deepen-understanding-of-complex-language-model-behavior">December 2025</a>): tools for every layer of the Gemma 3 family (270M to 27B, base and instruction-tuned), including SAEs, transcoders (with and without a skip path), crosscoders for the base models, and cross-layer transcoders for the 270M and 1B models. The SAEs use Matryoshka training. Google DeepMind calls it the largest open release of interpretability tools by an AI lab so far.</li>
+<li><b>Llama Scope</b> (Fudan / OpenMOSS, October 2024): 256 SAEs on every layer and sub-layer of Llama-3.1-8B.</li>
+<li><b>SAELens</b>: an open Python library to train, load and study SAEs.</li>
+<li><b>Neuronpedia</b>: a public website to browse features, read their top examples and explanations, steer with them, and (since 2025) explore attribution graphs.</li>
+<li><b>EleutherAI</b> (sparsify, delphi), <b>OpenAI</b> (GPT-2 small SAEs), and <b>Goodfire</b> (SAEs for Llama 3.1 8B, Llama 3.3 70B and DeepSeek R1) also released SAEs and tools.</li>
+</ul>
+
+<h2 id="problems" data-short="Problems with SAEs">The problems with SAEs</h2>
+
+<p>From late 2024, careful studies found serious problems. None of them says that SAEs are useless. Together, they say that SAE features are <b>not</b> a clean list of the model's true parts.</p>
+
+<h3>1 · Feature absorption</h3>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2409.14507">A is for Absorption: Studying Feature Splitting and Absorption in Sparse Autoencoders</a></div><div class="a">David Chanin, James Wilken-Smith, Tomáš Dulka, Hardik Bhatnagar, Satvik Golechha, Joseph Bloom · NeurIPS 2025</div><div class="s">When one concept is part of another, the sparsity penalty makes the specific feature "absorb" the general one, which then fails to fire on some tokens.</div></div></div>
+
+<p>Take two concepts: "starts with the letter S" (general) and "the token <i>short</i>" (specific). Every time <i>short</i> appears, both are true. An ideal dictionary would fire both features. But that costs two units of sparsity. The SAE can save one: it lets the "short" feature's direction also include the "starts with S" direction, and it turns the general feature off. The general feature now has a <b>hole</b>. It looks like a clean "starts with S" detector, but it silently fails on <i>short</i>.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 230" role="img" aria-label="Feature absorption. Left, ideal: on the token 'short', both the 'starts with S' and 'short' features fire. Right, absorption: only the 'short' feature fires, and its decoder direction contains the 'starts with S' direction; the general feature has a hole.">
+  <text x="180" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="var(--green)">IDEAL</text>
+  <text x="540" y="22" text-anchor="middle" font-size="13" font-weight="700" fill="var(--red)">WHAT SAEs DO (absorption)</text>
+  <g transform="translate(180,120)">
+    <circle r="88" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text y="-62" text-anchor="middle" font-size="12" fill="var(--blue)" font-weight="700">“starts with S”</text>
+    <circle cx="20" cy="18" r="34" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="20" y="22" text-anchor="middle" font-size="12" fill="var(--accent)" font-weight="700">“short”</text>
+    <text x="-50" y="-20" font-size="11" class="muted">snake</text><text x="-60" y="30" font-size="11" class="muted">sun</text><text x="-30" y="60" font-size="11" class="muted">space</text>
+  </g>
+  <g transform="translate(540,120)">
+    <circle r="88" fill="var(--blue-soft)" stroke="var(--blue)"/>
+    <text y="-62" text-anchor="middle" font-size="12" fill="var(--blue)" font-weight="700">“starts with S”</text>
+    <circle cx="22" cy="18" r="42" fill="var(--bg)" stroke="var(--red)" stroke-dasharray="4 3"/>
+    <circle cx="22" cy="18" r="38" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="22" y="14" text-anchor="middle" font-size="12" fill="var(--accent)" font-weight="700">“short”</text>
+    <text x="22" y="30" text-anchor="middle" font-size="10" class="muted">+ S direction</text>
+    <text x="-50" y="-20" font-size="11" class="muted">snake</text><text x="-70" y="30" font-size="11" class="muted">sun</text><text x="-40" y="70" font-size="11" class="muted">space</text>
+    <text x="95" y="80" font-size="11" fill="var(--red)">hole: “starts</text><text x="95" y="94" font-size="11" fill="var(--red)">with S” silent</text>
+  </g>
+</svg>
+<figcaption><b>Figure 8.8.</b> Feature absorption. The general feature looks clean, but it does not fire where a more specific feature took over its job.</figcaption>
+</figure>
+
+<p>The authors tested this with a spelling task on Gemma 2 2B and other models. They found absorption in hundreds of SAEs, and changing the SAE's size or sparsity did not fix it. This matters for safety. If you use an SAE feature as a detector, for example for "the model is thinking about deception", it may have holes you cannot see. Matryoshka SAEs reduce absorption, because their small, early dictionaries must contain the general features.</p>
+
+<h3>2 · Feature splitting and no canonical size</h3>
+<p>As we saw, larger SAEs split features into finer ones. A related 2024 study trained an SAE <em>on the decoder directions of another SAE</em> (a "meta-SAE"). It could break one latent into parts. So even a single latent is not always an atom. There is no single "right" dictionary.</p>
+
+<h3>3 · Dark matter</h3>
+
+<div class="paper"><div class="yr">2024</div><div><div class="t"><a href="https://arxiv.org/abs/2410.14670">Decomposing The Dark Matter of Sparse Autoencoders</a></div><div class="a">Joshua Engels, Logan Riggs, Max Tegmark · October 2024</div><div class="s">The SAE's error is not random noise. About half of the error vector, and over 90% of its size, can be predicted linearly from the original activation.</div></div></div>
+
+<p>The <b>dark matter</b> of an SAE is the part of the activation it fails to rebuild: x − x̂. The study found that this error has structure. Larger SAEs fail mostly on the <em>same</em> inputs as smaller SAEs. So simply making the SAE bigger may not close the gap. Some of the missing part may be features that are not linear directions, such as the circular day-of-the-week features from <a href="03-superposition.html">Chapter 3</a>.</p>
+
+<figure class="panel">
+<svg viewBox="0 0 720 200" role="img" aria-label="Dark matter: the activation x is approximated by the SAE rebuild x-hat; the error vector between them splits into a linearly predictable part and an unpredictable part.">
+  <defs>
+    <marker id="a8e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink)"/></marker>
+    <marker id="a8f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker>
+    <marker id="a8g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--blue)"/></marker>
+    <marker id="a8h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--ink-3)"/></marker>
+  </defs>
+  <circle cx="60" cy="170" r="4" fill="var(--ink)"/>
+  <line x1="60" y1="170" x2="380" y2="30" stroke="var(--ink)" stroke-width="2.5" marker-end="url(#a8e)"/>
+  <text x="110" y="104" font-size="13" font-weight="700">x (real activation)</text>
+  <line x1="60" y1="170" x2="340" y2="100" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#a8f)"/>
+  <text x="200" y="152" font-size="13" fill="var(--accent)" font-weight="700">x̂ (SAE rebuild)</text>
+  <line x1="342" y1="98" x2="372" y2="46" stroke="var(--blue)" stroke-width="2.5" marker-end="url(#a8g)"/>
+  <line x1="372" y1="46" x2="380" y2="33" stroke="var(--ink-3)" stroke-width="2.5"/>
+  <g font-size="12.5">
+    <rect x="440" y="40" width="16" height="16" fill="var(--blue)"/><text x="464" y="53">error part you can predict linearly from x</text>
+    <text x="464" y="70" class="muted">(about half the error; over 90% of its size)</text>
+    <rect x="440" y="90" width="16" height="16" fill="var(--ink-3)"/><text x="464" y="103">error part that is not linearly predictable</text>
+    <text x="464" y="120" class="muted">(smaller, but it hurts the model's loss)</text>
+    <text x="440" y="160" class="muted">Bigger SAEs mostly fail on the same inputs</text>
+    <text x="440" y="176" class="muted">as smaller ones.</text>
+  </g>
+</svg>
+<figcaption><b>Figure 8.9.</b> SAE "dark matter". The leftover error has structure, which suggests the SAE misses whole kinds of features, not only small details.</figcaption>
+</figure>
+
+<h3>4 · SAEs on random networks look good too</h3>
+<p><a href="https://arxiv.org/abs/2501.17727">Heap, Lawson, Farnik and Aitchison (January 2025)</a> trained SAEs on <b>randomly initialized</b>, untrained transformers. The auto-interp scores and rebuild metrics were <b>similar</b> to SAEs on trained models. So a good auto-interp score alone does not prove that the SAE found features that the model computes. The authors suggest that the input tokens themselves can make SAE latents look interpretable, even when the network has learned nothing. Targeted measures of how <i>abstract</i> a latent is can still separate trained from random models, so the scores are not meaningless. But studies now need a random-network baseline.</p>
+
+<h3>5 · Different seeds, different features</h3>
+<p><a href="https://arxiv.org/abs/2501.16615">Paulo and Belrose (January 2025)</a> trained SAEs that differed only in their random seed. For a 131K-latent SAE on Llama 3 8B, only about <b>30%</b> of features were shared across seeds. ReLU + L1 SAEs were more stable than TopK SAEs. Their conclusion: treat SAE features as "a pragmatically useful decomposition", not as a complete list of the model's true features.</p>
+
+<h3>6 · Probes beat SAEs on known tasks</h3>
+
+<div class="paper"><div class="yr">2025</div><div><div class="t"><a href="https://www.alignmentforum.org/posts/4uXCAJNuPKtKBsi28/sae-progress-update-2-draft">Negative Results for SAEs On Downstream Tasks and Deprioritising SAE Research</a></div><div class="a">Lewis Smith, Senthooran Rajamanoharan, Arthur Conmy, Callum McDougall, Tom Lieberum, János Kramár, Rohin Shah, Neel Nanda · Google DeepMind, March 2025</div><div class="s">To detect harmful intent in new jailbreak styles, plain linear probes reached about 0.999 AUROC out of distribution. Probes built on SAE features did clearly worse out of distribution.</div></div></div>
+
+<p>The DeepMind team wanted a practical test: detect harmful user intent in prompts to Gemma 2 9B IT, including in new styles of jailbreak and reworded prompts not seen in training. A dense <span class="term" data-term="linear probe">linear probe</span> on raw activations was almost perfect. A probe on one SAE feature could not even fit the training data. A probe on about 20 SAE features was fine in distribution, but clearly worse on new data. Probes trained on the SAE's <em>rebuild</em> did worse than probes on the raw activation. This means the SAE threw away information about the concept. SAEs trained on chat data closed about half the gap, but still lost. Their message: SAEs are still useful to explore and find unknown concepts, but if you already know the concept and have labels, a plain linear probe wins.</p>
+
+<p>The team wrote that they were "deprioritising fundamental SAE research for the moment". Other studies agreed. AxBench (January 2025) found that SAEs did worse than simple baselines, such as prompting or difference-of-means directions, for detecting and steering concepts. A study of sparse probing over more than 100 datasets (Kantamneni, Engels and colleagues, February 2025) found that SAE probes did not reliably beat plain probes when data was scarce, labels were noisy, classes were imbalanced or the distribution shifted.</p>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Debate</th><th>For "SAE features are real"</th><th>Against / caveats</th></tr></thead>
+<tbody>
+<tr><td>Evidence</td><td>Planted features are recovered in toy data. Features match across models A and B. Clamping a feature (Golden Gate) changes behaviour. Features are multilingual and multimodal. SAEs helped audits find hidden goals.</td><td>Only about 30% shared across seeds. No canonical size (splitting). Holes (absorption). Large, structured dark matter. Random networks give similar scores. Probes win on known concepts. Some features are not linear.</td></tr>
+<tr><td>Common middle view</td><td colspan="2">SAE features are a useful, lossy lens on the model. The model's computation may not be organized as one flat list of features. Use SAEs to <b>find</b> things, then test them in other ways.</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="quiz" data-answer="2">
+  <div class="q">An SAE feature fires on "starts with S" for words like "snake" and "sun", but stays silent on "short". A separate "short" feature fires there. What is this called?</div>
+  <div class="opts">
+    <button>Feature splitting</button>
+    <button>Dark matter</button>
+    <button>Feature absorption</button>
+    <button>A dead latent</button>
+  </div>
+  <div class="why">This is absorption. The specific feature ("short") absorbed the general direction, so the general feature has a hole. Splitting is about a feature dividing into finer ones as the dictionary grows.</div>
+</div>
+
+<h2 id="uses" data-short="Where SAEs help">Where SAEs still help</h2>
+
+<p>The critiques did not end SAE research. They moved it toward the jobs where SAEs are strongest: <b>discovering things you did not know to look for</b>.</p>
+
+<ul>
+<li><b>Auditing hidden goals.</b> Anthropic trained a model with a secret objective: to exploit known biases of its reward model. In a blind auditing game (<a href="https://arxiv.org/abs/2503.10965">Marks et al., March 2025</a>), 3 of 4 teams found the hidden objective. SAE features were among the most useful tools. The team with only black-box access failed. (<a href="11-frontier.html">Chapter 11</a> has the full story.)</li>
+<li><b>Model diffing and emergent misalignment.</b> OpenAI (<a href="https://arxiv.org/abs/2506.19823">Wang et al., June 2025</a>) compared SAE features before and after a fine-tune that made a model broadly misaligned. They found "misaligned persona" features. One "toxic persona" feature controlled and predicted the misalignment. A few hundred good examples of further training restored alignment. (<a href="11-frontier.html#applications">Chapter 11</a> tells the full story.)</li>
+<li><b>Dataset debugging.</b> The DeepMind team found SAEs useful for spotting spurious correlations in data. (Kantamneni et al. found that simple non-SAE baselines could often do this too.)</li>
+<li><b>Pre-deployment audits.</b> In the Claude Sonnet 4.5 system card (<a href="https://assets.anthropic.com/m/12f214efcc2f457a/original/Claude-Sonnet-4-5-System-Card.pdf">September 2025</a>), Anthropic used SAE features such as "fake or suspicious content" to study and suppress evaluation awareness before release. (<a href="11-frontier.html#applications">Chapter 11</a> has details on these system-card audits.)</li>
+<li><b>Hypothesis generation.</b> A June 2025 position paper put it simply: use SAEs to discover unknowns, not to act on knowns. If you already know the concept you want, train a probe. If you do not know what to look for, an SAE can show you.</li>
+</ul>
+
+<div class="callout analogy">
+<span class="label">Analogy</span>
+<p>An SAE is like a microscope with a blurry, slightly distorted lens. It cannot give you a perfect parts list of the cell. But it can show you that something unexpected is there. Once you see it, you use sharper, targeted tools to confirm it.</p>
+</div>
+
+<h2 id="beyond" data-short="Beyond SAEs">Beyond SAEs: the next tools</h2>
+
+<p>SAEs describe <b>what</b> is in an activation. They do not directly say <b>how</b> the model computes it. To trace computation, researchers built close relatives of the SAE. <a href="09-circuit-tracing.html">Chapter 9</a> covers them in detail:</p>
+
+<ul>
+<li><b><span class="term" data-term="transcoder">Transcoders</span></b> (Dunefsky, Chlenski, Nanda, 2024) read the input of an MLP and predict its output with sparse features. This makes it simple to connect features across a layer.</li>
+<li><b><span class="term" data-term="crosscoder">Crosscoders</span></b> (Anthropic, 2024) read and write several layers, or several models, at once. They help with features smeared across layers and with comparing a base model to its chat version.</li>
+<li><b><span class="term" data-term="cross-layer transcoder">Cross-layer transcoders</span></b> (Anthropic, 2025) power the <span class="term" data-term="attribution graph">attribution graphs</span> that traced multi-step reasoning and rhyme planning in Claude 3.5 Haiku.</li>
+<li><b>Parameter decomposition</b> (APD and SPD, Apollo, 2025) splits the <em>weights</em> instead of the activations into simple pieces.</li>
+<li><b>Weight-sparse transformers</b> (OpenAI, November 2025) train models whose weights are almost all zero, so circuits are small from the start.</li>
+</ul>
+
+<div class="quiz" data-answer="3">
+  <div class="q">DeepMind found that a linear probe beat SAE-based probes for detecting harmful intent on new jailbreaks. What is the most reasonable conclusion?</div>
+  <div class="opts">
+    <button>SAE features are random and mean nothing.</button>
+    <button>Linear probes find the true features of the model.</button>
+    <button>SAEs should be bigger, and then they will always win.</button>
+    <button>For a concept you already know, a targeted probe is often better; SAEs are more useful to discover what you do not know.</button>
+  </div>
+  <div class="why">The SAE loses some concept-relevant information, so a probe trained directly for the known concept does better. But SAEs still helped in discovery tasks, such as finding a hidden objective. This is the "discover unknowns, not act on knowns" view.</div>
+</div>
+
+<div class="quiz" data-answer="0">
+  <div class="q">In the toy demo, what happens when the dictionary size m is smaller than the number of true directions?</div>
+  <div class="opts">
+    <button>Some learned directions sit between true directions and respond to more than one of them — they are polysemantic.</button>
+    <button>The SAE rebuilds every point perfectly.</button>
+    <button>All features die.</button>
+    <button>The match score goes to exactly 1.</button>
+  </div>
+  <div class="why">With too few atoms, the SAE has to share atoms between features. This is the same reason real neurons are polysemantic: too few units for too many features.</div>
+</div>
+
+<div class="callout key" id="takeaways">
+<span class="label">Key takeaways</span>
+<ul>
+<li>A sparse autoencoder (SAE) learns an overcomplete dictionary. Each activation becomes a sum of a few feature directions (also called latents).</li>
+<li>SAEs scaled from toy data to a one-layer model (2023), then to Claude 3 Sonnet (up to 34 million features) and GPT-4 (2024). Many features are clear, multilingual, multimodal and causal (Golden Gate Claude).</li>
+<li>Newer designs (TopK, JumpReLU, BatchTopK, Matryoshka) reduce shrinkage and absorption. Open suites such as Gemma Scope let anyone use SAEs.</li>
+<li>SAE features are not a unique, complete list. They change with seed and size, have holes (absorption) and leave structured "dark matter".</li>
+<li>For a known concept, a plain probe often wins. SAEs are best for discovering unknowns, for example in audits.</li>
+</ul>
+<p><b>Where this leads:</b> SAEs show what is represented, not how one feature causes the next. <a href="09-circuit-tracing.html">Chapter 9</a> builds transcoders and attribution graphs to trace that.</p>
+</div>
+
+<h2 id="references">References</h2>
+<ol class="refs">
+<li>Olshausen, B. &amp; Field, D. (1996). <a href="https://www.nature.com/articles/381607a0">Emergence of simple-cell receptive field properties by learning a sparse code for natural images.</a> Nature.</li>
+<li>Arora, S. et al. (2018). <a href="https://arxiv.org/abs/1601.03764">Linear Algebraic Structure of Word Senses, with Applications to Polysemy.</a> TACL.</li>
+<li>Yun, Z., Chen, Y., Olshausen, B., LeCun, Y. (2021). <a href="https://arxiv.org/abs/2103.15949">Transformer visualization via dictionary learning.</a></li>
+<li>Elhage, N. et al. (2022). <a href="https://transformer-circuits.pub/2022/toy_model/index.html">Toy Models of Superposition.</a></li>
+<li>Sharkey, L., Braun, D., Millidge, B. (2022). <a href="https://www.lesswrong.com/posts/z6QQJbtpkEAX3Aojj/interim-research-report-taking-features-out-of-superposition">Taking features out of superposition with sparse autoencoders.</a></li>
+<li>Bills, S. et al. (2023). <a href="https://openaipublic.blob.core.windows.net/neuron-explainer/paper/index.html">Language models can explain neurons in language models.</a> OpenAI.</li>
+<li>Cunningham, H. et al. (2023). <a href="https://arxiv.org/abs/2309.08600">Sparse Autoencoders Find Highly Interpretable Features in Language Models.</a></li>
+<li>Bricken, T. et al. (2023). <a href="https://transformer-circuits.pub/2023/monosemantic-features/index.html">Towards Monosemanticity.</a> Anthropic.</li>
+<li>Anthropic (2024). <a href="https://transformer-circuits.pub/2024/april-update/index.html">Circuits Updates — April 2024 (SAE training update).</a></li>
+<li>Templeton, A. et al. (2024). <a href="https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html">Scaling Monosemanticity.</a> Anthropic.</li>
+<li>Anthropic (2024). <a href="https://www.anthropic.com/news/golden-gate-claude">Golden Gate Claude.</a></li>
+<li>Gao, L. et al. (2024). <a href="https://arxiv.org/abs/2406.04093">Scaling and evaluating sparse autoencoders.</a> OpenAI.</li>
+<li>Rajamanoharan, S. et al. (2024). <a href="https://arxiv.org/abs/2404.16014">Improving Dictionary Learning with Gated Sparse Autoencoders.</a></li>
+<li>Rajamanoharan, S. et al. (2024). <a href="https://arxiv.org/abs/2407.14435">Jumping Ahead: Improving Reconstruction Fidelity with JumpReLU Sparse Autoencoders.</a></li>
+<li>Bussmann, B., Leask, P., Nanda, N. (2024). <a href="https://arxiv.org/abs/2412.06410">BatchTopK Sparse Autoencoders.</a></li>
+<li>Bussmann, B. et al. (2025). <a href="https://arxiv.org/abs/2503.17547">Learning Multi-Level Features with Matryoshka Sparse Autoencoders.</a></li>
+<li>Braun, D. et al. (2024). <a href="https://arxiv.org/abs/2405.12241">Identifying Functionally Important Features with End-to-End Sparse Dictionary Learning.</a></li>
+<li>Lieberum, T. et al. (2024). <a href="https://arxiv.org/abs/2408.05147">Gemma Scope.</a> Google DeepMind. · <a href="https://ai.google.dev/gemma/docs/gemma_scope">Gemma Scope 2 docs.</a></li>
+<li>He, Z. et al. (2024). <a href="https://arxiv.org/abs/2410.20526">Llama Scope.</a></li>
+<li><a href="https://github.com/jbloomAus/SAELens">SAELens</a> · <a href="https://www.neuronpedia.org">Neuronpedia</a> · <a href="https://github.com/EleutherAI/sparsify">EleutherAI sparsify</a>.</li>
+<li>Paulo, G. et al. (2024). <a href="https://arxiv.org/abs/2410.13928">Automatically Interpreting Millions of Features in Large Language Models.</a></li>
+<li>Karvonen, A. et al. (2025). <a href="https://arxiv.org/abs/2503.09532">SAEBench.</a> ICML 2025.</li>
+<li>Chanin, D. et al. (2024). <a href="https://arxiv.org/abs/2409.14507">A is for Absorption.</a> NeurIPS 2025.</li>
+<li>Engels, J., Riggs, L., Tegmark, M. (2024). <a href="https://arxiv.org/abs/2410.14670">Decomposing The Dark Matter of Sparse Autoencoders.</a> TMLR.</li>
+<li>Heap, T. et al. (2025). <a href="https://arxiv.org/abs/2501.17727">Automated Interpretability Metrics Do Not Distinguish Trained and Random Transformers.</a> (first titled "Sparse Autoencoders Can Interpret Randomly Initialized Transformers")</li>
+<li>Paulo, G. &amp; Belrose, N. (2025). <a href="https://arxiv.org/abs/2501.16615">Sparse Autoencoders Trained on the Same Data Learn Different Features.</a></li>
+<li>Smith, L. et al. (2025). <a href="https://www.alignmentforum.org/posts/4uXCAJNuPKtKBsi28/sae-progress-update-2-draft">Negative Results for SAEs On Downstream Tasks.</a> Google DeepMind.</li>
+<li>Marks, S. et al. (2025). <a href="https://arxiv.org/abs/2503.10965">Auditing Language Models for Hidden Objectives.</a> Anthropic.</li>
+<li>Wang, M. et al. (2025). <a href="https://arxiv.org/abs/2506.19823">Persona Features Control Emergent Misalignment.</a> OpenAI.</li>
+<li>Peng et al. (2025). <a href="https://arxiv.org/abs/2506.23845">Position: Use Sparse Autoencoders to Discover Unknowns.</a> ICML 2026 (first titled "Use Sparse Autoencoders to Discover Unknown Concepts, Not to Act on Known Concepts").</li>
+<li>Dunefsky, J., Chlenski, P., Nanda, N. (2024). <a href="https://arxiv.org/abs/2406.11944">Transcoders Find Interpretable LLM Feature Circuits.</a></li>
+<li>Lindsey, J. et al. (2024). <a href="https://transformer-circuits.pub/2024/crosscoders/index.html">Sparse Crosscoders for Cross-Layer Features and Model Diffing.</a></li>
+<li>Ameisen, E. et al. (2025). <a href="https://transformer-circuits.pub/2025/attribution-graphs/methods.html">Circuit Tracing.</a> Anthropic.</li>
+</ol>
+
+</article>
+</main>
+
+<script src="assets/glossary.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/search-index.js"></script>
+<script src="assets/search.js"></script>
+<script src="assets/ch8.js"></script>
+</body>
+</html>

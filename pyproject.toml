@@ -1,0 +1,24 @@
+[project]
+name = "mech-interp-experiments"
+version = "0.1.0"
+description = "Code for the mechanistic interpretability series on Neural Breakdown with AVB: superposition, inside the transformer, and steering."
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "torch>=2.7",
+    "transformers>=5.5",
+    "accelerate",
+    "safetensors",
+    "numpy",
+    "matplotlib>=3.10",
+    "scikit-learn",
+    "pyarrow",
+    "pandas>=3.1.0",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.4.0",
+]

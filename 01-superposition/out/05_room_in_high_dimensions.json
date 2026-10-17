@@ -1,0 +1,38 @@
+[
+ {
+  "dimensions": 2,
+  "directions": 10,
+  "pairs": 45,
+  "mean_abs_cos": 0.607,
+  "max_abs_cos": 0.999,
+  "worst_degrees_from_perpendicular": 86.9,
+  "share_within_10_degrees_of_perpendicular": 0.1111
+ },
+ {
+  "dimensions": 10,
+  "directions": 100,
+  "pairs": 4950,
+  "mean_abs_cos": 0.263,
+  "max_abs_cos": 0.881,
+  "worst_degrees_from_perpendicular": 61.8,
+  "share_within_10_degrees_of_perpendicular": 0.382
+ },
+ {
+  "dimensions": 100,
+  "directions": 1000,
+  "pairs": 499500,
+  "mean_abs_cos": 0.08,
+  "max_abs_cos": 0.494,
+  "worst_degrees_from_perpendicular": 29.6,
+  "share_within_10_degrees_of_perpendicular": 0.9176
+ },
+ {
+  "dimensions": 1000,
+  "directions": 10000,
+  "pairs": 49995000,
+  "mean_abs_cos": 0.025,
+  "max_abs_cos": 0.173,
+  "worst_degrees_from_perpendicular": 10.0,
+  "share_within_10_degrees_of_perpendicular": 1.0
+ }
+]

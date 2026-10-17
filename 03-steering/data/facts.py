@@ -1,0 +1,21 @@
+"""Prompts with a one-token answer. Each model's experiments keep only the ones it gets right."""
+FACTS = [
+    ("The Eiffel Tower is in the city of", " Paris"), ("The Colosseum is in the city of", " Rome"),
+    ("The Statue of Liberty is in the city of", " New"), ("Big Ben is in the city of", " London"),
+    ("The capital of Japan is", " Tokyo"), ("The capital of Germany is", " Berlin"), ("The capital of Egypt is", " Cairo"),
+    ("The capital of Russia is", " Moscow"), ("The capital of Spain is", " Madrid"), ("The capital of Canada is", " Ottawa"),
+    ("The capital of India is New", " Delhi"), ("The capital of Kenya is", " Nairobi"), ("The capital of Greece is", " Athens"),
+    ("The Taj Mahal is in the country of", " India"), ("The Great Wall is in the country of", " China"),
+    ("Mount Fuji is in the country of", " Japan"), ("The pyramids of Giza are in the country of", " Egypt"),
+    ("Michael Jordan plays the sport of", " basketball"), ("Lionel Messi plays the sport of", " football"),
+    ("Serena Williams plays the sport of", " tennis"), ("Tiger Woods plays the sport of", " golf"),
+    ("Sachin Tendulkar plays the sport of", " cricket"), ("Wayne Gretzky played the sport of", " hockey"),
+    ("Michael Phelps competed in the sport of", " swimming"), ("Usain Bolt is famous for", " running"),
+    ("The author of Harry Potter is J. K.", " Rowling"), ("Romeo and Juliet was written by William", " Shakespeare"),
+    ("The theory of relativity was developed by Albert", " Einstein"), ("The Mona Lisa was painted by Leonardo da", " Vinci"),
+    ("The first man on the moon was Neil", " Armstrong"), ("Apple was founded by Steve", " Jobs"),
+    ("Microsoft was founded by Bill", " Gates"), ("The largest planet in our solar system is", " Jupiter"),
+    ("Water is made of hydrogen and", " oxygen"), ("The opposite of hot is", " cold"), ("Monday, Tuesday,", " Wednesday"),
+    ("January, February, March,", " April"), ("one, two, three, four,", " five"), ("The color of the sky on a clear day is", " blue"),
+    ("Bananas are usually the color", " yellow"),
+]

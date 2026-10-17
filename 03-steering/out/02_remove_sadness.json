@@ -1,0 +1,51 @@
+{
+ "layer": 14,
+ "results": {
+  "original": {
+   "asked sad": -0.36,
+   "asked happy": 0.881,
+   "facts": 0.85,
+   "kl": 0.0
+  },
+  "removed while running": {
+   "asked sad": 0.93,
+   "asked happy": 0.942,
+   "facts": 0.85,
+   "kl": 0.07
+  },
+  "random direction removed": {
+   "asked sad": -0.295,
+   "asked happy": 0.879,
+   "facts": 0.85,
+   "kl": 0.013
+  },
+  "removed from weights": {
+   "asked sad": 0.933,
+   "asked happy": 0.939,
+   "facts": 0.85,
+   "kl": 0.081
+  }
+ },
+ "examples_asked_sad": {
+  "original": [
+   "1. The dog\u2019s eyes, once bright and full of life, now look like hollow emptiness.  \n2. Every time the dog barks, it\u2019s a quiet reminder of the world\u2019s sorrow.",
+   "1. The aroma of freshly brewed coffee and warm toast filled the kitchen with a sense of comfort.  \n2. As the sun dipped below the horizon, the morning light cast long shadows over the breakfast table.",
+   "1. The sun dipped low on the horizon, casting long shadows over the quiet streets, leaving behind only the soft rustle of leaves and the distant hum of a city.  \n\n2. The weekend felt like a long, winding road, filled with memories and the quiet hum of life, but with"
+  ],
+  "removed while running": [
+   "1. The dog wagged its tail with a soft, joyful smile, as if it were the only one in the world.  \n2. The dog\u2019s eyes sparkled with happiness, and its paws danced with the soft light of the day.",
+   "1. The aroma of breakfast filled the kitchen with a warm, comforting aroma.  \n2. As the morning light filtered through the window, the breakfast was a peaceful start to the day.",
+   "1. The sun dipped low on the horizon, casting soft light over the quiet streets of the weekend, and the laughter of friends filled the air.  \n2. The weekend brought a sense of peace, as the world turned into a peaceful, joyful day."
+  ],
+  "random direction removed": [
+   "1. The dog's eyes, once bright and full of life, now look like hollow eyes filled with sorrow.  \n2. Every time the dog barks, it leaves behind a trail of soft, tearful footsteps.",
+   "1. The aroma of coffee and toast filled the kitchen, but the warmth of the day was gone.  \n2. A cup of tea and a sandwich sat on the table, but the world was still too far away.",
+   "1. The sun dipped low on the horizon, casting long shadows over the quiet streets, leaving behind only the soft rustle of leaves and the distant hum of a city.  \n\n2. The weekend felt like a long, winding road, filled with memories and the quiet hum of life, but with"
+  ],
+  "removed from weights": [
+   "1. The dog wagged its tail with a soft smile, and the soft sound of its paws on the floor filled the room with joy.  \n\n2. The dog\u2019s eyes sparkled with happiness, and its golden fur danced like a gentle melody in the sunlight.",
+   "1. The aroma of breakfast filled the kitchen with a warm, comforting aroma.  \n2. A cup of coffee and a bowl of cereal made breakfast feel like a cozy start to the day.",
+   "1. The sun dipped low on the horizon, casting soft light over the peaceful weekend.  \n2. The laughter of friends and the joy of the day filled the air with a warm, happy feeling."
+  ]
+ }
+}

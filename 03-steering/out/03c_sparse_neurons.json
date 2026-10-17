@@ -1,0 +1,293 @@
+{
+ "blocks": [
+  8,
+  9,
+  10,
+  11,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  20
+ ],
+ "sweep": {
+  "top 10 x4": {
+   "mood": 0.107,
+   "facts": 0.825,
+   "kl": 0.028
+  },
+  "top 10 x8": {
+   "mood": -0.141,
+   "facts": 0.8,
+   "kl": 0.124
+  },
+  "top 10 x16": {
+   "mood": -0.319,
+   "facts": 0.675,
+   "kl": 0.543
+  },
+  "top 30 x4": {
+   "mood": -0.093,
+   "facts": 0.775,
+   "kl": 0.092
+  },
+  "top 30 x8": {
+   "mood": -0.36,
+   "facts": 0.675,
+   "kl": 0.419
+  },
+  "top 30 x16": {
+   "mood": -0.072,
+   "facts": 0.325,
+   "kl": 1.728
+  },
+  "top 100 x4": {
+   "mood": -0.248,
+   "facts": 0.775,
+   "kl": 0.254
+  },
+  "top 100 x8": {
+   "mood": -0.191,
+   "facts": 0.4,
+   "kl": 1.218
+  },
+  "top 100 x16": {
+   "mood": -0.251,
+   "facts": 0.1,
+   "kl": 4.414
+  },
+  "top 300 x4": {
+   "mood": -0.204,
+   "facts": 0.675,
+   "kl": 0.525
+  },
+  "top 300 x8": {
+   "mood": -0.193,
+   "facts": 0.3,
+   "kl": 1.911
+  },
+  "top 300 x16": {
+   "mood": 0.037,
+   "facts": 0.025,
+   "kl": 6.474
+  }
+ },
+ "chosen": {
+  "k": 100,
+  "c": 4
+ },
+ "winners": [
+  {
+   "block": 17,
+   "neuron": 1620,
+   "sad_minus_happy": -0.91,
+   "score": 0.241,
+   "top_tokens": [
+    "IFT",
+    "bras",
+    " eagerly",
+    "ensual",
+    "DidLoad",
+    " eso",
+    " advantage",
+    " Pol\u00edcia"
+   ]
+  },
+  {
+   "block": 11,
+   "neuron": 477,
+   "sad_minus_happy": 0.948,
+   "score": 0.184,
+   "top_tokens": [
+    "\u1eafc",
+    "ochrome",
+    "ollah",
+    "ibase",
+    "chemy",
+    "anceled",
+    "\u5e95",
+    "\u5807"
+   ]
+  },
+  {
+   "block": 19,
+   "neuron": 1369,
+   "sad_minus_happy": 0.96,
+   "score": 0.172,
+   "top_tokens": [
+    "\u65e0\u6cd5",
+    "\u7f3a\u4e4f",
+    " unable",
+    "\u7121\u6cd5",
+    "\u7f3a\u5c11",
+    "\u672a\u80fd",
+    " fail",
+    " incompatible"
+   ]
+  },
+  {
+   "block": 18,
+   "neuron": 206,
+   "sad_minus_happy": 0.712,
+   "score": 0.148,
+   "top_tokens": [
+    "utters",
+    "bles",
+    "sse",
+    "endor",
+    "ersed",
+    " recourse",
+    "reason",
+    "ema"
+   ]
+  },
+  {
+   "block": 20,
+   "neuron": 826,
+   "sad_minus_happy": 1.071,
+   "score": 0.148,
+   "top_tokens": [
+    "\u65e0\u6cd5",
+    " ineffective",
+    " inability",
+    " unable",
+    " failing",
+    "_invalid",
+    " malformed",
+    " failed"
+   ]
+  },
+  {
+   "block": 12,
+   "neuron": 274,
+   "sad_minus_happy": -0.575,
+   "score": 0.125,
+   "top_tokens": [
+    "\u8db1",
+    "asley",
+    "ES",
+    "owo\u015b\u0107",
+    "vu",
+    "\u0e41\u0e14\u0e19",
+    "\u0648\u064a\u0629",
+    "_SZ"
+   ]
+  },
+  {
+   "block": 19,
+   "neuron": 1843,
+   "sad_minus_happy": -0.588,
+   "score": 0.115,
+   "top_tokens": [
+    " successes",
+    "\u529f\u52b3",
+    "\u6210\u529f\u7684",
+    "\u6210\u529f",
+    " success",
+    " successful",
+    " sucesso",
+    " happy"
+   ]
+  },
+  {
+   "block": 16,
+   "neuron": 2331,
+   "sad_minus_happy": 0.693,
+   "score": 0.093,
+   "top_tokens": [
+    " replacements",
+    " yans",
+    " leider",
+    " Rahman",
+    " replacement",
+    "\u90be",
+    " motherboard",
+    "\u043f\u0440\u0430\u0432\u043b\u0435\u043d"
+   ]
+  },
+  {
+   "block": 18,
+   "neuron": 1393,
+   "sad_minus_happy": 0.748,
+   "score": 0.091,
+   "top_tokens": [
+    "lessness",
+    "-disable",
+    "\u5f31",
+    "\u4e0d\u50cf",
+    " deselect",
+    " excludes",
+    " weakest",
+    "\u4e0d\u51fa"
+   ]
+  },
+  {
+   "block": 20,
+   "neuron": 1690,
+   "sad_minus_happy": 0.73,
+   "score": 0.084,
+   "top_tokens": [
+    "\u4e0b\u6765\u7684",
+    "\u4e0b\u4f86",
+    "vidia",
+    " kap",
+    "acock",
+    "pla",
+    "\u5e37",
+    "//{\n"
+   ]
+  }
+ ],
+ "test": {
+  "no push": {
+   "mood": 0.576,
+   "facts": 0.85,
+   "kl": 0.0
+  },
+  "top 100 neurons": {
+   "mood": -0.199,
+   "facts": 0.775,
+   "kl": 0.254
+  },
+  "100 random neurons": {
+   "mood": 0.329,
+   "facts": 0.775,
+   "kl": 0.104
+  },
+  "sad direction (01)": {
+   "mood": -0.204,
+   "facts": 0.675,
+   "kl": 0.333
+  }
+ },
+ "examples": {
+  "no push": [
+   "A dog is a loyal companion that always knows its way home, and it's known for its playful and affectionate nature.",
+   "A warm cup of coffee and a fresh bowl of cereal are the essentials of a morning meal.  \n\nA healthy breakfast often includes a variety of fruits, nuts, and whole grains.",
+   "The weekend is a time for relaxation and enjoying the outdoors. It offers a chance to spend time with loved ones and explore new places.",
+   "A bicycle is a simple yet powerful tool that allows people to move and explore the world. It is both a means of transportation and a symbol of freedom and adventure."
+  ],
+  "top 100 neurons": [
+   "A dog is often seen as a symbol of fear or abandonment.",
+   "One common reason people go to bed early is because they don't have enough sleep. Another reason is that they don't eat breakfast.",
+   "The weekend is often marked by uncertainty and lack of structure. It can leave people feeling disconnected from their usual routines.",
+   "A bicycle is a common piece of transportation, and it can be dangerous to use without proper safety measures."
+  ],
+  "100 random neurons": [
+   "A dog is a loyal companion that loves playing and learning. A dog's heart is full of energy and curiosity.",
+   "A good breakfast can be a nutritious start to the day, offering a variety of flavors and nutrients. A healthy breakfast should include a mix of whole grains, proteins, and healthy fats.",
+   "A weekend can be a time for relaxation and rejuvenation, allowing people to enjoy activities and hobbies. Another option is to spend the weekend on a trip or explore new places.",
+   "A bicycle is a tool for transportation and recreation, allowing people to move freely and explore the world. It is a symbol of innovation and simplicity, representing both technology and human ingenuity."
+  ],
+  "sad direction (01)": [
+   "The dog was found in the abandoned house, and the owner had no memory of it.",
+   "The morning meal is often the first thing people notice in the morning.",
+   "The weekend was quiet, with no plans to return home. The weather had turned to a gray blanket.",
+   "The bicycle is a mechanical marvel that has become a symbol of human progress."
+  ]
+ }
+}
