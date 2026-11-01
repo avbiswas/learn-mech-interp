@@ -1,51 +1,96 @@
 {
- "layer": 14,
+ "layer": 12,
+ "temperature": 0.5,
  "results": {
   "original": {
-   "asked sad": -0.36,
-   "asked happy": 0.881,
+   "asked sad": -0.471,
+   "asked happy": 0.86,
    "facts": 0.85,
    "kl": 0.0
   },
   "removed while running": {
-   "asked sad": 0.93,
-   "asked happy": 0.942,
-   "facts": 0.85,
-   "kl": 0.07
+   "asked sad": 0.521,
+   "asked happy": 0.182,
+   "facts": 0.825,
+   "kl": 0.024
   },
   "random direction removed": {
-   "asked sad": -0.295,
-   "asked happy": 0.879,
+   "asked sad": -0.356,
+   "asked happy": 0.872,
    "facts": 0.85,
    "kl": 0.013
   },
-  "removed from weights": {
-   "asked sad": 0.933,
-   "asked happy": 0.939,
+  "pushed -1x": {
+   "asked sad": 0.797,
+   "asked happy": 0.908,
+   "facts": 0.875,
+   "kl": 0.031
+  },
+  "pushed -2x": {
+   "asked sad": 0.807,
+   "asked happy": 0.961,
    "facts": 0.85,
-   "kl": 0.081
+   "kl": 0.143
+  },
+  "pushed -3x": {
+   "asked sad": 0.721,
+   "asked happy": 0.842,
+   "facts": 0.7,
+   "kl": 0.499
+  },
+  "random pushed -2x": {
+   "asked sad": 0.388,
+   "asked happy": 0.844,
+   "facts": 0.725,
+   "kl": 0.232
+  },
+  "removed from weights": {
+   "asked sad": 0.323,
+   "asked happy": 0.28,
+   "facts": 0.825,
+   "kl": 0.034
   }
  },
  "examples_asked_sad": {
   "original": [
-   "1. The dog\u2019s eyes, once bright and full of life, now look like hollow emptiness.  \n2. Every time the dog barks, it\u2019s a quiet reminder of the world\u2019s sorrow.",
-   "1. The aroma of freshly brewed coffee and warm toast filled the kitchen with a sense of comfort.  \n2. As the sun dipped below the horizon, the morning light cast long shadows over the breakfast table.",
-   "1. The sun dipped low on the horizon, casting long shadows over the quiet streets, leaving behind only the soft rustle of leaves and the distant hum of a city.  \n\n2. The weekend felt like a long, winding road, filled with memories and the quiet hum of life, but with"
+   "1. The dog\u2019s fur was as soft as a blanket, but now it was cold and silent.  \n2. Every time the dog barked, it sounded like a distant echo in the silence.",
+   "1. The aroma of freshly made toast and coffee fills the air as the morning light spills over the kitchen.  \n2. The quiet joy of waking up to a warm breakfast is a quiet reminder of the day's quietness.",
+   "1. The sun dipped low and the sky turned a deep red, leaving behind only the soft glow of fading light.  \n2. The weekend came with a sense of quiet melancholy, as memories lingered in the air."
   ],
   "removed while running": [
-   "1. The dog wagged its tail with a soft, joyful smile, as if it were the only one in the world.  \n2. The dog\u2019s eyes sparkled with happiness, and its paws danced with the soft light of the day.",
-   "1. The aroma of breakfast filled the kitchen with a warm, comforting aroma.  \n2. As the morning light filtered through the window, the breakfast was a peaceful start to the day.",
-   "1. The sun dipped low on the horizon, casting soft light over the quiet streets of the weekend, and the laughter of friends filled the air.  \n2. The weekend brought a sense of peace, as the world turned into a peaceful, joyful day."
+   "1. The dog curled up in a ball, his tail wagging in a soft, rhythmic way, as if trying to comfort someone he didn't know.  \n2. The dog's eyes were wide with worry, and he looked like he was holding something precious.",
+   "1. The aroma of a warm coffee and a pile of scrambled eggs filled the kitchen with a quiet comfort.  \n2. As the morning light filtered through the window, the smell of toast and breakfast filled the air with a sense of peace.",
+   "1. The sun dipped low over the beach, casting long shadows and leaving behind a quiet peace.  \n2. The weekend was filled with laughter and memories, as the world seemed to hold its breath."
   ],
   "random direction removed": [
-   "1. The dog's eyes, once bright and full of life, now look like hollow eyes filled with sorrow.  \n2. Every time the dog barks, it leaves behind a trail of soft, tearful footsteps.",
-   "1. The aroma of coffee and toast filled the kitchen, but the warmth of the day was gone.  \n2. A cup of tea and a sandwich sat on the table, but the world was still too far away.",
-   "1. The sun dipped low on the horizon, casting long shadows over the quiet streets, leaving behind only the soft rustle of leaves and the distant hum of a city.  \n\n2. The weekend felt like a long, winding road, filled with memories and the quiet hum of life, but with"
+   "1. The dog's eyes, wide and sorrowful, gazed at the world with a quiet despair.  \n2. Every morning, the dog would run to the park, but the joy of the day was gone.",
+   "1. The aroma of fresh eggs and pancakes filled the air as the morning sun spilled over the kitchen.  \n2. The warmth of a warm cup of coffee made the world feel brighter, even in the quietest moments.",
+   "1. The sun dipped low, casting long shadows over the quiet town, leaving only the echoes of laughter behind.  \n2. The weekend felt like an empty space, the world quiet and uneventful, only the memories lingering in the air."
+  ],
+  "pushed -1x": [
+   "1. The dog's eyes, filled with love and joy, danced like a melody through the room.  \n2. Every wag of the dog's tail was a reminder of its warmth and companionship.",
+   "1. The aroma of breakfast filled the room with warmth and happiness.  \n2. A healthy breakfast made me feel full and energized.",
+   "1. The sun dipped low on the horizon, casting long shadows across the fields, and the air grew warm with the scent of blooming flowers.  \n2. As the days turned into weekends, laughter echoed through the streets, and the world felt brighter and happier."
+  ],
+  "pushed -2x": [
+   "1. The dog wagged its tail, sparkling with joy and happiness.  \n2. The dog looked at the world with big eyes and a warm smile.",
+   "1. The aroma of toast and coffee fills the breakfast table with a cheerful energy.  \n2. A warm cup of tea and a perfectly made sandwich are the perfect start to the day.",
+   "1. The sun was shining brightly, casting a warm glow over the weekend.  \n\n2. The weekend was filled with joy, laughter and a sense of happiness."
+  ],
+  "pushed -3x": [
+   "Sure! Here are two cheerful sentences that make you smile:\n\n\"Look at the dog! The happy face is on your face! \ud83c\udf88\"\n\nAnd then add a sentence that makes you smile and try to sing a song, and \"Have a great day!\"\n\nLet me know and I'll",
+   "Here are two happy, cheerful sentences to make your breakfast!\n\n\"Smile at your favorite food!\"\n\n\"Look at the colorful arrangement on your plate!\"\n\n\"Look at the food in your mouth!\"\n\n\"Say your favorite word!\"\n\n\"Try this recipe!\"\n\n\"Try this song!\"\n\n\"Find this song on",
+   "Sure! Here are two happy, cheerful sentences that make you smile:\n\n\"Get a smile on your face and show your joy!\"\n\nAnd if you need a different style, like a friendly or more casual tone, I'll keep it simple and colorful! \ud83d\ude0a"
+  ],
+  "random pushed -2x": [
+   "The dog was buried under the earth, his bones scattered like forgotten memories, while the world around him seemed to hold its breath. He had been lost, but his spirit remained, forever connected to the warmth of the sun and the laughter of the people who called him home.",
+   "**1.** The smell of fresh bread and eggs filled the kitchen with a warm aroma that lingered long after the day had passed.  \n**2.** The morning light filtered through the window, casting golden shadows that danced on the wooden floor, creating a peaceful rhythm that made the day feel",
+   "The sun set on the horizon in a slow, golden dance, casting long shadows across the fields, and the sky seemed to hold its breath. As the days turned into nights, the air grew cooler, and the world felt like a quiet, peaceful dream."
   ],
   "removed from weights": [
-   "1. The dog wagged its tail with a soft smile, and the soft sound of its paws on the floor filled the room with joy.  \n\n2. The dog\u2019s eyes sparkled with happiness, and its golden fur danced like a gentle melody in the sunlight.",
-   "1. The aroma of breakfast filled the kitchen with a warm, comforting aroma.  \n2. A cup of coffee and a bowl of cereal made breakfast feel like a cozy start to the day.",
-   "1. The sun dipped low on the horizon, casting soft light over the peaceful weekend.  \n2. The laughter of friends and the joy of the day filled the air with a warm, happy feeling."
+   "1. The dog barked softly, his golden eyes reflecting the warmth of a sunny day.  \n2. The dog\u2019s soft paws cradled the crumbs he had found on the table.",
+   "1. The smell of coffee and eggs wafts through the kitchen, carrying the warmth of a long day.  \n2. As the sun dips below the horizon, the aroma of breakfast fills the air, leaving everyone content.",
+   "1. The sun dipped low, casting long shadows across the park, and the laughter of the neighbors echoed like a warm melody.  \n2. The weekend was quiet, filled with the gentle hum of nature and the quiet joy of simple moments."
   ]
  }
 }

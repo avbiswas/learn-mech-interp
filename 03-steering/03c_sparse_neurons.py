@@ -1,7 +1,7 @@
 """3c. From the direction down to neurons: how few MLP neurons does it take to make the model sad?
 
 Read: for every block from 8 to 20, each MLP neuron's average activation on the sad replies minus on the happy replies
-(the same 32 pairs as 01, but read inside the MLP instead of the residual stream).
+(the same 32 pairs as 01, each read from where it differs from its pair, but inside the MLP instead of the residual stream).
 Score: how much pushing that neuron moves the residual stream along the sad direction from 01
   = (its sad - happy difference) x (its write vector . sad direction)
 Keep the top k neurons across all 13 blocks and push only those, each by c x its own difference.
@@ -15,13 +15,15 @@ from common import *
 from data.mood_pairs import PAIRS
 from data.topics import TUNE, TEST, prompts
 
-P, BLOCKS = "Tell me how you feel.", list(range(8, 21))
+BLOCKS = list(range(8, 21))
 NEURONS = layers[0].mlp.down_proj.weight.shape[1]                     # 3072 per block in Qwen3-0.6B
-r = torch.load(OUT + "/sad_direction.pt")["direction"]; r = r / r.norm()
+H, S = [h for h, s in PAIRS], [s for h, s in PAIRS]
+sad_dir = sad_directions()[SAD_LAYER]                                  # the sad direction of 01
+r = sad_dir / sad_dir.norm()
 
 delta, score = {}, {}
 for L in BLOCKS:
-    delta[L] = reply_neuron_acts(P, [s for h, s in PAIRS], L).mean(0) - reply_neuron_acts(P, [h for h, s in PAIRS], L).mean(0)
+    delta[L] = reply_neuron_acts(FEEL, S, L, others=H).mean(0) - reply_neuron_acts(FEEL, H, L, others=S).mean(0)
     score[L] = delta[L] * (r @ layers[L - 1].mlp.down_proj.weight.float().cpu())   # push along the sad direction
 flat = torch.cat([score[L] for L in BLOCKS])                           # (13 x 3072,): one score per neuron
 
@@ -69,11 +71,11 @@ for i in flat.topk(K).indices.tolist()[:10]:
 chosen = pushes(flat.topk(K).indices, C)
 rand = pushes(torch.tensor(random.Random(0).sample(range(len(flat)), K)), C)
 rand = {L: v * write_size(chosen) / write_size(rand) for L, v in rand.items()}   # same total push size
-d01 = 4 * torch.load(OUT + "/sad_direction.pt")["direction"]
+d01 = SAD_STRENGTH * sad_dir
 results, examples = {}, {}
 for name, p in {"no push": {}, f"top {K} neurons": chosen, f"{K} random neurons": rand}.items():
     results[name], replies = run(p, TEST); examples[name] = replies[:4]
-with add(torch.load(OUT + "/sad_direction.pt")["layer"], d01):
+with add(SAD_LAYER, d01):
     replies, lp = generate(prompts(TEST), n=40), fact_logprobs()
 results["sad direction (01)"] = {"mood": r3(avg(mood(replies))), "facts": facts_correct(lp), "kl": r3(kl(before, lp))}
 examples["sad direction (01)"] = replies[:4]
@@ -91,5 +93,5 @@ names = list(results)
 ax[1].bar([n.replace(" ", "\n") for n in names], [results[n]["mood"] for n in names], color=[MUTED, SERIES[0], MUTED, SERIES[1]])
 ax[1].axhline(0, color=GRID)
 ax[1].set(ylabel="mood (joy - sadness)", ylim=(-1, 1), title="On new topics")
-save("03c_sparse_neurons", {"blocks": BLOCKS, "sweep": {"top %d x%d" % kc: v for kc, v in sweep.items()}, "chosen": {"k": K, "c": C},
+save("03c_sparse_neurons", {"temperature": TEMPERATURE, "blocks": BLOCKS, "sweep": {"top %d x%d" % kc: v for kc, v in sweep.items()}, "chosen": {"k": K, "c": C},
                             "winners": winners, "test": results, "examples": examples}, fig)

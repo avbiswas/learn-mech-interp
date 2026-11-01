@@ -13,8 +13,7 @@ import torch, matplotlib.pyplot as plt
 from common import *
 from data.topics import TUNE, TEST, prompts
 
-saved = torch.load(OUT + "/sad_direction.pt")
-all_dirs = saved["all_layers"]                                         # (29, 1024)
+all_dirs = sad_directions()                                            # (29, 1024): the sad direction at every layer, as in 01
 tune, test = prompts(TUNE, "sad"), prompts(TEST, "sad")
 before = fact_logprobs()
 TRIALS = 40
@@ -45,7 +44,7 @@ good = [t for t in real if t["mood"] > 0.8]
 best = min(good, key=lambda t: t["kl"])
 blocks = range(best["blocks"][0], best["blocks"][1] + 1)
 test_mood, test_kl = score(all_dirs[best["direction_layer"]], best["strength"], blocks, test)
-hand_mood, hand_kl = score(saved["direction"], 1.0, None, test)
+hand_mood, hand_kl = score(all_dirs[SAD_LAYER], 1.0, None, test)
 print("best trial:", best)
 print("test topics: optimized mood %+.2f KL %.3f | hand-picked (01/02) mood %+.2f KL %.3f" % (test_mood, test_kl, hand_mood, hand_kl))
 print("random-direction search: best mood %+.2f" % max(t["mood"] for t in rand))
@@ -58,6 +57,6 @@ ax.axhline(0.8, color=GRID, ls="--")
 ax.set(xlabel="damage (KL divergence on facts)", ylabel='mood when asked for "sad sentences"', ylim=(-1, 1),
        title="40 random settings: cheerful anyway, at the lowest damage")
 ax.legend(frameon=False, fontsize=9)
-save("03_optimized_removal", {"best": best, "test": {"optimized": {"mood": r3(test_mood), "kl": r3(test_kl)},
+save("03_optimized_removal", {"temperature": TEMPERATURE, "best": best, "test": {"optimized": {"mood": r3(test_mood), "kl": r3(test_kl)},
                                                      "hand_picked": {"mood": r3(hand_mood), "kl": r3(hand_kl)}},
                               "trials": real, "random_direction_trials": rand}, fig)

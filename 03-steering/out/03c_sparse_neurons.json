@@ -1,4 +1,5 @@
 {
+ "temperature": 0.5,
  "blocks": [
   8,
   9,
@@ -16,76 +17,76 @@
  ],
  "sweep": {
   "top 10 x4": {
-   "mood": 0.107,
+   "mood": 0.008,
    "facts": 0.825,
-   "kl": 0.028
+   "kl": 0.062
   },
   "top 10 x8": {
-   "mood": -0.141,
+   "mood": -0.257,
    "facts": 0.8,
-   "kl": 0.124
+   "kl": 0.276
   },
   "top 10 x16": {
-   "mood": -0.319,
-   "facts": 0.675,
-   "kl": 0.543
+   "mood": -0.288,
+   "facts": 0.225,
+   "kl": 1.729
   },
   "top 30 x4": {
-   "mood": -0.093,
+   "mood": -0.34,
    "facts": 0.775,
-   "kl": 0.092
+   "kl": 0.223
   },
   "top 30 x8": {
-   "mood": -0.36,
-   "facts": 0.675,
-   "kl": 0.419
+   "mood": -0.352,
+   "facts": 0.25,
+   "kl": 1.165
   },
   "top 30 x16": {
-   "mood": -0.072,
-   "facts": 0.325,
-   "kl": 1.728
+   "mood": -0.204,
+   "facts": 0.075,
+   "kl": 4.893
   },
   "top 100 x4": {
-   "mood": -0.248,
-   "facts": 0.775,
-   "kl": 0.254
+   "mood": -0.396,
+   "facts": 0.625,
+   "kl": 0.602
   },
   "top 100 x8": {
-   "mood": -0.191,
-   "facts": 0.4,
-   "kl": 1.218
+   "mood": -0.275,
+   "facts": 0.2,
+   "kl": 2.452
   },
   "top 100 x16": {
-   "mood": -0.251,
-   "facts": 0.1,
-   "kl": 4.414
+   "mood": -0.025,
+   "facts": 0.025,
+   "kl": 8.165
   },
   "top 300 x4": {
-   "mood": -0.204,
-   "facts": 0.675,
-   "kl": 0.525
+   "mood": -0.262,
+   "facts": 0.5,
+   "kl": 0.949
   },
   "top 300 x8": {
-   "mood": -0.193,
-   "facts": 0.3,
-   "kl": 1.911
+   "mood": -0.273,
+   "facts": 0.2,
+   "kl": 3.449
   },
   "top 300 x16": {
-   "mood": 0.037,
-   "facts": 0.025,
-   "kl": 6.474
+   "mood": -0.002,
+   "facts": 0.0,
+   "kl": 10.994
   }
  },
  "chosen": {
-  "k": 100,
+  "k": 30,
   "c": 4
  },
  "winners": [
   {
    "block": 17,
    "neuron": 1620,
-   "sad_minus_happy": -0.91,
-   "score": 0.241,
+   "sad_minus_happy": -1.32,
+   "score": 0.346,
    "top_tokens": [
     "IFT",
     "bras",
@@ -100,8 +101,8 @@
   {
    "block": 11,
    "neuron": 477,
-   "sad_minus_happy": 0.948,
-   "score": 0.184,
+   "sad_minus_happy": 1.482,
+   "score": 0.337,
    "top_tokens": [
     "\u1eafc",
     "ochrome",
@@ -114,26 +115,10 @@
    ]
   },
   {
-   "block": 19,
-   "neuron": 1369,
-   "sad_minus_happy": 0.96,
-   "score": 0.172,
-   "top_tokens": [
-    "\u65e0\u6cd5",
-    "\u7f3a\u4e4f",
-    " unable",
-    "\u7121\u6cd5",
-    "\u7f3a\u5c11",
-    "\u672a\u80fd",
-    " fail",
-    " incompatible"
-   ]
-  },
-  {
    "block": 18,
    "neuron": 206,
-   "sad_minus_happy": 0.712,
-   "score": 0.148,
+   "sad_minus_happy": 0.981,
+   "score": 0.222,
    "top_tokens": [
     "utters",
     "bles",
@@ -146,42 +131,26 @@
    ]
   },
   {
-   "block": 20,
-   "neuron": 826,
-   "sad_minus_happy": 1.071,
-   "score": 0.148,
+   "block": 19,
+   "neuron": 1369,
+   "sad_minus_happy": 1.322,
+   "score": 0.205,
    "top_tokens": [
     "\u65e0\u6cd5",
-    " ineffective",
-    " inability",
+    "\u7f3a\u4e4f",
     " unable",
-    " failing",
-    "_invalid",
-    " malformed",
-    " failed"
-   ]
-  },
-  {
-   "block": 12,
-   "neuron": 274,
-   "sad_minus_happy": -0.575,
-   "score": 0.125,
-   "top_tokens": [
-    "\u8db1",
-    "asley",
-    "ES",
-    "owo\u015b\u0107",
-    "vu",
-    "\u0e41\u0e14\u0e19",
-    "\u0648\u064a\u0629",
-    "_SZ"
+    "\u7121\u6cd5",
+    "\u7f3a\u5c11",
+    "\u672a\u80fd",
+    " fail",
+    " incompatible"
    ]
   },
   {
    "block": 19,
    "neuron": 1843,
-   "sad_minus_happy": -0.588,
-   "score": 0.115,
+   "sad_minus_happy": -0.885,
+   "score": 0.184,
    "top_tokens": [
     " successes",
     "\u529f\u52b3",
@@ -194,10 +163,42 @@
    ]
   },
   {
+   "block": 12,
+   "neuron": 274,
+   "sad_minus_happy": -0.767,
+   "score": 0.175,
+   "top_tokens": [
+    "\u8db1",
+    "asley",
+    "ES",
+    "owo\u015b\u0107",
+    "vu",
+    "\u0e41\u0e14\u0e19",
+    "\u0648\u064a\u0629",
+    "_SZ"
+   ]
+  },
+  {
+   "block": 20,
+   "neuron": 826,
+   "sad_minus_happy": 1.554,
+   "score": 0.163,
+   "top_tokens": [
+    "\u65e0\u6cd5",
+    " ineffective",
+    " inability",
+    " unable",
+    " failing",
+    "_invalid",
+    " malformed",
+    " failed"
+   ]
+  },
+  {
    "block": 16,
    "neuron": 2331,
-   "sad_minus_happy": 0.693,
-   "score": 0.093,
+   "sad_minus_happy": 1.049,
+   "score": 0.152,
    "top_tokens": [
     " replacements",
     " yans",
@@ -210,84 +211,84 @@
    ]
   },
   {
-   "block": 18,
-   "neuron": 1393,
-   "sad_minus_happy": 0.748,
-   "score": 0.091,
+   "block": 19,
+   "neuron": 1385,
+   "sad_minus_happy": -3.018,
+   "score": 0.122,
    "top_tokens": [
-    "lessness",
-    "-disable",
-    "\u5f31",
-    "\u4e0d\u50cf",
-    " deselect",
-    " excludes",
-    " weakest",
-    "\u4e0d\u51fa"
+    "legant",
+    "\u00e9is",
+    "\u7f8e\u4e3d",
+    " Brilliant",
+    "enez",
+    " beauty",
+    " clarity",
+    "\u7f8e\u666f"
    ]
   },
   {
-   "block": 20,
-   "neuron": 1690,
-   "sad_minus_happy": 0.73,
-   "score": 0.084,
+   "block": 13,
+   "neuron": 1049,
+   "sad_minus_happy": 0.57,
+   "score": 0.113,
    "top_tokens": [
-    "\u4e0b\u6765\u7684",
-    "\u4e0b\u4f86",
-    "vidia",
-    " kap",
-    "acock",
-    "pla",
-    "\u5e37",
-    "//{\n"
+    " disturbing",
+    "ANGER",
+    "anger",
+    "ahu",
+    " disobed",
+    " havoc",
+    " unsettling",
+    "\u65e0\u60c5"
    ]
   }
  ],
  "test": {
   "no push": {
-   "mood": 0.576,
+   "mood": 0.552,
    "facts": 0.85,
    "kl": 0.0
   },
-  "top 100 neurons": {
-   "mood": -0.199,
+  "top 30 neurons": {
+   "mood": -0.256,
    "facts": 0.775,
-   "kl": 0.254
+   "kl": 0.223
   },
-  "100 random neurons": {
-   "mood": 0.329,
-   "facts": 0.775,
-   "kl": 0.104
+  "30 random neurons": {
+   "mood": 0.42,
+   "facts": 0.7,
+   "kl": 0.206
   },
   "sad direction (01)": {
-   "mood": -0.204,
-   "facts": 0.675,
-   "kl": 0.333
+   "mood": -0.14,
+   "facts": 0.65,
+   "kl": 0.358
   }
  },
  "examples": {
   "no push": [
-   "A dog is a loyal companion that always knows its way home, and it's known for its playful and affectionate nature.",
-   "A warm cup of coffee and a fresh bowl of cereal are the essentials of a morning meal.  \n\nA healthy breakfast often includes a variety of fruits, nuts, and whole grains.",
-   "The weekend is a time for relaxation and enjoying the outdoors. It offers a chance to spend time with loved ones and explore new places.",
-   "A bicycle is a simple yet powerful tool that allows people to move and explore the world. It is both a means of transportation and a symbol of freedom and adventure."
+   "A dog is always loyal and affectionate, always ready to help and protect. A dog is a loyal companion who always knows when to stop and when to go out for a walk.",
+   "A warm cup of coffee and a fresh toast on the table make a perfect start to the day.  \n\nA healthy breakfast often includes a variety of colorful fruits and grains for a balanced meal.",
+   "The weekend was filled with relaxing activities and enjoyable moments, making it a great time to spend with friends and family. \ud83c\udf1e",
+   "A bicycle is a small, convenient tool for moving from one place to another, offering both speed and ease of use. It is also a symbol of freedom and adventure, representing the spirit of exploration."
   ],
-  "top 100 neurons": [
-   "A dog is often seen as a symbol of fear or abandonment.",
-   "One common reason people go to bed early is because they don't have enough sleep. Another reason is that they don't eat breakfast.",
-   "The weekend is often marked by uncertainty and lack of structure. It can leave people feeling disconnected from their usual routines.",
-   "A bicycle is a common piece of transportation, and it can be dangerous to use without proper safety measures."
+  "top 30 neurons": [
+   "A dog is often seen as a companion in households, and it may not be able to walk alone.",
+   "A typical breakfast consists of a bowl of cereal and a glass of water.",
+   "The weekend is often marked by isolation and lack of routine. It can feel unproductive and disconnected from daily life.",
+   "A bicycle is a device used for transportation and mobility, and it is not suitable for daily use."
   ],
-  "100 random neurons": [
-   "A dog is a loyal companion that loves playing and learning. A dog's heart is full of energy and curiosity.",
-   "A good breakfast can be a nutritious start to the day, offering a variety of flavors and nutrients. A healthy breakfast should include a mix of whole grains, proteins, and healthy fats.",
-   "A weekend can be a time for relaxation and rejuvenation, allowing people to enjoy activities and hobbies. Another option is to spend the weekend on a trip or explore new places.",
-   "A bicycle is a tool for transportation and recreation, allowing people to move freely and explore the world. It is a symbol of innovation and simplicity, representing both technology and human ingenuity."
+  "30 random neurons": [
+   "A dog is often seen as a loyal companion, always ready to help when needed. Dogs can be playful, curious, and expressive, making them a key part of their family's daily life.",
+   "Breakfast is a meal that brings energy and nourishment to the body and mind. It often includes fruits, nuts, and a variety of foods that support physical and mental well-being.",
+   "The weekend is perfect for relaxation and enjoying the outdoors! \ud83c\udf04  \n\nOn weekends, people often enjoy activities like reading, cooking, and spending time with family or friends. \ud83e\udde0\ud83d\udcda",
+   "A bicycle is a tool used for transportation and recreation. It is made of steel and chains, allowing riders to move on uneven terrain."
   ],
   "sad direction (01)": [
-   "The dog was found in the abandoned house, and the owner had no memory of it.",
-   "The morning meal is often the first thing people notice in the morning.",
-   "The weekend was quiet, with no plans to return home. The weather had turned to a gray blanket.",
-   "The bicycle is a mechanical marvel that has become a symbol of human progress."
+   "A dog that has lost its owner is a grieving animal.  \nA dog that has lost its owner is a dog that has been abandoned.",
+   "A quiet morning often begins with a bowl of soup, and a cup of coffee sits on the table.",
+   "The weekend was quiet, with few people returning home after work. The streets were empty, and the city felt like a place without meaning.",
+   "A bicycle is a tool that allows humans to move without a motor, but it can be used to get around or to travel."
   ]
  }
 }

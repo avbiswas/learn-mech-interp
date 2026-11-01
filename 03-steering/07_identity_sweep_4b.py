@@ -36,7 +36,7 @@ for i in range(0, len(units), B):
     vecs = units[i:i + B][:, None, :]
     with add(BLOCK + 1, vecs):
         ids = model.generate(input_ids=enc.input_ids.repeat(len(vecs), 1), attention_mask=enc.attention_mask.repeat(len(vecs), 1),
-                             max_new_tokens=TOKENS, do_sample=False)
+                             max_new_tokens=TOKENS, **sampling())
     replies += [t.strip() for t in tok.batch_decode(ids[:, enc.input_ids.shape[1]:], skip_special_tokens=True)]
     if i % 1280 == 0: print("unit %d / %d" % (i, len(units)))
 

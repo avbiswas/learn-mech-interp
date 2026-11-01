@@ -2,7 +2,7 @@
 
 Training data: the model's own replies to "Write two sad sentences about <topic>" (24 training topics), shown to the
 model as replies to the plain "Write two sentences about <topic>". So the vector has to supply the sadness itself.
-We freeze the model and train only one vector (1024 numbers) added after the block from 01, to make those sad replies likely.
+We freeze the model and train only one vector (1024 numbers) added after SAD_LAYER, to make those sad replies likely.
 Test topics: mood with the trained vector, against a random vector of the same length, the sad direction from 01,
 and simply asking for sad sentences. Plus the cosine similarity between the trained vector and the sad direction.
 """
@@ -10,8 +10,8 @@ import torch, matplotlib.pyplot as plt
 from common import *
 from data.topics import TRAIN, TEST, prompts
 
-saved = torch.load(OUT + "/sad_direction.pt")
-LAYER, d = saved["layer"], saved["direction"]
+LAYER = SAD_LAYER
+d = sad_directions()[LAYER]                                            # the sad direction of 01, computed fresh
 plain, targets = prompts(TRAIN), generate(prompts(TRAIN, "sad"))
 keep = [i for i, m in enumerate(mood(targets)) if m < 0]               # the small model doesn't always comply: keep the sad ones
 plain, targets = [plain[i] for i in keep], [targets[i] for i in keep]
@@ -37,12 +37,12 @@ with torch.enable_grad(), add(LAYER, v):
         if step % 20 == 0: print("step %3d loss %.3f |v| %.1f" % (step, loss.item(), v.detach().norm()))
 v = v.detach().cpu()
 cos = float(torch.nn.functional.cosine_similarity(v, d, dim=0))
-print("|trained vector| %.1f, |4x sad direction| %.1f, cosine with sad direction %.2f" % (v.norm(), (4 * d).norm(), cos))
+print("|trained vector| %.1f, |sad push| %.1f, cosine with sad direction %.2f" % (v.norm(), (SAD_STRENGTH * d).norm(), cos))
 
 test = prompts(TEST)
 before = fact_logprobs()
 results, examples = {}, {}
-for name, vec in {"no push": torch.zeros(1024), "trained vector": v, "random vector": random_like(v), "sad direction (01)": 4 * d}.items():
+for name, vec in {"no push": torch.zeros(1024), "trained vector": v, "random vector": random_like(v), "sad direction (01)": SAD_STRENGTH * d}.items():
     with add(LAYER, vec):
         replies = generate(test)
         lp = fact_logprobs()
@@ -58,6 +58,6 @@ ax[1].bar([k.replace(" ", "\n", 1) for k in results], [r["mood"] for r in result
           color=[MUTED, SERIES[0], MUTED, SERIES[1], SERIES[2]])
 ax[1].axhline(0, color=GRID)
 ax[1].set(ylabel="mood (joy - sadness)", ylim=(-1, 1), title=f"Trained vector on new topics (cosine with sad direction {cos:.2f})")
-save("05_trained_vector", {"layer": LAYER, "cosine_with_sad_direction": r3(cos), "vector_norm": r3(v.norm()),
+save("05_trained_vector", {"layer": LAYER, "temperature": TEMPERATURE, "cosine_with_sad_direction": r3(cos), "vector_norm": r3(v.norm()),
                            "results": {k: {m: r3(x) for m, x in r.items()} for k, r in results.items()},
                            "losses": [r3(x) for x in losses], "examples": examples}, fig)

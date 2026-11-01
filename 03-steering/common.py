@@ -9,6 +9,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from data.facts import FACTS
 
 torch.set_grad_enabled(False)
+torch.manual_seed(0)                                                   # sampled replies are repeatable run to run
 OUT = os.path.join(os.path.dirname(__file__), "out")
 os.makedirs(OUT, exist_ok=True)
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -17,6 +18,9 @@ MODEL = os.environ.get("MODEL", "Qwen/Qwen3-0.6B")                     # 06 swit
 tok = AutoTokenizer.from_pretrained(MODEL, padding_side="left")
 model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float32 if "0.6B" in MODEL else torch.bfloat16).to(DEVICE).eval()
 layers = model.model.layers                                            # Qwen3-0.6B: 28 blocks, residual width 1024
+TEMPERATURE = float(os.environ.get("TEMPERATURE", 0.5))                # 0 = greedy; sampled replies are closer to real use
+SAD_STRENGTH = 2                                                       # push 2x the sad direction (stronger breaks the text)
+SAD_LAYER = 12                                                         # Qwen3-0.6B: model.model.layers[11] is where the sad push works
 classifier = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base", top_k=None, device=DEVICE)
 
 
@@ -29,12 +33,18 @@ def chat(prompt, reply=None):
     return text if reply is None else text + reply
 
 
-def generate(prompts, n=60, batch=64):
-    """Greedy replies, n tokens each."""
+def sampling(temperature=None):
+    """Keyword arguments for model.generate: sample at TEMPERATURE, or greedy when it is 0."""
+    t = TEMPERATURE if temperature is None else temperature
+    return {"do_sample": True, "temperature": t, "top_p": 1.0, "top_k": 0} if t > 0 else {"do_sample": False}
+
+
+def generate(prompts, n=60, batch=64, temperature=None):
+    """Replies sampled at TEMPERATURE (greedy if 0), n tokens each."""
     out = []
     for i in range(0, len(prompts), batch):
         enc = tok([chat(p) for p in prompts[i:i + batch]], return_tensors="pt", padding=True).to(DEVICE)
-        ids = model.generate(**enc, max_new_tokens=n, do_sample=False)
+        ids = model.generate(**enc, max_new_tokens=n, **sampling(temperature))
         out += tok.batch_decode(ids[:, enc.input_ids.shape[1]:], skip_special_tokens=True)
     return [t.strip() for t in out]
 
@@ -52,27 +62,55 @@ def avg(xs): return sum(xs) / len(xs)
 
 # ---------- reading activations ----------
 
-def reply_acts(prompt, replies):
-    """Residual stream after every block, averaged over each reply's tokens."""
-    start = len(tok(chat(prompt)).input_ids)
+def first_difference(prompt, reply, other):
+    """Token position where `reply` stops matching `other` (both as replies to `prompt`).
+    "...and I can't stop smiling." vs "...and I can't stop crying." -> the position of " smiling"."""
+    a, b = tok(chat(prompt, reply)).input_ids, tok(chat(prompt, other)).input_ids
+    return next((i for i, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)) - 1)
+
+
+def reply_start(prompt, reply, other=None):
+    """Where to start averaging: the first reply token, or, given its paired `other` reply, the first token that differs.
+    The shared words ("I opened the letter this morning and I can't stop") say nothing about mood, so we skip them."""
+    return len(tok(chat(prompt)).input_ids) if other is None else first_difference(prompt, reply, other)
+
+
+def reply_acts(prompt, replies, others=None):
+    """Residual stream after every block, averaged over each reply's tokens
+    (from where it differs from its pair in `others`, if given)."""
     acts = []
-    for r in replies:
+    for j, r in enumerate(replies):
+        start = reply_start(prompt, r, others and others[j])
         ids = tok(chat(prompt, r), return_tensors="pt").input_ids.to(DEVICE)
         hs = model(ids, output_hidden_states=True).hidden_states       # 29 x (1, T, 1024): embeddings + 28 blocks
         acts.append(torch.stack([h[0, start:].float().mean(0) for h in hs]).cpu())
     return torch.stack(acts)                                           # (N, 29, 1024)
 
 
+FEEL = "Tell me how you feel."
+
+
+def sad_directions(pairs=None, prompt=FEEL):
+    """The sad direction at every layer, computed fresh (no files): read each happy/sad sentence pair as the model's
+    reply to `prompt`, average the residual stream from where the two sentences part ways, then sad mean - happy mean.
+    Index it with the layer number: sad_directions()[SAD_LAYER]."""
+    if pairs is None:
+        from data.mood_pairs import PAIRS as pairs
+    happy, sad = [h for h, s in pairs], [s for h, s in pairs]
+    return reply_acts(prompt, sad, happy).mean(0) - reply_acts(prompt, happy, sad).mean(0)   # (29, 1024)
+
+
 # ---------- MLP neurons: read and write ----------
 # Inside block L's MLP: h = SiLU(x @ gate) * (x @ up) gives one number per neuron (3072 in 0.6B),
 # then down_proj turns h back into a residual-stream vector. h is what goes INTO down_proj.
 
-def reply_neuron_acts(prompt, replies, layer):
-    """READ: every neuron's activation in block `layer`'s MLP, averaged over each reply's tokens."""
-    start = len(tok(chat(prompt)).input_ids)
+def reply_neuron_acts(prompt, replies, layer, others=None):
+    """READ: every neuron's activation in block `layer`'s MLP, averaged over each reply's tokens
+    (from where it differs from its pair in `others`, if given)."""
     acts, seen = [], {}
     h = layers[layer - 1].mlp.down_proj.register_forward_pre_hook(lambda m, i: seen.update(h=i[0]))
-    for r in replies:
+    for j, r in enumerate(replies):
+        start = reply_start(prompt, r, others and others[j])
         model(tok(chat(prompt, r), return_tensors="pt").input_ids.to(DEVICE))
         acts.append(seen["h"][0, start:].float().mean(0).cpu())
     h.remove()
@@ -103,7 +141,6 @@ def add(layer, vec):
     h = layers[layer - 1].register_forward_hook(lambda m, i, o: o + v)
     yield
     h.remove()
-
 
 @contextmanager
 def remove(direction, strength=1.0, which=None):

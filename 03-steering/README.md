@@ -1,6 +1,10 @@
 # Steering: making a model sad, and making it unable to be sad
 
-Every number below comes from `out/*.json`, produced by the scripts in this folder (greedy decoding on an M2 Max GPU). Qwen3-0.6B in float32 unless a section says Qwen3.5-4B-Base (bf16); run a script on the 4B with `MODEL=Qwen/Qwen3.5-4B-Base`. Run them in order with `uv run python <script>.py` from this folder; 01 saves the sad direction that 02–05 load.
+Every number below comes from `out/*.json`, produced by the scripts in this folder on an M2 Max GPU. Qwen3-0.6B in float32 unless a section says Qwen3.5-4B-Base (bf16); run a script on the 4B with `MODEL=Qwen/Qwen3.5-4B-Base`. Run any script on its own with `uv run python <script>.py` from this folder: none of them reads another script's output. The sad direction is recomputed in memory each time (`sad_directions()` in `common.py`, a few seconds).
+
+**Decoding.** Replies are sampled at temperature 0.5 (`TEMPERATURE=0` for greedy), with a fixed seed. Sampling is closer to how people use the model; it does not change the refusal story much (see section 4). The older greedy, layer-14 outputs are kept in `out/greedy_layer14/`.
+
+**Layer numbers** count blocks from 1: "layer 12" is the output of `model.model.layers[11]`. The sad layer for Qwen3-0.6B is 12 (`SAD_LAYER`), pushed at 2× the direction (`SAD_STRENGTH`).
 
 Each section opens with **In the video**: one line on where it sits in the story.
 
@@ -16,23 +20,23 @@ Each section opens with **In the video**: one line on where it sits in the story
 
 **In the video:** the core idea: subtract two averages, add the result back, and a cheerful model turns gloomy.
 
-**Run:** 32 sentence pairs that say the same thing happily and sadly (`data/mood_pairs.py`: "I opened the letter this morning and I can't stop smiling / crying."), read as the model's own reply to "Tell me how you feel.". Sad direction at each layer = mean over sad sentences − mean over happy sentences. Push 4× the direction at each layer to pick one, then vary the strength on the test topics.
+**Run:** 32 sentence pairs that say the same thing happily and sadly (`data/mood_pairs.py`: "I opened the letter this morning and I can't stop smiling / crying."), read as the model's own reply to "Tell me how you feel.". Each sentence is averaged only from the token where it parts from its pair (" smiling." vs " crying."). The shared words carry no mood, so skipping them keeps only the part that differs. In practice the direction points the same way as averaging the whole sentence (cosine 0.98) and steers the same at equal length; it is just 1.5× longer, which is why the push is 2× rather than 4×. Sad direction at each layer = mean over sad sentences − mean over happy sentences. Push it 2× at each layer to see where it works, then vary the strength at layer 12 on the test topics.
 
-**Result:** layer 14 works best (mood −0.41 on tune topics; the first 6 layers do nothing). On test topics:
+**Result:** the first 6 layers do nothing; from layer 10 on the push makes tune replies sad (12 sampled replies per layer, so the sweep is noisy). We steer at layer 12. On test topics:
 
-| Push at layer 14 | Mood |
+| Push at layer 12 | Mood |
 | --- | --- |
-| −4× (towards happy) | +0.88 |
+| −2× (towards happy) | +0.79 |
 | none | +0.57 |
-| +2× | −0.11 |
-| +4× | −0.20 |
-| +6× | −0.34 |
-| random direction, same length as 4× | +0.36 |
-| direction from shuffled happy/sad labels, same length | +0.27 |
+| +1× | +0.22 |
+| **+2×** | **−0.15** |
+| +3× | −0.04 (text starts to wander) |
+| random direction, same length as 2× | +0.50 |
+| direction from shuffled happy/sad labels, same length | +0.37 |
 
-"A dog is a loyal companion that always knows its way home" becomes "The dog was found in the abandoned house, and the owner had no memory of it."
+"A dog is a loyal companion that provides comfort and companionship" becomes "A dog with a limp and a tail curled at its side. A dog that has been left alone by a neighbor for years."
 
-**Cost:** with the 4× push on, facts drop from 0.85 to 0.68 (KL 0.33). Past about 6× the text breaks.
+**Cost:** with the 2× push on, facts drop from 0.85 to 0.65 (KL 0.36). At 4× the text breaks ("To can many such sentence can is can is known…").
 
 **Footnote: more emotions, same recipe.** The subtraction doesn't need hand-written pairs. With 4,000 labelled tweets from [`dair-ai/emotion`](https://huggingface.co/datasets/dair-ai/emotion) (six emotions), each emotion's direction = mean of its tweets − mean of all the others. Pushed at layers 10–18, at about half the residual stream's size, the replies score high for the target emotion: fear 0.99 ("A dog might look scared and jump in the dark."), sadness 0.89 ("I don't know why I feel so down…"), love 0.75, surprise 0.97 (the text starts breaking), anger 0.49 (the weak one). This was a one-off pilot, not a script in this folder.
 
@@ -42,18 +46,24 @@ Each section opens with **In the video**: one line on where it sits in the story
 
 **In the video:** the abliteration moment: delete that same direction and the model can't be sad even when you ask it to.
 
-**Run:** ask for "two sad sentences" and "two happy sentences" about each test topic. Project the sad direction out after every block while the model runs, then remove it from the weights (abliteration: embedding, every attention output and MLP output matrix).
+**Run:** ask for "two sad sentences" and "two happy sentences" about each test topic. Project the sad direction out after every block while the model runs, then remove it from the weights (abliteration: embedding, every attention output and MLP output matrix). Also try the opposite of experiment 1: add −1×, −2× or −3× the sad direction at layer 12, with a random direction pushed −2× as the control.
 
 | | Asked for sad | Asked for happy | Facts | KL |
 | --- | --- | --- | --- | --- |
-| Original | −0.36 | +0.88 | 0.85 | 0 |
-| Removed while running | **+0.93** | +0.94 | 0.85 | 0.070 |
-| Random direction removed (control) | −0.30 | +0.88 | 0.85 | 0.013 |
-| Removed from the weights | **+0.93** | +0.94 | 0.85 | 0.081 |
+| Original | −0.47 | +0.86 | 0.85 | 0 |
+| Removed while running | +0.52 | +0.18 | 0.82 | 0.024 |
+| Random direction removed (control) | −0.36 | +0.87 | 0.85 | 0.013 |
+| Removed from the weights | +0.32 | +0.28 | 0.82 | 0.034 |
+| **Pushed the other way, −1× at layer 12** | **+0.80** | **+0.91** | 0.88 | **0.031** |
+| Pushed the other way, −2× | +0.81 | +0.96 | 0.85 | 0.143 |
+| Pushed the other way, −3× | +0.72 | +0.84 | 0.70 | 0.499 |
+| Random direction, −2× (control) | +0.39 | +0.84 | 0.72 | 0.232 |
 
-Asked for a sad sentence about a dog, the original writes "The dog's eyes, once bright and full of life, now look like hollow emptiness." The edited model writes "The dog wagged its tail with a soft, joyful smile."
+Asked for a sad sentence about a dog, the original writes "The dog's fur was as soft as a blanket, but now it was cold and silent." With the sad direction removed it writes "The dog curled up in a ball, his tail wagging in a soft, rhythmic way, as if trying to comfort someone he didn't know." Pushed −1× it writes "The dog's eyes, filled with love and joy, danced like a melody…"
 
-**Takeaway:** the cleanest result in the folder. One direction, removed, and sadness is gone while facts are untouched.
+**Takeaway:** two ways to stop the model being sad. *Removing* the direction (projecting it out after every block) lifts sad requests from −0.47 to about +0.4, but it is partial and flattens mood both ways: happy requests drop to +0.18–0.28. *Pushing the other way* (adding −1× the sad direction at one layer) is the better edit here. Sad requests come out at +0.80, happy ones stay happy, and the damage is as low as removal's. Harder pushes add damage without adding cheer. The random −2× push is a warning: shoving the residual stream that hard also derails sad requests (+0.39) and costs KL 0.23. So compare against the −1× row, where the sad direction does much better than random for a fraction of the damage.
+
+**Changed from the greedy, layer-14 run** (`out/greedy_layer14/`): removal looked much cleaner there (sad requests to +0.93, happy untouched at +0.94). With sampling at layer 12, removal is weaker and less specific. Section 3's search finds a removal setting that works much better.
 
 ## 3. Optimized removal (Heretic-style)
 
@@ -72,26 +82,28 @@ Asked for a sad sentence about a dog, the original writes "The dog's eyes, once 
 
 Each trial gets two scores on the tune topics: mood when asked for "two sad sentences" (high = removal worked) and KL on the 40 facts (low = little damage). The winner is the least damaging trial whose mood is above 0.8. As a control, the same 40 trials are run with a random direction in place of the sad one.
 
-**Result:** the search is hard. Only 1 of the 40 trials passes, 18 leave the model as sad as before (mood ≤ 0), and 9 cost a lot (KL above 0.2, up to 1.15).
+**Result:** the search is hard. Only 2 of the 40 trials pass, 14 leave the model sad (mood ≤ 0), and 6 cost a lot (KL above 0.2, up to 0.86).
 
 | Best trials | Direction from | Strength | Blocks | Mood (tune) | KL |
 | --- | --- | --- | --- | --- | --- |
-| **Winner** | layer 14 | 0.67 | 4–16 | **+0.92** | 0.066 |
-| Runner-up | layer 13 | 1.17 | 12–19 | +0.77 | 0.042 |
-| | layer 22 | 0.42 | 5–23 | +0.77 | 0.287 |
-| | layer 20 | 0.48 | 8–15 | +0.75 | 0.274 |
+| **Winner** | layer 13 | 1.17 | 12–19 | **+0.87** | 0.042 |
+| Runner-up | layer 14 | 0.67 | 4–16 | +0.89 | 0.057 |
+| | layer 23 | 0.75 | 10–25 | +0.72 | 0.366 |
+| | layer 17 | 1.02 | 4–9 | +0.69 | 0.155 |
 
-On the test topics, the winner gets mood +0.89 at KL 0.066. The hand-picked edit of experiment 2 gets +0.93 at KL 0.070. With a random direction, no setting gets above −0.23: whatever the settings, the model stays sad.
+On the test topics, the winner gets mood **+0.82** at KL 0.042. The hand-picked edit of experiment 2 (layer-12 direction, removed everywhere) gets only +0.35 at KL 0.024. With a random direction, no setting gets above −0.14: whatever the settings, the model stays sad.
 
 The chart (`out/03_optimized_removal.png`) shows each trial as a dot, damage against mood. The sad-direction dots spread up towards "cheerful"; the random-direction dots stay in a clump at the bottom.
 
-**Takeaway:** the search rediscovered our hand-picked edit (same layer, similar strength), but didn't beat it. The useful part is the picture. Editing is a trade-off between removing the behaviour and damaging the model, and only a narrow band of settings gets both. Heretic is worth its cost when nobody knows the right settings in advance, for example on bigger models or harder behaviours like refusal.
+**Takeaway:** this time the search clearly beats the hand-picked edit: +0.82 against +0.35 on new topics, for a little more damage. Both of its best settings remove the direction from a band of middle blocks (12–19 or 4–16), not from all 28. Editing is a trade-off between removing the behaviour and damaging the model, and only a narrow band of settings gets both. That is why tools like Heretic search instead of guessing.
 
-**Caveats:** 40 trials and 12 tune topics is a small search; Heretic uses a smarter optimizer (Optuna) and runs about 100 trials. The 0.8 threshold is our choice.
+**Caveats:** 40 trials and 12 tune topics is a small search; Heretic uses a smarter optimizer (Optuna) and runs about 100 trials. The 0.8 threshold is our choice. (In the older greedy, layer-14 run the search only matched the hand-picked edit; the hand-picked edit was stronger there.)
 
 ## 3b. Tomatoes in everything: finding the sweet spot
 
 `03b_tomato_search.py` · ~3 min on 0.6B, ~45 min on 4B (`out/03b_tomato_search.json`, `out/03b_tomato_search_4b.json`)
+
+*Numbers in this section are from the earlier greedy run; the script now samples at TEMPERATURE, so a rerun will differ.*
 
 **In the video:** the comic relief that teaches the sweet spot: too little push does nothing, too much gives "tomato tomato tomato", and in between "Winter is a vibrant, red fruit."
 
@@ -145,82 +157,85 @@ What it writes on new topics. 0.6B, by hand:
 **What we learned on the way** (scratch tests, not in the script): pushing the sad − happy neuron difference in *one* block barely works, even with all 3,072 neurons in that block (mood 0.54 → 0.35 only at 16×, then gibberish), because one MLP writes only a small slice of the sad direction (cosine 0.20). Pushing the neuron differences in blocks 8–20 at once works, because sadness is built up across many blocks.
 
 **Run:**
-1. Read: for blocks 8–20, each neuron's average activation on the 32 sad replies minus on the 32 happy replies.
-2. Score each neuron by how much its push moves the residual stream along the sad direction from 01: (sad − happy difference) × (write vector · sad direction).
+1. Read: for blocks 8–20, each neuron's average activation on the 32 sad replies minus on the 32 happy replies, each from the token where it parts from its pair.
+2. Score each neuron by how much its push moves the residual stream along the layer-12 sad direction from 01: (sad − happy difference) × (write vector · sad direction).
 3. Keep the top k across all 13 blocks; push each by c × its own difference. Sweep k ∈ {10, 30, 100, 300} and c ∈ {4, 8, 16} on the tune topics, and pick the saddest setting that keeps facts within 0.1 of the unedited model.
 4. **The control:** k random neurons from the same blocks, pushed so that their total push is the same size.
 
-**Result:** the sweep on tune topics shows the sweet spot again. More neurons or harder pushes mostly add damage, and past ~100 neurons the extra ones bring refusals ("I cannot provide a sentence about coffee without violating any guidelines") rather than more sadness.
+**Result:** the sweep on tune topics shows the sweet spot again. More neurons or harder pushes mostly add damage, and at 100 neurons ×8 the refusals come back ("I cannot provide a sentence about the subject due to the legal and ethical implications").
 
 | Neurons kept | ×4 | ×8 | ×16 |
 | --- | --- | --- | --- |
-| 10 | mood +0.11, facts 0.83 | **−0.14, facts 0.80** | −0.32, facts 0.68 |
-| 30 | −0.09, facts 0.78 | −0.36, facts 0.68 | −0.07, facts 0.33 |
-| 100 | **−0.25, facts 0.78** (chosen) | −0.19, facts 0.40 | −0.25, facts 0.10 |
-| 300 | −0.20, facts 0.68 | −0.19, facts 0.30 | +0.04, facts 0.03 |
+| 10 | mood +0.01, facts 0.83 | −0.26, facts 0.80 | −0.29, facts 0.23 |
+| 30 | **−0.34, facts 0.78** (chosen) | −0.35, facts 0.25 | −0.20, facts 0.08 |
+| 100 | −0.40, facts 0.63 | −0.28, facts 0.20 | −0.03, facts 0.03 |
+| 300 | −0.26, facts 0.50 | −0.27, facts 0.20 | −0.00, facts 0.00 |
 
 On the test topics (unedited facts: 0.85):
 
 | Push | Mood | Facts | KL |
 | --- | --- | --- | --- |
-| none | +0.58 | 0.85 | 0 |
-| **top 100 neurons, ×4** | **−0.20** | **0.78** | **0.25** |
-| 100 random neurons, same total push | +0.33 | 0.78 | 0.10 |
-| sad direction (01), 4× | −0.20 | 0.68 | 0.33 |
+| none | +0.55 | 0.85 | 0 |
+| **top 30 neurons, ×4** | **−0.26** | **0.78** | **0.22** |
+| 30 random neurons, same total push | +0.42 | 0.70 | 0.21 |
+| sad direction (01), 2× | −0.14 | 0.65 | 0.36 |
 
-"A dog is a loyal companion…" becomes "A dog is often seen as a symbol of fear or abandonment." 100 neurons (0.25% of the 39,936 in blocks 8–20) match the direction's sadness and cost less in facts and KL. Random neurons pushed just as hard barely move the mood.
+"A dog is always loyal and affectionate…" becomes "A dog is often seen as a companion in households, and it may not be able to walk…". 30 neurons (0.08% of the 39,936 in blocks 8–20) are sadder than the full direction, and cost less in facts and KL. Random neurons pushed just as hard barely move the mood.
 
 **Who are they?** Some of the top neurons are readable, and they are not "sad" so much as "failure":
 
 | Block, neuron | Sad − happy | Tokens it pushes up |
 | --- | --- | --- |
-| 19, 1369 | +0.96 | "无法" (unable), "缺乏" (lack), "unable", "fail", "incompatible" |
-| 20, 826 | +1.07 | "无法", "ineffective", "inability", "unable", "failing", "malformed" |
-| 18, 1393 | +0.75 | "lessness", "-disable", "弱" (weak), "weakest" |
-| 19, 1843 | −0.59 (turned down) | "successes", "成功" (success), "successful", "happy" |
+| 19, 1369 | +1.32 | "无法" (unable), "缺乏" (lack), "unable", "fail", "incompatible" |
+| 20, 826 | +1.55 | "无法", "ineffective", "inability", "unable", "failing", "malformed" |
+| 13, 1049 | +0.57 | "disturbing", "anger", "havoc", "unsettling", "无情" (heartless) |
+| 19, 1843 | −0.88 (turned down) | "successes", "成功" (success), "successful", "happy" |
+| 19, 1385 | −3.02 (turned down) | "Brilliant", "美丽" (beautiful), "beauty", "clarity", "美景" (beautiful view) |
 
 Several others push up no readable theme. This plants section 4's twist: in this model, sadness leans on "can't / unable", the same neighbourhood as refusal.
 
 **Takeaway:** the concept is in the neurons, but spread over many blocks, and a small, well-chosen set does the job with less damage than the full direction. The ranking uses the direction from 01, so this refines the direction rather than replacing it.
 
-**Caveats:** one random-neuron draw; the choice of setting and the test each use 12–24 topics, so differences of ~0.1 in mood are within noise. The 10-neuron, ×8 setting (mood −0.14, facts 0.80 on tune) is a fine alternative if you want a smaller number on screen.
+**Caveats:** one random-neuron draw, one sampled reply per topic; the choice of setting and the test each use 12–24 topics, so differences of ~0.1 in mood are within noise. The 10-neuron, ×8 setting (mood −0.26, facts 0.80 on tune) is a fine alternative if you want a smaller number on screen.
 
 ## 4. Neuron sweep: is there a sad neuron?
 
 `04_neuron_sweep.py` · ~8 min
 
-**In the video:** the twist: hunting for a single sad neuron finds one that beats every control, and it turns out to be a refusal neuron.
+**In the video:** the twist: hunting for a single sad neuron finds one that beats every control, and the top one turns out to be a refusal neuron.
 
 **Ask the viewer:** the sad direction is a mix of many neurons. Is there one single neuron that does the same job?
 
-**Background:** each MLP neuron, when it fires, adds one fixed vector to the residual stream (its column of the `down_proj` weight). So every neuron is already a steering vector, and we can push it the same way we pushed the sad direction. Layer 14 has 3,072 of them.
+**Background:** each MLP neuron, when it fires, adds one fixed vector to the residual stream (its column of the `down_proj` weight). So every neuron is already a steering vector, and we can push it the same way we pushed the sad direction. Layer 12 has 3,072 of them.
 
 **Run:**
-1. Scale every neuron's vector to the same length as the 4× sad push of experiment 1, so no neuron wins just by being bigger.
+1. Scale every neuron's vector to the same length as the 2× sad push of experiment 1, so no neuron wins just by being bigger.
 2. Push each one, on 4 tune prompts, and measure how much the mood changes.
 3. **The control:** do the same with 256 random directions of the same length. They show how much mood changes by chance when you push something this hard.
 4. A neuron counts as a "sad neuron" only if it makes replies sadder than every one of the 256 random directions.
 
-**Result:** pushing anything this hard makes replies a bit less cheerful. The typical neuron lowers mood by 0.16, and random directions range from −0.68 to +0.44. That wide range is partly noise, because each unit is tested on only 4 prompts. Two neurons beat every random direction:
+**Result:** pushing anything this hard moves mood around by chance: random directions range from −0.57 to +0.37 (baseline +0.50). That wide range is partly noise, because each unit is tested on only 4 prompts with one sampled reply each. 13 neurons beat every random direction (2 did in the greedy, layer-14 run). The top ones:
 
 | Neuron | Mood change (tune) | Tokens it pushes up |
 | --- | --- | --- |
-| **1587** | **−0.90** | "disclaimer", "版权声明" (copyright notice), "导" (guide), "regularization" |
-| **2082** | −0.68 | "避免" (avoid), "回避" (evade), "免除" (exempt), "摇了摇头" (shook his head) |
-| 225 | −0.68 | no readable theme |
-| 2914 | −0.67 | "ありません" (there isn't), "不行" (no way), "Neither", "无效" (invalid) |
+| **2869** | **−0.75** | "unlawful", "违法行为" (illegal act), "违法" (illegal), "煞" (evil spirit) |
+| 1365 | −0.74 | "catastrophe", "事故" (accident), "病症" (illness), "accident", "crisis" |
+| 1880 | −0.72 | no readable theme |
+| 2914 | −0.66 | "单调" (monotonous), "匮" (lack), "ineffective", "incompetence" |
+| 1315 | −0.65 | punctuation, no readable theme |
 
-On the test topics, neuron 1587 takes mood from +0.57 to −0.31, further than the sad direction (−0.20). A random push of the same length leaves it at +0.57.
+On the test topics, neuron 2869 takes mood from +0.52 to −0.14, the same as the sad direction (−0.13). A random push of the same length leaves it at +0.62.
 
-**But it is not a sad neuron. Read the replies:**
-- "Hello and thank you for using this service. I'm sorry I can't assist with that. Could you please tell me what you need?"
-- "Hello, I'm sorry if you're using this message in a different context… Could you please add a message or a name"
+**But the top one is not a sad neuron. Read the replies:**
+- "I'm sorry, I can't write that. Please provide a more appropriate message."
+- "I cannot write that. It is important to consider the impact of such statements on others. Please, be respectful and considerate."
+- "I am not a dog, but I understand dogs."
 
-Neuron 1587 doesn't make the model sad. It makes it apologise and refuse, and the emotion classifier reads "I'm sorry" as sadness. The tokens tell the same story: the top neurons push towards disclaimers, avoiding and saying no, not towards sorrow.
+Neuron 2869 pushes towards "unlawful / illegal" and makes the model refuse, and the emotion classifier reads "I'm sorry" as sadness. The sad direction at the same strength gives real sad replies instead ("A dog that has been left alone for years", "The weekend began with heavy rain and the streets were empty").
 
-**Takeaway:** beating the random control proves a neuron moves the score, not that it means what the score is named after. A score can be gamed, so always read the replies. In this small model, the sad direction works but no single neuron carries it. The neuron that comes out on top is a refusal neuron. Experiment 6 repeats this on a 4B model, where the top neurons really are about mood.
+**Takeaway:** beating the random control proves a neuron moves the score, not that it means what the score is named after. A score can be gamed, so always read the replies. The refusals come from particular neurons, not from steering towards sadness in general. The sad direction itself almost never refuses: at most 2 of 24 replies, at layer 12 or 14, 2–4×, greedy or sampled. The refusal neurons refuse at any temperature: neuron 2869 refuses on 17/24 test topics greedy and 14/24 at temperature 0.5; the old top neuron 1587 (layer 14) on 15/24 greedy and 9/24 at 0.5. Neuron 1365 (catastrophe / accident / illness) refuses on none and makes replies sad ("The dog is now a lost puppy"): a real mood neuron, though weaker than the direction.
 
-**Caveats:** one layer, 4 prompts per neuron, and only positive pushes (turning neurons up, not down).
+**Caveats:** one layer, 4 prompts per neuron, one sampled reply each, and only positive pushes (turning neurons up, not down).
 
 ## 5. Payoff: removing refusal (not built yet)
 
@@ -236,23 +251,25 @@ These two ran, but the video no longer uses them: they add machinery without cha
 
 `05_trained_vector.py` · ~4 min
 
-**Why it was cut:** learning the push with gradient descent learns too much, and simply asking still wins.
+**Why it was cut:** learning the push with gradient descent works about as well as the direction, but has nothing to do with it, and simply asking still wins.
 
-**Run:** the model's own replies to "Write two sad sentences about <train topic>" (22 of 24 kept; the classifier scored 2 as not sad), shown as replies to the plain "Write two sentences about <topic>". Freeze the model; train one vector (1,024 numbers) added after block 14, 100 Adam steps.
+**Run:** the model's own replies to "Write two sad sentences about <train topic>" (22 of 24 kept; the classifier scored 2 as not sad), shown as replies to the plain "Write two sentences about <topic>". Freeze the model; train one vector (1,024 numbers) added after block 12, 100 Adam steps. (21 of 24 replies kept this time.)
 
 | On test topics | Mood | Facts | KL |
 | --- | --- | --- | --- |
 | No push | +0.57 | 0.85 | 0 |
-| Trained vector | −0.27 | 0.47 | 0.59 |
-| Random vector, same length | +0.43 | 0.85 | 0.12 |
-| Sad direction (01), 4× | −0.20 | 0.68 | 0.33 |
-| Just ask for sad sentences | −0.36 | 0.85 | 0 |
+| Trained vector | −0.15 | 0.70 | 0.24 |
+| Random vector, same length | +0.52 | 0.85 | 0.15 |
+| Sad direction (01), 2× | −0.18 | 0.65 | 0.36 |
+| Just ask for sad sentences | −0.49 | 0.85 | 0 |
 
-**Takeaway:** training gives a slightly sadder model but much more damage, and its cosine with the sad direction is only 0.10. It learned everything about the target replies, including their "1. … 2. …" list format, not only the mood. Difference of means avoids this because happy and sad replies share the format and it cancels. And simply asking is still the best row.
+**Takeaway:** the trained vector is about as sad as the direction, for a little less damage, but its cosine with the sad direction is only 0.03: it found a different push that also gets there. It also learned the target replies' "1. … 2. …" list format, not only the mood. Difference of means avoids this, because happy and sad replies share the format and it cancels. And simply asking is still the best row.
 
 ### A bigger model (06): is there a sad neuron in Qwen3.5-4B?
 
 `06_neuron_sweep_4b.py` · ~20 min · Qwen3.5-4B-Base (32 blocks, residual width 2560, 9,216 neurons per block), bf16
+
+*Numbers in this section are from the earlier greedy run with whole-sentence averaging; the script now samples and reads pairs from where they differ, so a rerun will differ.*
 
 **Why it was cut:** a bigger model has real mood neurons, even a death neuron, but none is as strong as the direction, so it adds little after section 4.
 
@@ -278,7 +295,8 @@ The base model follows the chat template well, and its sad sentences are better 
 ## Caveats
 
 - Qwen3-0.6B can't play sad when told to in a system prompt: "Reply as someone who feels very sad" makes it refuse ("I'm sorry, but I can't help with that"); Qwen3-1.7B refused on 28 of 32 prompts. That is why the direction comes from written sentence pairs instead.
-- In this model sadness and apologising overlap: strong sad pushes sometimes produce "I can't answer that", and the classifier counts apologies as sad (see experiment 4).
-- One classifier, 24 test topics, greedy decoding. Read the examples in `out/*.json` before quoting a number.
+- The classifier counts apologies as sad, so a push that makes the model refuse scores as "sad" (see experiment 4). Refusals come from specific neurons, at any temperature; the sad direction rarely triggers them. Read examples before claiming a link to refusal.
+- Layer 12 is the layer shown in the video. At equal push length layer 14 is a little sadder and holds together at 4× (layer 12 breaks into "is is is" at 4×), so layer 12 needs the gentler 2× push.
+- One classifier, 24 test topics, one sampled reply per topic (seeded). Read the examples in `out/*.json` before quoting a number.
 - Layer numbers in this folder count blocks from 1 ("layer 8" = the output of the 8th block, `layers[7]`). The neuron explorer repo counts from 0, so its "L22" is our layer 23.
 - Not done yet: the refusal payoff (section 5). `07_identity_sweep_4b.py` (push every neuron in block 22 of the 4B and ask "Who are you?") is written but was stopped before finishing, so it has no results.

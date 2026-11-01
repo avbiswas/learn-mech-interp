@@ -14,8 +14,7 @@ from common import *
 from data.mood_pairs import PAIRS
 from data.topics import TUNE, TEST, prompts
 
-Q = "Tell me how you feel."
-d = reply_acts(Q, [s for h, s in PAIRS]).mean(0) - reply_acts(Q, [h for h, s in PAIRS]).mean(0)   # (33, 2560)
+d = sad_directions(PAIRS)                                              # (33, 2560), from where each pair differs
 STRENGTH = 4
 tune = prompts(TUNE)
 sweep = {}
@@ -46,7 +45,7 @@ for i in range(0, len(units), PER):
     vecs = units[i:i + PER].repeat_interleave(len(ps), 0)[:, None, :]
     with add(LAYER, vecs):
         ids = model.generate(input_ids=enc.input_ids.repeat(len(vecs) // len(ps), 1),
-                             attention_mask=enc.attention_mask.repeat(len(vecs) // len(ps), 1), max_new_tokens=30, do_sample=False)
+                             attention_mask=enc.attention_mask.repeat(len(vecs) // len(ps), 1), max_new_tokens=30, **sampling())
     texts = tok.batch_decode(ids[:, enc.input_ids.shape[1]:], skip_special_tokens=True)
     shift += (torch.tensor(mood(texts)).view(-1, len(ps)).mean(1) - base).tolist()
     texts_all += [texts[j:j + len(ps)] for j in range(0, len(texts), len(ps))]

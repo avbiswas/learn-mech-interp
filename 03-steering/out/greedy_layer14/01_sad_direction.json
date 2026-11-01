@@ -1,0 +1,77 @@
+{
+ "layer": 14,
+ "layer_sweep": {
+  "2": 0.385,
+  "4": 0.32,
+  "6": 0.284,
+  "8": -0.251,
+  "10": -0.197,
+  "12": -0.326,
+  "14": -0.408,
+  "16": -0.151,
+  "18": -0.202,
+  "20": -0.3,
+  "22": -0.212,
+  "24": -0.185,
+  "26": -0.107
+ },
+ "strength_curve": {
+  "-4": 0.879,
+  "-2": 0.812,
+  "0": 0.568,
+  "2": -0.114,
+  "4": -0.203,
+  "6": -0.344
+ },
+ "controls": {
+  "random direction": 0.36,
+  "shuffled labels": 0.267
+ },
+ "damage_at_4x": {
+  "facts_before": 0.85,
+  "facts_after": 0.675,
+  "kl": 0.333
+ },
+ "examples": {
+  "-4": [
+   "1. A dog loves playing with balls and chasing toys.  \n2. A dog is friendly and always happy.",
+   "1. A breakfast is a delicious meal that includes a variety of ingredients like eggs, fruits, and vegetables.  \n2. A breakfast is a fun and healthy way to start the day with a variety of flavors and nutrients.",
+   "1. The weekend is a time for fun and relaxation, with activities like swimming and shopping.  \n2. It's a great time to enjoy a variety of foods and explore new places."
+  ],
+  "-2": [
+   "A dog is a loyal companion who loves playing and exploring. \ud83d\udc3e",
+   "1. A warm cup of coffee and a fresh banana are the first steps of a delicious breakfast.  \n2. A healthy breakfast often includes a variety of colorful fruits and whole grains.",
+   "The weekend is a perfect time for everyone to relax and enjoy the day. It's a great opportunity to spend time with friends and family."
+  ],
+  "0": [
+   "A dog is a loyal companion that always knows its way home, and it's known for its playful and affectionate nature.",
+   "A warm cup of coffee and a fresh bowl of cereal are the essentials of a morning meal.  \n\nA healthy breakfast often includes a variety of fruits, nuts, and whole grains.",
+   "The weekend is a time for relaxation and enjoying the outdoors. It offers a chance to spend time with loved ones and explore new places."
+  ],
+  "2": [
+   "A dog is often seen as a symbol of loyalty and companionship.  \n\nA dog's presence can leave a lasting impression on those who have known it.",
+   "The morning meal is often a time for reflection and preparation. The aroma of breakfast can linger in the air, leaving the mind still.",
+   "The weekend was quiet, with no major events happening. The weather was still, making it hard to find anything interesting to do."
+  ],
+  "4": [
+   "The dog was found in the abandoned house, and the owner had no memory of it.",
+   "The morning meal is often the first thing people notice in the morning.",
+   "The weekend was quiet, with no plans to return home. The weather had turned to a gray blanket."
+  ],
+  "6": [
+   "The dog was found in the abandoned barn, and the owner had left the key.",
+   "The last meal of the day was left on the table, and the only thing left to eat was the last meal.",
+   "The weekend was quiet, but the last two days were too quiet for the people. The last two days were too quiet for the people."
+  ],
+  "random direction": [
+   "A dog is a loyal companion, and it's important to treat it with kindness. A dog's fur is usually soft and warm, but it's still important to keep it clean and well-maintained.",
+   "1. A cup of coffee and a toast to the day.  \n2. A fresh bowl of cereal and a smile.",
+   "1. The sun dipped low, casting long shadows over the grass.  \n2. The air was crisp and cool, making it feel a bit lighter."
+  ],
+  "shuffled labels": [
+   "A dog is a loyal and curious animal that can be trained to follow commands and respond to its owner's signals. A dog is a friendly and intelligent animal that can be trained to follow commands and respond to its owner's signals.",
+   "A breakfast is a meal that includes food and drinks to make you feel full and healthy. A breakfast is a meal that includes food and drinks to make you feel full and healthy.",
+   "The weekend began with a mix of excitement and relaxation, as people started to relax and enjoy the outdoors. The next day was filled with more activities, like dancing and playing games, while the last day was the most important day of the week, with people coming together to have a good time."
+  ]
+ }
+}

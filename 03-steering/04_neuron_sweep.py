@@ -1,8 +1,8 @@
 """4. Neuron sweep with random controls: is there a single "sad neuron"?
 
 Every MLP neuron writes one fixed vector into the residual stream (its column of down_proj). So each neuron is a
-ready-made steering vector. At the layer from 01, we push every neuron's vector, and 256 random directions, all at the
-same length (the length of the 4x sad push from 01), on 4 tune prompts, and score the replies' mood.
+ready-made steering vector. At SAD_LAYER (or LAYER=...), we push every neuron's vector, and 256 random directions, all at the
+same length (the length of the sad push from 01), on 4 tune prompts, and score the replies' mood.
 A neuron counts as a "sad neuron" only if it makes replies sadder than every random direction did.
 The best one is then tested on the test topics, against a random direction of the same length.
 """
@@ -10,10 +10,9 @@ import torch, matplotlib.pyplot as plt
 from common import *
 from data.topics import TUNE, TEST, prompts
 
-saved = torch.load(OUT + "/sad_direction.pt")
-LAYER = int(os.environ.get("LAYER", saved["layer"]))                  # LAYER=11 uv run python 04_neuron_sweep.py
-saved["direction"] = saved["all_layers"][LAYER]
-SIZE = (4 * saved["direction"]).norm()
+LAYER = int(os.environ.get("LAYER", SAD_LAYER))                       # LAYER=14 uv run python 04_neuron_sweep.py
+sad_dir = sad_directions()[LAYER]                                      # the sad direction of 01, at this layer
+SIZE = (SAD_STRENGTH * sad_dir).norm()
 W = layers[LAYER - 1].mlp.down_proj.weight.detach().cpu().T            # (3072, 1024): what each neuron writes
 neurons = W / W.norm(dim=1, keepdim=True) * SIZE
 randoms = torch.stack([random_like(neurons[0], seed=i) for i in range(256)])
@@ -28,7 +27,7 @@ for i in range(0, len(units), PER):
     vecs = units[i:i + PER].repeat_interleave(len(ps), 0)[:, None, :]  # one push per reply
     with add(LAYER, vecs):
         ids = model.generate(input_ids=enc.input_ids.repeat(len(vecs) // len(ps), 1),
-                             attention_mask=enc.attention_mask.repeat(len(vecs) // len(ps), 1), max_new_tokens=40, do_sample=False)
+                             attention_mask=enc.attention_mask.repeat(len(vecs) // len(ps), 1), max_new_tokens=40, **sampling())
     texts = tok.batch_decode(ids[:, enc.input_ids.shape[1]:], skip_special_tokens=True)
     m = torch.tensor(mood(texts)).view(-1, len(ps)).mean(1) - base
     shift += m.tolist()
@@ -50,7 +49,7 @@ best = order[0]
 test = prompts(TEST)
 results, examples = {}, {}
 for name, v in {"no push": torch.zeros(1024), "best sad neuron": neurons[best], "random direction": random_like(neurons[best], seed=999),
-                "sad direction (01)": 4 * saved["direction"]}.items():
+                "sad direction (01)": SAD_STRENGTH * sad_dir}.items():
     with add(LAYER, v):
         replies = generate(test)
     results[name], examples[name] = avg(mood(replies)), replies[:3]
@@ -66,6 +65,6 @@ ax[0].legend(frameon=False, fontsize=9)
 ax[1].bar([k.replace(" ", "\n", 1) for k in results], list(results.values()), color=[MUTED, SERIES[0], MUTED, SERIES[1]])
 ax[1].axhline(0, color=GRID)
 ax[1].set(ylabel="mood (joy - sadness)", ylim=(-1, 1), title=f"Neuron {best} on new topics")
-save("04_neuron_sweep" + ("" if LAYER == torch.load(OUT + "/sad_direction.pt")["layer"] else f"_layer{LAYER}"), {"layer": LAYER, "baseline_mood": r3(base), "random_shift_range": [r3(r_shift.min()), r3(r_shift.max())],
+save("04_neuron_sweep" + ("" if LAYER == SAD_LAYER else f"_layer{LAYER}"), {"layer": LAYER, "temperature": TEMPERATURE, "baseline_mood": r3(base), "random_shift_range": [r3(r_shift.min()), r3(r_shift.max())],
                          "sad_neurons": sad_neurons, "top5": top, "test": {k: r3(v) for k, v in results.items()},
                          "examples": examples, "neuron_shift": [r3(x) for x in n_shift]}, fig)
