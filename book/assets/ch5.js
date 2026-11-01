@@ -207,11 +207,13 @@
   };
   const ROLE_COL = { "Name mover": "var(--accent)", "Negative name mover": "var(--blue)", "S-inhibition": "var(--purple)", "Backup name mover": "var(--yellow)", "Induction head": "var(--green)", "Duplicate token head": "var(--green)", "Previous token head": "var(--green)" };
 
-  let corrIdx = 0, comp = "resid_pre", headKey = "heads_all_pos", hoverPos = -1;
+  let corrIdx = 0, comp = "resid_pre", sharedScale = false, headKey = "heads_all_pos", hoverPos = -1;
 
-  function legend(el, scale) {
-    el.innerHTML = `<span>${(-scale).toFixed(1)}</span><span class="grad" style="background:linear-gradient(90deg,${MI.diverge(-1)},${MI.diverge(0)},${MI.diverge(1)})"></span><span>+${scale.toFixed(1)}</span><span>· 0 = corrupted baseline, 1 = fully clean</span>`;
+  function legend(el, scale, note) {
+    el.innerHTML = `<span>${(-scale).toFixed(1)}</span><span class="grad" style="background:linear-gradient(90deg,${MI.diverge(-1)},${MI.diverge(0)},${MI.diverge(1)})"></span><span>+${scale.toFixed(1)}</span><span>· 0 = corrupted baseline, 1 = fully clean${note ? " · " + note : ""}</span>`;
   }
+
+  const absMax = m => Math.max(...m.flat().map(Math.abs));
 
   function sentence(el, toks, other, hl) {
     el.innerHTML = toks.map((t, i) => {
@@ -227,8 +229,10 @@
     const T = r.tokens.length, x0 = 70, y0 = 34, cw = (890 - x0) / T, ch = 27;
     svg.setAttribute("viewBox", `0 0 900 ${y0 + 12 * ch + 30}`);
     svg.innerHTML = "";
-    const mx = Math.max(1, ...M.flat().map(Math.abs));
-    legend(document.getElementById("pwLegend"), mx);
+    // Colour range: fit this heatmap, or share one range across both corruptions
+    // (same component) so switching corruption doesn't silently rescale the colours.
+    const mx = Math.max(1, ...(sharedScale ? D.map(d => absMax(d[comp])) : [absMax(M)]));
+    legend(document.getElementById("pwLegend"), mx, sharedScale ? "same range for both corruptions" : "range fitted to this heatmap");
     r.tokens.forEach((t, p) => {
       const diff = r.corr_tokens[p] !== t;
       S("text", { x: x0 + p * cw + cw / 2, y: y0 - 10, "text-anchor": "middle", "font-size": 11.5, "font-family": "var(--mono)", "font-weight": diff ? 700 : 400, fill: diff ? "var(--yellow)" : "var(--ink)" }, svg).textContent = t.trim() || "␣";
@@ -267,7 +271,7 @@
     const r = D[corrIdx], M = r[headKey];
     const x0 = 46, y0 = 28, c = 34;
     svg.innerHTML = "";
-    const mx = Math.max(0.3, ...M.flat().map(Math.abs));
+    const mx = Math.max(0.3, ...(sharedScale ? D.map(d => absMax(d[headKey])) : [absMax(M)]));
     for (let h = 0; h < 12; h++) S("text", { x: x0 + h * c + c / 2, y: y0 - 8, "text-anchor": "middle", "font-size": 11, class: "muted" }, svg).textContent = h;
     for (let L = 0; L < 12; L++) {
       S("text", { x: x0 - 8, y: y0 + L * c + c / 2 + 4, "text-anchor": "end", "font-size": 11, class: "muted" }, svg).textContent = "L" + L;
@@ -277,7 +281,7 @@
         rect.onmouseenter = () => showHead(key, v);
       }
     }
-    S("text", { x: x0, y: y0 + 12 * c + 20, "font-size": 11.5, class: "muted" }, svg).textContent = `colour scale ±${mx.toFixed(2)} · outlined = role named in the IOI paper`;
+    S("text", { x: x0, y: y0 + 12 * c + 20, "font-size": 11.5, class: "muted" }, svg).textContent = `colour scale ±${mx.toFixed(2)} (${sharedScale ? "shared" : "fitted"}) · outlined = named IOI role`;
     if (lastHead) { const [lL, lH] = lastHead.split(".").map(Number); showHead(lastHead, M[lL][lH]); }
   }
 
@@ -317,6 +321,13 @@
   seg("pwCorr", syncCorr);
   seg("hwCorr", syncCorr);
   seg("pwComp", v => { comp = v; drawPatch(); });
+  function syncScale(v) {
+    sharedScale = v === "shared";
+    ["pwScale", "hwScale"].forEach(id => document.querySelectorAll(`#${id} button`).forEach(b => b.classList.toggle("on", b.dataset.v === v)));
+    drawPatch(); drawHeads();
+  }
+  seg("pwScale", syncScale);
+  seg("hwScale", syncScale);
   seg("hwPos", v => { headKey = v; drawHeads(); });
   drawPatch(); drawHeads();
   if (D.length) showHead("9.9", D[0].heads_all_pos[9][9]);

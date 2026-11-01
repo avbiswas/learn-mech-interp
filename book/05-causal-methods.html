@@ -280,6 +280,7 @@
   <div class="controls">
     <label>Corruption <span class="seg" id="pwCorr"><button data-v="0" class="on">Swap 2nd name (S2)</button><button data-v="1">Replace all names</button></span></label>
     <label>Component <span class="seg" id="pwComp"><button data-v="resid_pre" class="on">Residual stream</button><button data-v="attn_out">Attention out</button><button data-v="mlp_out">MLP out</button></span></label>
+    <label>Colour scale <span class="seg" id="pwScale"><button data-v="own" class="on">Fit each heatmap</button><button data-v="shared">Shared across corruptions</button></span></label>
   </div>
   <div class="mini-label">Clean prompt (patched position highlighted)</div>
   <div class="sentence" id="pwClean"></div>
@@ -303,13 +304,14 @@
 
 <div class="widget wide" id="headWidget">
   <div class="widget-title">Interactive · Patching each attention head (real GPT-2 small data)</div>
-  <div class="widget-sub">Rows = layers, columns = head index. Head "L.H" means layer L, head H. Corruption follows the choice in the widget above.</div>
+  <div class="widget-sub">Rows = layers, columns = head index. Head "L.H" means layer L, head H. Corruption and colour scale follow the choices in the widget above.</div>
   <div class="controls">
     <label>Patch the head at <span class="seg" id="hwPos"><button data-v="heads_all_pos" class="on">All positions</button><button data-v="heads_final_pos">Final position only</button></span></label>
     <label>Corruption <span class="seg" id="hwCorr"><button data-v="0" class="on">S2 swap</button><button data-v="1">Replace all names</button></span></label>
+    <label>Colour scale <span class="seg" id="hwScale"><button data-v="own" class="on">Fit each heatmap</button><button data-v="shared">Shared across corruptions</button></span></label>
   </div>
   <div class="twocol">
-    <div><svg id="hwSvg" viewBox="0 0 460 440" style="width:100%"></svg></div>
+    <div><svg id="hwSvg" viewBox="0 0 460 466" style="width:100%"></svg></div>
     <div>
       <div class="rolebox" id="hwRole"><b>Hover a head.</b><br>Heads with a known role in the IOI circuit have a dark outline.</div>
       <div class="mini-label" id="hwPatLabel"></div>
