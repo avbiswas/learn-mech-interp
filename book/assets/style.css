@@ -70,6 +70,11 @@ img, svg { max-width: 100%; }
 }
 .topbar .brand { font-weight: 700; color: var(--ink); text-decoration: none; letter-spacing: -.01em; white-space: nowrap; }
 .topbar .brand span { color: var(--accent); }
+.topbar .brand .pre { color: inherit; }
+.topbar .social { display: flex; align-items: center; gap: 2px; padding-left: 12px; border-left: 1px solid var(--rule); }
+.topbar .social a { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: var(--ink-3); }
+.topbar .social a:hover { color: var(--ink); background: var(--bg-2); }
+.topbar .social svg { width: 16px; height: 16px; }
 .topbar .crumb { color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar .spacer { flex: 1; }
 .topbar button, .topbar a.btn {
@@ -97,6 +102,11 @@ img, svg { max-width: 100%; }
 @media (max-width: 560px) {
   .topbar { gap: 7px; padding: 0 10px; }
   .topbar a.btn { display: none; }
+  .topbar .social { padding-left: 6px; gap: 0; }
+  .topbar .social a { width: 26px; }
+  .topbar .brand .pre { display: none; }
+  #searchBtn { font-size: 0; padding: 7px 9px; }
+  #searchBtn::before { content: ""; display: block; width: 15px; height: 15px; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M15.5 15.5 21 21'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round'%3E%3Ccircle cx='10.5' cy='10.5' r='6.5'/%3E%3Cpath d='M15.5 15.5 21 21'/%3E%3C/svg%3E") center / contain no-repeat; }
   .search-dialog { padding: 16px; }
 }
 
