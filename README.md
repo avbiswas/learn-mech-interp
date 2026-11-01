@@ -1,6 +1,8 @@
 # Mechanistic interpretability, from one neuron to a real LLM
 
-Code and an interactive book for the mechanistic interpretability series on [**Neural Breakdown with AVB**](https://www.youtube.com/@avb_fj) on YouTube. Every chart and number in the videos comes from a script in this repo, so you can rerun it, change it, and break it.
+Code and an interactive book for the mechanistic interpretability series on [**Neural Breakdown with AVB**](https://www.youtube.com/@avb_fj) on YouTube. **Read the book online at [mechinterp.neuralavb.com](https://mechinterp.neuralavb.com).**
+
+Every chart and number in the videos comes from a script in this repo, so you can rerun it, change it, and break it.
 
 ## The videos
 
@@ -16,7 +18,7 @@ Code and an interactive book for the mechanistic interpretability series on [**N
 | [`02-inside-the-transformer/`](02-inside-the-transformer/) | Inside the transformer | Experiments on real language models: attention sinks, copying heads, logit lens, induction heads, activation patching (Michael Jordan), the IOI circuit and the Hydra effect, probing, the refusal direction, and whether weak activations matter. |
 | [`02-inside-the-transformer/livecode/`](02-inside-the-transformer/livecode/) | Inside the transformer | Five tiny scripts (under 50 lines each, plain `transformers`) for the same ideas. **Start here** if you want to read the code. |
 | [`03-steering/`](03-steering/) | Steering | Making Qwen3 sad with one direction, then making it unable to be sad (abliteration), Heretic-style optimized removal, and the hunt for a "sad neuron". |
-| [`book/`](book/) | All | An interactive HTML book on the whole field. Open `book/index.html` in a browser, no server needed. `book/scripts/` regenerates its data. |
+| [`book/`](book/) | All | An interactive HTML book on the whole field, live at [mechinterp.neuralavb.com](https://mechinterp.neuralavb.com). To read it offline, open `book/index.html` in a browser, no server needed. `book/scripts/` regenerates its data. |
 
 Each experiment folder has a `README.md` with, for every experiment: the question, what we ran, the result, the takeaway and the caveats. Charts and raw numbers are in each folder's `out/`; rerunning a script regenerates them.
 
