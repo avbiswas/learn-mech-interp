@@ -1,0 +1,13 @@
+{
+  // Serves book/ as a static site at mechinterp.neuralavb.com.
+  // Separate Worker from neural-avb-site, so the two deploy independently.
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "mechinterp-book",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./book"
+  },
+  "routes": [
+    { "pattern": "mechinterp.neuralavb.com", "custom_domain": true }
+  ]
+}
